@@ -1,0 +1,43 @@
+name: Manual Chatmosphere Deploy
+on:
+  # Manual Trigger for Stage Server
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: environment
+        description: Select the environment
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ github.event.inputs.environment }}
+
+    strategy:
+      matrix:
+        node-version: [16.x]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: npm ci, build and test
+        run: |
+          npm install
+          npm test
+          PUBLIC_URL="https://${{ secrets.PUBLIC_URL }}" REACT_APP_SERVICE_URL=${{ secrets.SERVICE_URL }} REACT_APP_USE_WEBSOCKET="true" npm run build
+      - name: rsync deploy
+        uses: burnett01/rsync-deployments@4.1
+        with:
+          switches: -avzr --delete
+          path: ./build/
+          remote_path: /var/www/virtual/${{ secrets.UBERSPACE_USER }}/${{ secrets.PUBLIC_URL }}/
+          remote_host: ${{ secrets.UBERSPACE_HOST }}
+          remote_user: ${{ secrets.UBERSPACE_USER }}
+          remote_key: ${{ secrets.DEPLOY_KEY_PRIVATE }}

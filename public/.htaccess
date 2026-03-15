@@ -1,0 +1,9 @@
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+RewriteCond %{HTTP_HOST} ^chatmosphere.cc/build
+RewriteRule (.*) https://stage.chatmosphere.cc/$1 [R=301,L]
+RewriteCond %{HTTP_HOST} ^chatmosphere.cc/demo
+RewriteRule (.*) https://demo.chatmosphere.cc/$1 [R=301,L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.html [QSA,L]
