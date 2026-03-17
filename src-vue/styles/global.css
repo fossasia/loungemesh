@@ -1,0 +1,121 @@
+@import './theme.css';
+
+@font-face {
+  font-family: 'Space';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Regular.woff2') format('woff2'),
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Regular.woff') format('woff'),
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Space';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src:
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Medium.woff2') format('woff2'),
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Medium.woff') format('woff'),
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Medium.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Space';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Bold.woff2') format('woff2'),
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Bold.woff') format('woff'),
+    url('../assets/fonts/space-grotesk-v2/SpaceGrotesk-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    url('../assets/fonts/inter-v7/Inter-Regular.woff2') format('woff2'),
+    url('../assets/fonts/inter-v7/Inter-Regular.woff') format('woff'),
+    url('../assets/fonts/inter-v7/inter-v7-latin-regular.ttf') format('truetype');
+}
+
+html,
+body {
+  font-family: var(--font-display);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-bg-page);
+}
+
+input,
+textarea,
+button {
+  font-family: var(--font-body);
+}
+
+a {
+  cursor: default;
+}
+
+#app {
+  text-align: center;
+}
+
+/* Legacy `Button` primary / warning (non–icon-only), e.g. Join / Leave Call */
+.btn-primary-round {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 12px 20px;
+  border-radius: var(--radius-round);
+  border: 2px solid transparent;
+  color: var(--btn-primary-fg);
+  background-color: var(--btn-primary-bg);
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.btn-primary-round:hover {
+  background-color: var(--btn-primary-bg-hover);
+  color: var(--btn-default-fg);
+}
+
+.btn-primary-round:active {
+  background-color: var(--color-mono0);
+  color: var(--btn-primary-fg);
+}
+
+.btn-leave-call {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 12px 20px;
+  border-radius: var(--radius-round);
+  border: 2px solid transparent;
+  color: var(--btn-warning-fg);
+  background-color: var(--btn-warning-bg);
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.btn-leave-call:hover {
+  background-color: var(--btn-warning-bg-hover);
+  border: solid 2px var(--color-red100);
+}
+
+.btn-leave-call:active {
+  background-color: var(--color-mono0);
+}

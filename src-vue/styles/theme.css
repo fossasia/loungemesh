@@ -1,0 +1,62 @@
+/* Warm theme from legacy styled-components (src/theme/theme.tsx) */
+:root {
+  --font-display: 'Space', system-ui, sans-serif;
+  --font-body: 'Space', system-ui, sans-serif;
+
+  --color-mono0: #000000;
+  --color-mono10: #272625;
+  --color-mono30: #434241;
+  /* Between mono30 and mono60 — menu link icons */
+  --color-mono40: #6f6e6d;
+  --color-mono60: #9c9b9a;
+  --color-mono80: #d5d4d3;
+  --color-mono95: #f5f4f3;
+  --color-mono100: #ffffff;
+
+  --color-orange100: #e27022;
+  --color-blue100: #5770eb;
+  --color-red100: #e15d4c;
+  --color-red120: #f07969;
+
+  --color-text-default: #272625;
+  --color-text-light: #9c9b9a;
+  --color-text-warning: #e15d4c;
+  --color-text-primary: #5770eb;
+
+  --color-bg-page: #f5f4f3;
+  --color-bg-inset: #9c9b9a;
+  --color-bg-card: #ffffff;
+
+  --btn-default-bg: #ffffff;
+  --btn-default-bg-hover: #f5f4f3;
+  --btn-default-fg: #434241;
+
+  --btn-primary-bg: #5770eb;
+  --btn-primary-bg-hover: #f5f4f3;
+  --btn-primary-fg: #ffffff;
+
+  --btn-warning-bg: #e15d4c;
+  --btn-warning-bg-hover: #f07969;
+  --btn-warning-fg: #ffffff;
+
+  --btn-active-bg: #5770eb;
+  --btn-active-fg: #ffffff;
+
+  --input-bg: #ffffff;
+  --input-fg: #d5d4d3;
+  --line-dark: #434241;
+  --line-default: #9c9b9a;
+  --line-light: #f5f4f3;
+
+  --radius-sm: 5px;
+  --radius-round: 25px;
+
+  --fs-hero: 3rem;
+  --fs-h1: 1.5rem;
+  --fs-h2: 1.25rem;
+  --fs-body: 1rem;
+  --fs-small: 0.875rem;
+
+  --fw-medium: 500;
+  --fw-bold: 600;
+}
