@@ -9,6 +9,15 @@
 **Chatmosphere is an open source project that aims to make video calls informal and natural**. We missed the dynamics of a self-organizing crowd hanging out at one big table together. The big table in a bar, where so many discussions, jokes, comforting talks, utopias and ideas happen. With chatmosphere you can move and zoom in the area and hear people that are located near by louder and have dynamic talks. To learn more about the Chatmosphere project and ideas have a look in our [ABOUT.md](docs/ABOUT.md)
 
 
+### Docker (Flowspace + local Jitsi Meet)
+
+1. Create Jitsi env and config dirs: `node docker/setup-jitsi-env.mjs`
+2. Start everything: `docker compose --env-file docker/.env.jitsi up --build`
+
+Then open **Flowspace** at **http://localhost:8880**. Jitsi’s web port is **`HTTP_PORT`** in `docker/.env.jitsi` (example uses **8001** so it does not collide with apps on 8000). `PUBLIC_URL` must stay in sync with that port because it is baked into the SPA at build time.
+
+For media behind NAT, set `DOCKER_HOST_ADDRESS` (or `JVB_ADVERTISE_IPS`) in `docker/.env.jitsi` per the [Jitsi Docker handbook](https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker). More options: `docker/env.jitsi.example` and the upstream [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) `env.example`.
+
 ### Helpful Links
 * [How to run Chatmosphere](docs/INSTALL.md)
 * [Contribution Guideline](docs/CONTRIBUTION.md)

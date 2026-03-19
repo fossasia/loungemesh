@@ -1,0 +1,94 @@
+# Flowspace (Vue SPA) + local Jitsi Meet (docker-jitsi-meet stack).
+#
+# 1) node docker/setup-jitsi-env.mjs
+# 2) docker compose --env-file docker/.env.jitsi up --build
+#
+# UI: http://localhost:8880  ·  Jitsi web (XMPP/BOSH): PUBLIC_URL from docker/.env.jitsi (default :8001)
+#
+# If build args don’t pick up PUBLIC_URL, always pass --env-file docker/.env.jitsi
+
+services:
+  flowspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_JITSI_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8001}
+        VITE_XMPP_DOMAIN: ${XMPP_DOMAIN:-meet.jitsi}
+        VITE_XMPP_MUC_DOMAIN: ${XMPP_MUC_DOMAIN:-muc.meet.jitsi}
+        VITE_USE_WEBSOCKET: "true"
+        VITE_EVENTYAY_API_BASE: ${VITE_EVENTYAY_API_BASE-}
+        VITE_SESSION_PREFIX: ${VITE_SESSION_PREFIX-}
+    ports:
+      - "${FLOWSPACE_PORT:-8880}:80"
+    depends_on:
+      - jitsi-web
+    restart: unless-stopped
+
+  # --- upstream Jitsi images (web renamed to avoid clashing with old service name) ---
+  jitsi-web:
+    image: jitsi/web:${JITSI_IMAGE_VERSION:-stable}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${HTTP_PORT:-8000}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ${CONFIG:-./docker/jitsi-config}/web:/config:Z
+      - ${CONFIG:-./docker/jitsi-config}/web/crontabs:/var/spool/cron/crontabs:Z
+      - ${CONFIG:-./docker/jitsi-config}/transcripts:/usr/share/jitsi-meet/transcripts:Z
+    env_file:
+      - ./docker/.env.jitsi
+    depends_on:
+      - jvb
+    networks:
+      meet.jitsi:
+
+  prosody:
+    image: jitsi/prosody:${JITSI_IMAGE_VERSION:-stable}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    expose:
+      - "5222"
+      - "5269"
+      - "5347"
+      - "5280"
+    volumes:
+      - ${CONFIG:-./docker/jitsi-config}/prosody/config:/config:Z
+      - ${CONFIG:-./docker/jitsi-config}/prosody/prosody-plugins-custom:/prosody-plugins-custom:Z
+    env_file:
+      - ./docker/.env.jitsi
+    networks:
+      meet.jitsi:
+        aliases:
+          - ${XMPP_SERVER:-xmpp.meet.jitsi}
+
+  jicofo:
+    image: jitsi/jicofo:${JITSI_IMAGE_VERSION:-stable}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    ports:
+      - "127.0.0.1:${JICOFO_REST_PORT:-8888}:8888"
+    volumes:
+      - ${CONFIG:-./docker/jitsi-config}/jicofo:/config:Z
+    env_file:
+      - ./docker/.env.jitsi
+    depends_on:
+      - prosody
+    networks:
+      meet.jitsi:
+
+  jvb:
+    image: jitsi/jvb:${JITSI_IMAGE_VERSION:-stable}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    ports:
+      - "${JVB_PORT:-10000}:${JVB_PORT:-10000}/udp"
+      - "127.0.0.1:${JVB_COLIBRI_PORT:-8090}:8080"
+    volumes:
+      - ${CONFIG:-./docker/jitsi-config}/jvb:/config:Z
+    env_file:
+      - ./docker/.env.jitsi
+    depends_on:
+      - prosody
+    networks:
+      meet.jitsi:
+
+networks:
+  meet.jitsi:
