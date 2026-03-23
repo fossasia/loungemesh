@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
-import type { JitsiTrackLike } from '@/types/jitsi';
+import type { JitsiTrack } from '@/types/jitsi';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   clampPan,
   clampScale,
@@ -9,7 +10,6 @@ import {
 } from '@/constants/pan';
 import { isOnScreen } from '@/utils/vector';
 import { useConferenceStore } from './conferenceStore';
-import { useConnectionStore } from './connectionStore';
 
 export type Vector2 = { x: number; y: number };
 
@@ -19,8 +19,8 @@ export type LocalState = {
   pos: Vector2;
   pan: Vector2;
   scale: number;
-  audio?: JitsiTrackLike;
-  video?: JitsiTrackLike;
+  audio?: JitsiTrack;
+  video?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   onStage: boolean;
   stageVisible: boolean;
@@ -59,11 +59,8 @@ export const useLocalStore = defineStore('local', {
       this.scale = scale;
       this.pan = clampPan(payload.pan, scale);
     },
-    /** Called when `PanWrapper` mounts — matches legacy TransformWrapper initial pan + random user tile. */
     resetViewportForRoom() {
       this.setLocalPosition(randomInitialUserPosition());
-      // Centering depends on `window.innerWidth/Height` which can be wrong during initial layout
-      // (fonts, browser UI, etc). Re-run a few times to avoid landing “in a corner”.
       const centerNow = () => {
         if (window.innerWidth < 200 || window.innerHeight < 200) return;
         const pan = initialPanCenterOnUser(this.pos, defaultScale);
@@ -73,13 +70,13 @@ export const useLocalStore = defineStore('local', {
       requestAnimationFrame(centerNow);
       window.setTimeout(centerNow, 150);
     },
-    setLocalTracks(tracks: any[]) {
+    setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
       const videoTrack = tracks.find((t) => t.getType?.() === 'video');
       if (audioTrack) this.audio = audioTrack;
       if (videoTrack) {
         this.video = videoTrack;
-        this.videoType = videoTrack?.videoType === 'desktop' ? 'desktop' : 'camera';
+        this.videoType = videoTrack.videoType === 'desktop' ? 'desktop' : 'camera';
       }
     },
     setOnStage(v: boolean) {
@@ -96,7 +93,8 @@ export const useLocalStore = defineStore('local', {
       else this.selectedUsersOnStage = [id];
     },
     calculateUsersOnScreen() {
-      const conference = useConferenceStore().conferenceObject;
+      const engine = getMediaEngineInstance();
+      const conference = engine.getConference();
       const users = useConferenceStore().users;
       const visibleUserIds: string[] = [];
       const stageIds: string[] = [];
@@ -125,7 +123,7 @@ export const useLocalStore = defineStore('local', {
       this.usersOnStage = [...new Set(stageIds)];
 
       const selectedEndpoints = [...this.visibleUsers, ...this.usersOnStage];
-      conference?.setReceiverConstraints?.({
+      engine.setReceiverConstraints({
         colibriClass: 'SelectedEndpointsChangedEvent',
         selectedEndpoints,
         lastN: selectedEndpoints.length,
@@ -133,24 +131,23 @@ export const useLocalStore = defineStore('local', {
         defaultConstraints: { maxHeight: 200 },
         constraints: {},
       });
+      void conference;
     },
     async toggleMute() {
+      const engine = getMediaEngineInstance();
       let audioTrack = this.audio;
       if (!audioTrack) {
-        const jsMeet = useConnectionStore().jsMeet;
-        if (!jsMeet) return;
         try {
-          const tracks = (await jsMeet.createLocalTracks({ devices: ['audio'] })) as any[];
-          const created = tracks.find((t) => t.getType?.() === 'audio');
+          const tracks = await engine.createLocalTracks(['audio']);
+          const created = tracks.find((t) => t.getType() === 'audio');
           if (!created) return;
           this.audio = created;
           audioTrack = created;
-          const conf = useConferenceStore().conferenceObject;
-          if (conf) {
+          if (engine.isJoined()) {
             try {
-              await conf.addTrack?.(created);
+              await engine.addLocalTrack(created);
             } catch {
-              /* already added or unsupported */
+              /* already added */
             }
           }
         } catch {
@@ -158,14 +155,13 @@ export const useLocalStore = defineStore('local', {
         }
       }
       if (!audioTrack) return;
-      if (audioTrack.isMuted?.()) {
-        audioTrack.unmute?.();
+      if (audioTrack.isMuted()) {
+        await audioTrack.unmute();
         this.mute = false;
       } else {
-        audioTrack.mute?.();
+        await audioTrack.mute();
         this.mute = true;
       }
     },
   },
 });
-

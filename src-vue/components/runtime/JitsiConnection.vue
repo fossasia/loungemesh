@@ -1,46 +1,58 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, watchEffect } from 'vue';
+import { onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useConnectionStore } from '@/stores/connectionStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { conferenceOptions } from '@/config/jitsiOptions';
 
 const route = useRoute();
-const connectionStore = useConnectionStore();
+const { engine, connected, connect, joinRoom, leaveRoom, disconnect } = useMediaEngine();
 const conferenceStore = useConferenceStore();
 
-onMounted(async () => {
-  await connectionStore.initJitsiMeet();
-  await connectionStore.connectServer();
-});
-
 onBeforeUnmount(() => {
+  leaveRoom();
   conferenceStore.leaveConference();
-  connectionStore.disconnectServer();
+  disconnect();
 });
 
-watchEffect(async () => {
-  const id = String(route.params.id ?? '');
-  if (!id) return;
-  if (!connectionStore.connected) return;
-  if (conferenceStore.isJoining) return;
+watch(
+  [() => route.params.id, connected],
+  async ([id, isConnected]) => {
+    const roomId = String(id ?? '');
+    if (!roomId) return;
 
-  if (conferenceStore.isJoined && conferenceStore.conferenceName !== id) {
-    conferenceStore.leaveConference();
-  }
-  if (conferenceStore.isJoined) return;
-  if (conferenceStore.conferenceObject) return;
+    if (!isConnected) {
+      conferenceStore.error = undefined;
+      try {
+        await connect();
+      } catch (e: unknown) {
+        conferenceStore.error = e instanceof Error ? e.message : String(e);
+      }
+      return;
+    }
 
-  conferenceStore.error = undefined;
-  try {
-    await conferenceStore.initConference(id);
-  } catch (e: unknown) {
-    conferenceStore.error = e instanceof Error ? e.message : String(e);
-  }
-});
+    if (conferenceStore.isJoining) return;
+    if (conferenceStore.isJoined && conferenceStore.conferenceName !== roomId) {
+      leaveRoom();
+      conferenceStore.leaveConference();
+    }
+    if (conferenceStore.isJoined) return;
+    if (conferenceStore.conferenceObject) return;
+
+    conferenceStore.error = undefined;
+    conferenceStore.setConferenceName(roomId);
+    try {
+      await joinRoom(roomId, conferenceStore.displayName, conferenceOptions);
+      conferenceStore.conferenceObject = engine.getConference();
+    } catch (e: unknown) {
+      conferenceStore.error = e instanceof Error ? e.message : String(e);
+      conferenceStore.isJoining = false;
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
-  <!-- runtime-only component -->
   <span style="display: none" />
 </template>
-

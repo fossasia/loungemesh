@@ -1,94 +1,99 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue';
-import { useConnectionStore } from '@/stores/connectionStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
+import { throttle } from '@/utils/throttle';
 import { getVolumeByDistance } from '@/utils/vector';
 
-function throttle<T extends (...args: any[]) => void>(fn: T, waitMs: number): T {
-  let last = 0;
-  let timeout: number | undefined;
-  let pendingArgs: any[] | undefined;
-  const run = () => {
-    last = Date.now();
-    timeout = undefined;
-    if (pendingArgs) fn(...pendingArgs);
-    pendingArgs = undefined;
-  };
-  return ((...args: any[]) => {
-    const now = Date.now();
-    const remaining = waitMs - (now - last);
-    if (remaining <= 0) {
-      pendingArgs = args;
-      run();
-      return;
-    }
-    pendingArgs = args;
-    if (timeout) return;
-    timeout = window.setTimeout(run, remaining);
-  }) as T;
-}
-
-const connectionStore = useConnectionStore();
+const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
 const localStore = useLocalStore();
 
 const throttledSendPos = throttle((pos: string) => {
-  conferenceStore.conferenceObject?.sendCommand?.('pos', { value: pos });
+  engine.sendCommand('pos', pos);
 }, 200);
 
-onMounted(async () => {
-  await connectionStore.initJitsiMeet();
+let worker: Worker | undefined;
+let workerReady = false;
+
+function applyVolumes(myPos: { x: number; y: number }) {
+  for (const key of Object.keys(conferenceStore.users)) {
+    const u = conferenceStore.users[key];
+    const vol = getVolumeByDistance(myPos, u.pos);
+    u.volume = vol;
+    setParticipantVolume(key, vol);
+  }
+}
+
+function initProximityWorker() {
+  if (typeof Worker === 'undefined') return;
+  try {
+    worker = new Worker(new URL('@/workers/proximityAudio.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    worker.onmessage = (e: MessageEvent<{ volumes: Array<{ id: string; volume: number }> }>) => {
+      for (const { id, volume } of e.data.volumes) {
+        if (conferenceStore.users[id]) {
+          conferenceStore.users[id].volume = volume;
+          setParticipantVolume(id, volume);
+        }
+      }
+      localStore.calculateUsersOnScreen();
+    };
+    workerReady = true;
+  } catch {
+    worker = undefined;
+  }
+}
+
+onMounted(() => {
+  initProximityWorker();
 });
 
 watch(
   () => conferenceStore.conferenceObject,
-  (conf) => {
-    const id = conf?.myUserId?.();
+  () => {
+    const id = engine.getLocalUserId();
     if (id) localStore.setMyID(id);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
-  () => connectionStore.jsMeet,
-  async (jsMeet) => {
-    if (!jsMeet) return;
-    /* Pinia survives Enter → Session; avoid a second createLocalTracks + leaked devices. */
+  () => conferenceStore.isJoined,
+  async (joined) => {
+    if (!joined) return;
     if (localStore.audio && localStore.video) return;
     try {
-      const tracks = await jsMeet.createLocalTracks({
-        devices: ['audio', 'video'],
-        firePermissionPromptIsShownEvent: true,
-      });
+      const tracks = await createLocalTracks(['audio', 'video']);
       localStore.setLocalTracks(tracks);
     } catch {
-      // ignore for now
+      /* permissions denied */
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-/** Publish mic/camera to the room once the conference is joined (required for remote A/V). */
 async function addLocalTracksToConference() {
-  const conf = conferenceStore.conferenceObject;
+  const conf = engine.getConference();
   if (!conferenceStore.isJoined || !conf) return;
   for (const track of [localStore.audio, localStore.video]) {
     if (!track) continue;
     try {
-      await conf.addTrack?.(track);
+      await engine.addLocalTrack(track);
     } catch {
-      /* already in conference or unsupported */
+      /* already added */
     }
   }
 }
 
 watch(
-  () => [conferenceStore.isJoined, conferenceStore.conferenceObject, localStore.audio, localStore.video],
+  () => [conferenceStore.isJoined, localStore.audio, localStore.video],
   () => {
     void addLocalTracksToConference();
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch(
@@ -97,18 +102,21 @@ watch(
     if (!id) return;
     throttledSendPos(JSON.stringify({ ...pos, id }));
 
-    // update volumes for all remote users
-    for (const key of Object.keys(conferenceStore.users)) {
-      const u = conferenceStore.users[key];
-      u.volume = getVolumeByDistance(pos, u.pos);
+    if (worker && workerReady) {
+      const users = Object.values(conferenceStore.users).map((u) => ({
+        id: u.id,
+        pos: u.pos,
+      }));
+      worker.postMessage({ myPos: pos, users });
+    } else {
+      applyVolumes(pos);
+      localStore.calculateUsersOnScreen();
     }
-    localStore.calculateUsersOnScreen();
   },
-  { deep: true }
+  { deep: true },
 );
 </script>
 
 <template>
   <span style="display: none" />
 </template>
-

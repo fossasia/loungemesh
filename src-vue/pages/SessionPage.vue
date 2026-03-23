@@ -12,14 +12,16 @@ import LocalUser from '@/components/room/LocalUser.vue';
 import AppHeader from '@/components/layout/AppHeader.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import Info from '@/components/common/Info.vue';
-import ChatPanel from '@/components/chat/ChatPanel.vue';
+import { defineAsyncComponent } from 'vue';
 import MoreTab from '@/components/footer/MoreTab.vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
 import StageButton from '@/components/stage/StageButton.vue';
-import StagePanel from '@/components/stage/StagePanel.vue';
+
+const ChatPanel = defineAsyncComponent(() => import('@/components/chat/ChatPanel.vue'));
+const StagePanel = defineAsyncComponent(() => import('@/components/stage/StagePanel.vue'));
 import { useLocalStore } from '@/stores/localStore';
 import { useConferenceStore } from '@/stores/conferenceStore';
-import { useConnectionStore } from '@/stores/connectionStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import MicIcon from '@/components/icons/MicIcon.vue';
 import MicOffIcon from '@/components/icons/MicOffIcon.vue';
 
@@ -31,7 +33,7 @@ const identifier = computed(() => String(route.params.id ?? ''));
 
 const local = useLocalStore();
 const conf = useConferenceStore();
-const conn = useConnectionStore();
+const { disconnect, leaveRoom, engine } = useMediaEngine();
 const router = useRouter();
 
 // Pinia can preserve pan/zoom across navigations; force a deterministic recenter per session.
@@ -43,9 +45,10 @@ watch(
 
 function leave() {
   local.setOnStage(false);
-  conf.conferenceObject?.setLocalParticipantProperty?.('onStage', false);
+  engine.setLocalParticipantProperty('onStage', false);
+  leaveRoom();
   conf.leaveConference();
-  conn.disconnectServer();
+  disconnect();
   router.push('/');
 }
 </script>
@@ -62,7 +65,7 @@ function leave() {
     </Room>
   </PanWrapper>
   <StagePanel />
-  <FooterBar left-text="Chatmosphere">
+  <FooterBar left-text="Flowspace">
     <StageButton />
     <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">
       <template #icon>
