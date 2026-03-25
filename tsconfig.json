@@ -15,7 +15,10 @@
     "noEmit": true,
     "jsx": "preserve",
     "noImplicitAny": false,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@/*": ["./src-vue/*"]
+    }
   },
-  "include": ["src-vue", "src-vue/**/*", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src-vue", "src-vue/**/*", "vite.config.ts", "vitest.config.ts", "e2e"]
 }
