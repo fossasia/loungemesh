@@ -1,7 +1,6 @@
 {
-  "version": "0.6.1",
-  "homepage": "https://app.chatmosphere.cc",
-  "name": "chatmosphere",
+  "version": "0.7.0",
+  "name": "flowspace",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,10 +8,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "docs:dev": "vitepress dev docs-site",
+    "docs:build": "vitepress build docs-site",
+    "docs:preview": "vitepress preview docs-site",
     "docker:jitsi-env": "node docker/setup-jitsi-env.mjs",
     "docker:up": "docker compose --env-file docker/.env.jitsi up --build"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@types/node": "^25.5.0",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/test-utils": "^2.4.6",
@@ -21,6 +26,7 @@
     "prettier": "^3.8.1",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
+    "vitepress": "^1.6.3",
     "vitest": "^4.1.2"
   },
   "dependencies": {

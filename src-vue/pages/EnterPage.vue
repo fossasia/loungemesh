@@ -50,9 +50,9 @@ function join() {
   <div id="centerContainer" class="centerOverlay">
     <div class="headlineRow">
       <img :src="Wave" alt="" class="wave" />
-      <h1 class="big">Welcome to Chatmosphere</h1>
+      <h1 class="big">Welcome to Flowspace</h1>
     </div>
-    <h3 class="sub">The Open Source Videochat for Cozy Talks</h3>
+    <h3 class="sub">Spatial video lounges for informal online events</h3>
   </div>
   <FooterBar>
     <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">

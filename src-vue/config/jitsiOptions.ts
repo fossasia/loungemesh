@@ -1,4 +1,4 @@
-export const conferenceNameDefault = 'chatmosphere';
+export const conferenceNameDefault = 'flowspace';
 
 export const conferenceOptions = {
   openBridgeChannel: false,

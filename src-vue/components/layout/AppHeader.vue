@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import kissingCat from '@/assets/kissingCat.svg';
-import loveCat from '@/assets/loveCat.svg';
+import logo from '@/assets/logo.svg';
 </script>
 
 <template>
-  <a class="hdr" target="_blank" rel="noopener noreferrer" href="https://chatmosphere.cc">
-    <img :src="kissingCat" alt="" class="cat default" width="40" height="40" />
-    <img :src="loveCat" alt="" class="cat hover" width="40" height="40" />
-    <slot />
+  <a class="hdr" href="/" rel="home">
+    <img :src="logo" alt="" class="logo" width="32" height="32" />
+    <span class="brand"><slot>Flowspace</slot></span>
   </a>
 </template>
 
@@ -16,29 +14,24 @@ import loveCat from '@/assets/loveCat.svg';
   display: flex;
   flex-direction: row;
   align-items: center;
+  gap: 8px;
   position: fixed;
   margin: 10px 0;
   right: 10px;
-  padding: 10px;
-  border-radius: 5px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
   z-index: 10000;
-  font-weight: 500;
-  font-size: 1.25rem;
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-h2);
   text-decoration: none;
-  color: #000;
-  height: 40px;
+  color: var(--color-text-default);
+  background: var(--color-bg-card);
+  box-shadow: 0 1px 4px rgba(79, 110, 247, 0.12);
 }
-.cat.hover {
-  display: none;
-  margin-right: 5px;
+.logo {
+  flex-shrink: 0;
 }
-.cat.default {
-  margin-right: 5px;
-}
-.hdr:hover .cat.default {
-  display: none;
-}
-.hdr:hover .cat.hover {
-  display: inline;
+.brand {
+  line-height: 1;
 }
 </style>

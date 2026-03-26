@@ -3,8 +3,6 @@ import { ref } from 'vue';
 import IconButton from '@/components/ui/IconButton.vue';
 import MoreVerticalIcon from '@/components/icons/MoreVerticalIcon.vue';
 import MenuCard from '@/components/common/MenuCard.vue';
-import HeartIcon from '@/components/icons/HeartIcon.vue';
-import TwitterIcon from '@/components/icons/TwitterIcon.vue';
 import GitHubIcon from '@/components/icons/GitHubIcon.vue';
 import MessageCircleIcon from '@/components/icons/MessageCircleIcon.vue';
 
@@ -16,19 +14,7 @@ const open = ref(false);
     <MenuCard v-if="open" title="More" :onClose="() => (open = false)">
       <ul class="list">
         <li class="li">
-          <a class="a" href="https://opencollective.com/chatmosphere" target="_blank" rel="noopener noreferrer">
-            <HeartIcon class="ico" />
-            Spenden
-          </a>
-        </li>
-        <li class="li">
-          <a class="a" href="https://twitter.com/chatmospherecc" target="_blank" rel="noopener noreferrer">
-            <TwitterIcon class="ico" />
-            Twitter
-          </a>
-        </li>
-        <li class="li">
-          <a class="a" href="https://github.com/Chatmosphere/chatmosphere-app" target="_blank" rel="noopener noreferrer">
+          <a class="a" href="https://github.com/eventyay/flowspace" target="_blank" rel="noopener noreferrer">
             <GitHubIcon class="ico" />
             GitHub
           </a>
@@ -36,12 +22,12 @@ const open = ref(false);
         <li class="li">
           <a
             class="a"
-            href="https://www.allourideas.org/ChatmosphereFeedback/"
+            href="https://docs.flowspace.com"
             target="_blank"
             rel="noopener noreferrer"
           >
             <MessageCircleIcon class="ico" />
-            Feedback
+            Documentation
           </a>
         </li>
       </ul>

@@ -16,7 +16,7 @@ function goSession(name: string) {
 </script>
 
 <template>
-  <AppHeader>Chatmosphere</AppHeader>
+  <AppHeader />
   <Info>
     Welcome to our Prototype<br />
     Please use <b>Chromium</b> or <b>Chrome</b> for now for a stable Experience
@@ -25,9 +25,9 @@ function goSession(name: string) {
     <div class="center">
       <div class="headlineRow">
         <img :src="Wave" alt="" class="wave" />
-        <h1 class="big">Welcome to Chatmosphere</h1>
+        <h1 class="big">Welcome to Flowspace</h1>
       </div>
-      <h3 class="sub">The Open Source Videochat for Cozy Talks</h3>
+      <h3 class="sub">Spatial video lounges for informal online events</h3>
       <NameInputForm class="formWrap" @submit="goSession" />
     </div>
   </main>

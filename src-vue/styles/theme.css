@@ -1,4 +1,4 @@
-/* Warm theme from legacy styled-components (src/theme/theme.tsx) */
+/* Flowspace theme — cool blue-tinted surfaces */
 :root {
   --font-display: 'Space', system-ui, sans-serif;
   --font-body: 'Space', system-ui, sans-serif;
@@ -10,7 +10,7 @@
   --color-mono40: #6f6e6d;
   --color-mono60: #9c9b9a;
   --color-mono80: #d5d4d3;
-  --color-mono95: #f5f4f3;
+  --color-mono95: #eef1ff;
   --color-mono100: #ffffff;
 
   --color-orange100: #e27022;
@@ -23,8 +23,8 @@
   --color-text-warning: #e15d4c;
   --color-text-primary: #5770eb;
 
-  --color-bg-page: #f5f4f3;
-  --color-bg-inset: #9c9b9a;
+  --color-bg-page: #eef1ff;
+  --color-bg-inset: #8b8fa8;
   --color-bg-card: #ffffff;
 
   --btn-default-bg: #ffffff;
