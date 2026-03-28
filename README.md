@@ -1,40 +1,46 @@
-<div align="center" style="border:0 solid #efefef; background-color: #fff; padding:0; margin:0 0 50px 0; color:#333;">
-<h1 style="border-bottom:none; margin-bottom:0;">😽 Chatmosphere</h1>
-<b>The Open Source Videochat for Cozy Talks</b>
-</div>
+# Flowspace
 
+Spatial video lounge for informal online and hybrid events — move freely in a shared 2D space with proximity-based audio. Built for [Eventyay](https://eventyay.com) integration and self-hosted Jitsi.
 
-![Chatmosphere Demo](docs/chatmosphere.gif)
+**Documentation:** [docs.flowspace.com](https://docs.flowspace.com) (configure via GitHub Pages + `DOCS_CNAME`)
 
-**Chatmosphere is an open source project that aims to make video calls informal and natural**. We missed the dynamics of a self-organizing crowd hanging out at one big table together. The big table in a bar, where so many discussions, jokes, comforting talks, utopias and ideas happen. With chatmosphere you can move and zoom in the area and hear people that are located near by louder and have dynamic talks. To learn more about the Chatmosphere project and ideas have a look in our [ABOUT.md](docs/ABOUT.md)
+## Quick start
 
+```bash
+cp .env.example .env.local
+npm install
+npm run dev
+```
 
-### Docker (Flowspace + local Jitsi Meet)
+Open [http://localhost:5173](http://localhost:5173).
 
-1. Create Jitsi env and config dirs: `node docker/setup-jitsi-env.mjs`
-2. Start everything: `docker compose --env-file docker/.env.jitsi up --build`
+## Docker (SPA + Jitsi stack)
 
-Then open **Flowspace** at **http://localhost:8880**. Jitsi’s web port is **`HTTP_PORT`** in `docker/.env.jitsi` (example uses **8001** so it does not collide with apps on 8000). `PUBLIC_URL` must stay in sync with that port because it is baked into the SPA at build time.
+```bash
+npm run docker:jitsi-env
+npm run docker:up
+```
 
-For media behind NAT, set `DOCKER_HOST_ADDRESS` (or `JVB_ADVERTISE_IPS`) in `docker/.env.jitsi` per the [Jitsi Docker handbook](https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker). More options: `docker/env.jitsi.example` and the upstream [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) `env.example`.
+- Flowspace: http://localhost:8880  
+- Jitsi: see `docker/env.jitsi.example`
 
-### Helpful Links
-* [How to run Chatmosphere](docs/INSTALL.md)
-* [Contribution Guideline](docs/CONTRIBUTION.md)
-* [Find Support here](https://github.com/Chatmosphere/chatmosphere-app/discussions)
-* [Code of Conduct for Excellent Humans](docs/CODE_OF_CONDUCT.md)
-* [Roadmap](https://github.com/orgs/Chatmosphere/projects/4)
-* [Code License](LICENSE.md)
-* [Donations to help us maintaining Chatmospere and run our demo server](https://opencollective.com/chatmosphere)
+## Stack
 
-<!-- 
-You can learn more about the awesome Create React App Starter Kit in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).  
-To learn more about React, check out the [React documentation](https://reactjs.org/).  
--->
-<!-- TODO: write [Shoutout and Fame] -->
+- Vue 3, TypeScript, Vite, Pinia
+- `lib-jitsi-meet` (headless, no iframe)
+- Web Audio API for spatial gain
+- Docker + nginx
 
-### Funded from September 2020 until February 2021 and September 2021 until February 2022 by
+## Scripts
 
-<p style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
-<a href="https://www.bmbf.de/bmbf/en" rel="nofollow"><img src="https://github.com/Chatmosphere/chatmosphere-app/blob/24e0769f66ecea8cfb4b6f71d5af5380b441cd6a/docs/BMBF_sponsored_by_en.jpg" alt="Logo of the German Ministry for Education and Research" style="max-width:100%; padding:20px;" height="150px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://prototypefund.de/en/" rel="nofollow"><img src="docs/PF-Logo.svg" alt="Logo of the Prototype Fund" style="max-width:100%; padding:20px;" height="150px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://okfn.de/en/" rel="nofollow"><img src="docs/OKFD-Logo.svg" alt="Logo of the Open Knowledge Foundation Germany" style="max-width:100%; padding:20px;" height="150px"></a>
-</p>
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Development server |
+| `npm run build` | Production build → `dist/` |
+| `npm test` | Vitest unit tests |
+| `npm run docs:dev` | VitePress docs locally |
+| `npm run docs:build` | Build docs to `docs-site/.vitepress/dist` |
+
+## License
+
+See [LICENSE.md](LICENSE.md).
