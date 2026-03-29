@@ -11,6 +11,10 @@
 # production
 /build
 /dist
+/docs-site/.vitepress/dist
+/docs-site/.vitepress/cache
+/test-results
+/playwright-report
 
 # misc
 .DS_Store
