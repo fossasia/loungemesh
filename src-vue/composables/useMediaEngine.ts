@@ -2,93 +2,37 @@ import { readonly, ref, shallowRef } from 'vue';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { MediaService } from '@/services/MediaService';
 import { useConferenceStore } from '@/stores/conferenceStore';
-import { useConnectionStore } from '@/stores/connectionStore';
-import { useLocalStore } from '@/stores/localStore';
 import type { JitsiTrack } from '@/types/jitsi';
+import { refreshJwt, getStoredJwt } from '@/composables/useAccessGuard';
+import { setJwtRefreshCallback } from '@/composables/useEvenytayBridge';
+import { isMediaEngineWired, markMediaEngineWired } from '@/composables/mediaEngineWiringState';
+import { wireStoreSync } from '@/composables/mediaEngineWiring';
+import { runConferenceJoin } from '@/composables/joinConferenceRoom';
 
 function getEngine(): MediaService {
   return getMediaEngineInstance();
 }
 
-function wireStoreSync(engine: MediaService): void {
-  const connectionStore = useConnectionStore();
-  const conferenceStore = useConferenceStore();
-
-  engine.on('connected', () => {
-    connectionStore.$patch({ connected: true, error: undefined });
+function wireTokenRefresh(engine: MediaService): void {
+  // Register the token refresh function with the media engine.
+  // The engine calls this when Jitsi fires AUTHENTICATION_REQUIRED.
+  engine.onTokenExpired(async () => {
+    const newJwt = await refreshJwt();
+    return newJwt;
   });
-  engine.on('disconnected', () => {
-    connectionStore.$patch({ connected: false });
-  });
-  engine.on('connectionFailed', (detail) => {
-    connectionStore.$patch({ connected: false, error: detail, connection: undefined });
-  });
-  engine.on('conferenceJoined', () => {
-    conferenceStore.$patch({
-      isJoined: true,
-      isJoining: false,
-      error: undefined,
-      conferenceObject: engine.getConference(),
-    });
-    const id = engine.getLocalUserId();
-    if (id) useLocalStore().setMyID(id);
-  });
-  engine.on('conferenceError', (detail) => {
-    conferenceStore.$patch({
-      error: detail,
-      conferenceObject: undefined,
-      isJoined: false,
-      isJoining: false,
-    });
-  });
-  engine.on('userJoined', (id, user) => {
-    conferenceStore.addUser(id, user);
-  });
-  engine.on('userLeft', (id) => {
-    conferenceStore.removeUser(id);
-  });
-  engine.on('trackAdded', (track) => {
-    const id = track.getParticipantId?.();
-    if (!id) return;
-    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
-    if (track.getType() === 'audio') {
-      conferenceStore.users[id].audio = track;
-      conferenceStore.users[id].mute = track.isMuted();
-    } else {
-      conferenceStore.users[id].video = track;
-      conferenceStore.users[id].videoType = track.videoType === 'desktop' ? 'desktop' : 'camera';
-    }
-  });
-  engine.on('messageReceived', (id, text, nr) => {
-    conferenceStore.messages = [...conferenceStore.messages, { id, text, nr }];
-  });
-  engine.on('participantPropertyChanged', (id, properties) => {
-    if (!conferenceStore.users[id]) return;
-    conferenceStore.users[id].properties = {
-      ...conferenceStore.users[id].properties,
-      ...properties,
-    };
-  });
-  engine.on('command', (name, payload) => {
-    if (name !== 'pos') return;
-    try {
-      const pos = JSON.parse(payload.value) as { id?: string; x?: number; y?: number };
-      if (pos?.id != null && pos.x != null && pos.y != null) {
-        conferenceStore.updateUserPosition(pos.id, { x: pos.x, y: pos.y });
-      }
-    } catch {
-      /* ignore malformed */
-    }
+  // Register the callback for token refresh initiated by the Eventyay parent window.
+  setJwtRefreshCallback((jwt: string) => {
+    // Reconnect directly with the injected JWT.
+    void engine.connect({ jwt } as never);
   });
 }
 
-let wired = false;
-
 export function useMediaEngine() {
   const engine = getEngine();
-  if (!wired) {
+  if (!isMediaEngineWired()) {
     wireStoreSync(engine);
-    wired = true;
+    wireTokenRefresh(engine);
+    markMediaEngineWired();
   }
 
   const connected = ref(engine.isConnected());
@@ -119,8 +63,9 @@ export function useMediaEngine() {
     connected: readonly(connected),
     joined: readonly(joined),
     engineError: readonly(engineError),
-    async connect() {
-      await engine.connect();
+    async connect(opts?: { jwt?: string; appId?: string }) {
+      const jwt = opts?.jwt ?? getStoredJwt() ?? undefined;
+      await engine.connect(jwt ? { jwt } : undefined);
       connected.value = engine.isConnected();
     },
     disconnect() {
@@ -130,17 +75,8 @@ export function useMediaEngine() {
     },
     async joinRoom(room: string, displayName: string, conferenceOptions: Record<string, unknown>) {
       const conferenceStore = useConferenceStore();
-      if (conferenceStore.isJoining) return;
-      conferenceStore.isJoining = true;
-      conferenceStore.conferenceObject = engine.getConference() as never;
-      try {
-        await engine.joinRoom(room, displayName, conferenceOptions);
-        conferenceStore.conferenceObject = engine.getConference() as never;
-        joined.value = engine.isJoined();
-      } catch (e) {
-        conferenceStore.isJoining = false;
-        throw e;
-      }
+      await runConferenceJoin(engine, conferenceStore, room, displayName, conferenceOptions);
+      joined.value = engine.isJoined();
     },
     leaveRoom() {
       engine.leaveRoom();

@@ -16,7 +16,11 @@ ARG VITE_XMPP_MUC_DOMAIN
 ARG VITE_SERVICE_URL
 ARG VITE_USE_WEBSOCKET
 ARG VITE_EVENTYAY_API_BASE
+ARG VITE_EVENTYAY_JWT_ENDPOINT
 ARG VITE_SESSION_PREFIX
+# Comma-separated origins allowed to embed Flowspace in an iframe.
+# Baked at build time into the SPA (used in meta tag + postMessage).
+ARG VITE_ALLOW_IFRAME_FROM
 
 ENV VITE_JITSI_PUBLIC_URL=$VITE_JITSI_PUBLIC_URL \
     VITE_XMPP_DOMAIN=$VITE_XMPP_DOMAIN \
@@ -24,14 +28,22 @@ ENV VITE_JITSI_PUBLIC_URL=$VITE_JITSI_PUBLIC_URL \
     VITE_SERVICE_URL=$VITE_SERVICE_URL \
     VITE_USE_WEBSOCKET=$VITE_USE_WEBSOCKET \
     VITE_EVENTYAY_API_BASE=$VITE_EVENTYAY_API_BASE \
-    VITE_SESSION_PREFIX=$VITE_SESSION_PREFIX
+    VITE_EVENTYAY_JWT_ENDPOINT=$VITE_EVENTYAY_JWT_ENDPOINT \
+    VITE_SESSION_PREFIX=$VITE_SESSION_PREFIX \
+    VITE_ALLOW_IFRAME_FROM=$VITE_ALLOW_IFRAME_FROM
 
 RUN npm run build
 
-# --- runtime: static SPA ---
+# --- runtime: static SPA served by nginx ---
 FROM nginx:stable-alpine
 
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+# The official nginx image processes *.conf.template via envsubst before start.
+# NGINX_ALLOW_IFRAME_FROM sets CSP frame-ancestors at runtime without a rebuild.
+COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# Default: deny all cross-origin framing.
+ENV NGINX_ALLOW_IFRAME_FROM=""
 
 EXPOSE 80

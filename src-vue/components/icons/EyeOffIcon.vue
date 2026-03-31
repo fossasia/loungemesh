@@ -1,5 +1,4 @@
 <template>
-  <!-- feather "eye-off" style -->
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
     <path
       d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.11 1 12c.74-1.76 2.05-3.66 3.77-5.16"

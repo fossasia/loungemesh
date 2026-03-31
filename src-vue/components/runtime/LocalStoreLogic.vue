@@ -5,6 +5,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { throttle } from '@/utils/throttle';
 import { getVolumeByDistance } from '@/utils/vector';
+import { applyWorkerVolume } from '@/components/runtime/applyWorkerVolume';
 
 const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
@@ -34,10 +35,7 @@ function initProximityWorker() {
     });
     worker.onmessage = (e: MessageEvent<{ volumes: Array<{ id: string; volume: number }> }>) => {
       for (const { id, volume } of e.data.volumes) {
-        if (conferenceStore.users[id]) {
-          conferenceStore.users[id].volume = volume;
-          setParticipantVolume(id, volume);
-        }
+        applyWorkerVolume(id, volume, conferenceStore.users, setParticipantVolume);
       }
       localStore.calculateUsersOnScreen();
     };

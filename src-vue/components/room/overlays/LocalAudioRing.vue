@@ -11,7 +11,7 @@ import { audioRadius } from '@/utils/vector';
 </template>
 
 <style scoped>
-/* Hearing range for proximity audio — matches app.chatmosphere.cc session UI */
+/* Hearing range circle for proximity audio (dashed ring around local user) */
 .ring {
   position: absolute;
   left: 50%;

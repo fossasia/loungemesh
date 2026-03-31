@@ -30,6 +30,9 @@ jobs:
       - run: npm run docs:build
         env:
           DOCS_BASE_URL: ${{ vars.DOCS_BASE_URL || '/' }}
+      - name: Custom domain (docs.example.com)
+        if: ${{ vars.DOCS_CNAME != '' }}
+        run: echo "${{ vars.DOCS_CNAME }}" > docs-site/.vitepress/dist/CNAME
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

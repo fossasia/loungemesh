@@ -1,4 +1,5 @@
 import { getConnectionOptions } from '@/config/connectionOptions';
+import { conferenceErrorDetail } from '@/services/conferenceErrorDetail';
 import { secureConferenceName } from '@/utils/secureConferenceName';
 import type { JitsiConference, JitsiMeetJS, JitsiTrack, ReceiverConstraints } from '@/types/jitsi';
 import type {
@@ -119,9 +120,20 @@ export class JitsiAdapter implements MediaService {
       this.emit('messageReceived', String(id), String(text), Number(nr));
     });
     conference.on(ev.CONFERENCE_ERROR, () => {
-      this.emit('conferenceError', connection.xmpp?.lastErrorMsg ?? 'conference_error');
+      this.emit('conferenceError', conferenceErrorDetail(connection.xmpp));
       this.conference = undefined;
       this.joined = false;
+    });
+    conference.on(ev.CONFERENCE_FAILED, (reason: unknown) => {
+      const r = String(reason ?? '');
+      // Jitsi fires CONFERENCE_FAILED with AUTHENTICATION_REQUIRED when the JWT expires
+      if (r.includes('not-authorized') || r.includes('authentication') || r.includes('auth')) {
+        void this.handleTokenExpired();
+      } else {
+        this.emit('conferenceError', r);
+        this.conference = undefined;
+        this.joined = false;
+      }
     });
     conference.on(ev.TRACK_ADDED, (track: unknown) => {
       const t = track as JitsiTrack;
@@ -221,7 +233,23 @@ export class JitsiAdapter implements MediaService {
 
   onTokenExpired(refreshFn: () => Promise<string | null>): void {
     this.tokenRefreshFn = refreshFn;
-    void this.tokenRefreshFn;
+  }
+
+  private async handleTokenExpired(): Promise<void> {
+    this.emit('tokenExpired');
+    if (!this.tokenRefreshFn) return;
+    const newJwt = await this.tokenRefreshFn();
+    if (!newJwt) {
+      this.emit('conferenceError', 'token_refresh_failed');
+      return;
+    }
+    // Reconnect with fresh JWT
+    this.jwt = newJwt;
+    this.leaveRoom();
+    this.connection?.disconnect();
+    this.connection = undefined;
+    this.connected = false;
+    await this.connect({ jwt: newJwt, appId: this.appId ?? undefined } as never);
   }
 
   dispose(): void {

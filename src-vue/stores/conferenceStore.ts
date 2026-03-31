@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { shallowReactive } from 'vue';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { JitsiConference, JitsiTrack } from '@/types/jitsi';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
@@ -35,7 +36,12 @@ export const useConferenceStore = defineStore('conference', {
     conferenceName: conferenceNameDefault,
     isJoined: false,
     isJoining: false,
-    users: {},
+    /**
+     * shallowReactive: each RemoteUser object is reactive at the top level only.
+     * Nested track objects (JitsiTrack) are intentionally NOT deeply observed —
+     * they are opaque SDK objects that change by reference, not property mutation.
+     */
+    users: shallowReactive({}),
     displayName: 'Friendly Sphere',
     error: undefined,
     messages: [],

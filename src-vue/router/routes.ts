@@ -7,6 +7,9 @@ const defaultRoomRedirect = () =>
 const defaultEnterRedirect = () =>
   ({ name: 'enter' as const, params: { id: conferenceNameDefault } });
 
+const defaultJoinRedirect = () =>
+  ({ name: 'join' as const, params: { id: conferenceNameDefault } });
+
 export const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -27,6 +30,19 @@ export const routes: RouteRecordRaw[] = [
     path: '/session/:id',
     name: 'session',
     component: () => import('@/pages/SessionPage.vue'),
+    props: true,
+  },
+  /**
+   * /join/:id — Eventyay entry point.
+   * Receives ?token=<opaque> from the eventyay-flowspace plugin,
+   * validates access, then redirects to /session/:id.
+   */
+  { path: '/join', redirect: defaultJoinRedirect },
+  { path: '/join/', redirect: defaultJoinRedirect },
+  {
+    path: '/join/:id',
+    name: 'join',
+    component: () => import('@/pages/JoinPage.vue'),
     props: true,
   },
 ];

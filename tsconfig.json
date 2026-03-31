@@ -20,5 +20,10 @@
       "@/*": ["./src-vue/*"]
     }
   },
-  "include": ["src-vue", "src-vue/**/*", "vite.config.ts", "vitest.config.ts", "e2e"]
+  "include": ["src-vue", "src-vue/**/*", "vite.config.ts", "vitest.config.ts", "e2e"],
+  "exclude": [
+    "src-vue/**/*.test.ts",
+    "src-vue/**/*.spec.ts",
+    "src-vue/test/**"
+  ]
 }

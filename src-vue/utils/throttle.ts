@@ -7,8 +7,10 @@ export function throttle<T extends (...args: unknown[]) => void>(fn: T, waitMs: 
   const run = () => {
     last = Date.now();
     timeout = undefined;
-    if (pendingArgs) fn(...pendingArgs);
+    if (pendingArgs === undefined) return;
+    const args = pendingArgs;
     pendingArgs = undefined;
+    fn(...args);
   };
 
   return ((...args: Parameters<T>) => {

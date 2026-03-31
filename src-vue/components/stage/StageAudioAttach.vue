@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+/**
+ * StageAudioAttach — wires a Jitsi audio track into the Web Audio API
+ * using a GainNode for smooth, click-free volume changes.
+ *
+ * The stage view shows a single "on-stage" speaker at full volume;
+ * this component replaces the old HTMLAudioElement.volume approach.
+ */
+import { onBeforeUnmount, onMounted, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
 
 const props = defineProps<{
@@ -7,63 +14,61 @@ const props = defineProps<{
   volume: number;
 }>();
 
-const audioEl = ref<HTMLAudioElement | null>(null);
-let previousContainer: any | undefined;
+let ctx: AudioContext | undefined;
+let source: MediaStreamAudioSourceNode | undefined;
+let gain: GainNode | undefined;
 
-function attach() {
-  if (props.track && audioEl.value) {
-    // Legacy behavior: detach from previous container first (StageAudio.tsx)
-    const containers = (props.track as any)?.containers;
-    if (containers && containers.length > 0) {
-      previousContainer = containers[0];
-      try {
-        props.track.detach?.(previousContainer);
-      } catch {
-        // ignore
-      }
-    }
-    if ((props.track as any)?.containers?.length === 0) {
-      props.track.attach?.(audioEl.value);
-    } else {
-      props.track.attach?.(audioEl.value);
-    }
-  }
+function ensureCtx(): AudioContext {
+  if (!ctx) ctx = new AudioContext();
+  if (ctx.state === 'suspended') void ctx.resume();
+  return ctx;
 }
 
-function detach() {
-  if (props.track && audioEl.value) props.track.detach?.(audioEl.value);
-  if (props.track && previousContainer) {
-    try {
-      props.track.attach?.(previousContainer);
-    } catch {
-      // ignore
-    }
-    previousContainer = undefined;
+function teardown(): void {
+  try {
+    source?.disconnect();
+    gain?.disconnect();
+  } catch {
+    /* already disconnected */
   }
+  source = undefined;
+  gain = undefined;
 }
 
-onMounted(attach);
-watch(() => props.track, () => {
-  detach();
-  attach();
-});
+function setup(): void {
+  teardown();
+  const track = props.track as { getOriginalStream?: () => MediaStream } | undefined;
+  const stream = track?.getOriginalStream?.();
+  if (!stream) return;
+
+  const audioCtx = ensureCtx();
+  source = audioCtx.createMediaStreamSource(stream);
+  gain = audioCtx.createGain();
+  gain.gain.value = Math.max(0, Math.min(1, props.volume));
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+}
+
+onMounted(setup);
+watch(() => props.track, () => { setup(); });
 
 watch(
   () => props.volume,
   (v) => {
-    if (audioEl.value) audioEl.value.volume = v;
-  }
+    if (!gain || !ctx) return;
+    const clamped = Math.max(0, Math.min(1, v));
+    gain.gain.setTargetAtTime(clamped, ctx.currentTime, 0.015);
+  },
 );
 
-onBeforeUnmount(detach);
+onBeforeUnmount(() => {
+  teardown();
+  void ctx?.close();
+  ctx = undefined;
+});
 </script>
 
 <template>
-  <audio v-if="track" ref="audioEl" autoplay class="aud" />
+  <!-- No visible element — audio is handled entirely by Web Audio API -->
+  <span aria-hidden="true" style="display:none" />
 </template>
-
-<style scoped>
-.aud {
-  display: none;
-}
-</style>

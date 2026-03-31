@@ -1,4 +1,5 @@
-type PanVec = { x: number; y: number };
+/** Pan/zoom position in screen pixels. */
+export type PanVec = { x: number; y: number };
 
 export const roomSize = { x: 6000, y: 6000 };
 export const userSize = { x: 200, y: 200 };

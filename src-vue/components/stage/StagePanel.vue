@@ -2,27 +2,17 @@
 import { computed } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
-import type { JitsiTrackLike } from '@/types/jitsi';
 import StageVideoAttach from '@/components/stage/StageVideoAttach.vue';
 import StageUser from '@/components/stage/components/StageUser.vue';
 import IconButton from '@/components/ui/IconButton.vue';
 import EyeOffIcon from '@/components/icons/EyeOffIcon.vue';
 import VolumeXIcon from '@/components/icons/VolumeXIcon.vue';
+import { remoteStageUsers as listRemoteStageUsers } from '@/components/stage/remoteStageUsers';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
 
-const remoteStageUsers = computed(() => {
-  const out: Array<{ id: string; audio?: JitsiTrackLike; video?: JitsiTrackLike }> = [];
-  for (const id of Object.keys(conference.users)) {
-    const u = conference.users[id];
-    const p = u?.properties?.onStage;
-    if (p === true || p === 'true') {
-      out.push({ id, audio: u.audio, video: u.video });
-    }
-  }
-  return out;
-});
+const remoteStageUsers = computed(() => listRemoteStageUsers(conference.users));
 
 const showStrip = computed(() => remoteStageUsers.value.length > 0 || local.onStage);
 

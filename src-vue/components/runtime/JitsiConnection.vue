@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { conferenceOptions } from '@/config/jitsiOptions';
+import { handleSessionConnectionWatch } from './sessionConnectionWatch';
 
 const route = useRoute();
 const { engine, connected, connect, joinRoom, leaveRoom, disconnect } = useMediaEngine();
@@ -16,38 +17,17 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  [() => route.params.id, connected],
+  [() => route.params.id, () => connected.value],
   async ([id, isConnected]) => {
     const roomId = String(id ?? '');
-    if (!roomId) return;
-
-    if (!isConnected) {
-      conferenceStore.error = undefined;
-      try {
-        await connect();
-      } catch (e: unknown) {
-        conferenceStore.error = e instanceof Error ? e.message : String(e);
-      }
-      return;
-    }
-
-    if (conferenceStore.isJoining) return;
-    if (conferenceStore.isJoined && conferenceStore.conferenceName !== roomId) {
-      leaveRoom();
-      conferenceStore.leaveConference();
-    }
-    if (conferenceStore.isJoined) return;
-    if (conferenceStore.conferenceObject) return;
-
-    conferenceStore.error = undefined;
-    conferenceStore.setConferenceName(roomId);
-    try {
-      await joinRoom(roomId, conferenceStore.displayName, conferenceOptions);
-      conferenceStore.conferenceObject = engine.getConference();
-    } catch (e: unknown) {
-      conferenceStore.error = e instanceof Error ? e.message : String(e);
-      conferenceStore.isJoining = false;
-    }
+    await handleSessionConnectionWatch(roomId, isConnected, {
+      connect,
+      joinRoom,
+      leaveRoom,
+      conferenceStore,
+      engine,
+      conferenceOptions,
+    });
   },
   { immediate: true },
 );

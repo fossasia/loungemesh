@@ -1,0 +1,42 @@
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 6;
+    gzip_proxied any;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    # X-Content-Type-Options and Referrer-Policy are always set.
+    # X-Frame-Options is omitted in favour of CSP frame-ancestors below,
+    # which supports listing specific origins (X-Frame-Options cannot).
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # NGINX_ALLOW_IFRAME_FROM is substituted at container start via envsubst.
+    # Default value ('self') denies all cross-origin framing.
+    # Set to e.g. "https://eventyay.com https://video.eventyay.com" in docker-compose.
+    add_header Content-Security-Policy "frame-ancestors 'self' ${NGINX_ALLOW_IFRAME_FROM}" always;
+
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location /libs/ {
+        add_header Cache-Control "public, max-age=86400";
+        try_files $uri =404;
+    }
+
+    location = /favicon.svg {
+        add_header Cache-Control "public, max-age=604800";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

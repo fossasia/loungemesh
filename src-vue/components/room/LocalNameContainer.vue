@@ -29,7 +29,12 @@ function commit() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' || e.key === 'Enter') {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    commit();
+    return;
+  }
+  if (e.key === 'Enter' || e.key === 'NumpadEnter') {
     e.preventDefault();
     commit();
   }

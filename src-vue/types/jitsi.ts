@@ -57,6 +57,7 @@ export interface JitsiMeetJSEvents {
     USER_JOINED: string;
     USER_LEFT: string;
     CONFERENCE_JOINED: string;
+    CONFERENCE_FAILED: string;
     CONFERENCE_ERROR: string;
     TRACK_ADDED: string;
     MESSAGE_RECEIVED: string;

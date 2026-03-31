@@ -154,7 +154,6 @@ export const useLocalStore = defineStore('local', {
           return;
         }
       }
-      if (!audioTrack) return;
       if (audioTrack.isMuted()) {
         await audioTrack.unmute();
         this.mute = false;

@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 /** Matches legacy `useInfoStore` for the prototype banner (dismiss on click). */
 export const useInfoStore = defineStore('info', {
   state: () => ({
-    /** Visible on first load like https://app.chatmosphere.cc — dismiss sets false. */
+    /** Visible on first load — dismiss sets false. */
     show: true,
   }),
   actions: {
