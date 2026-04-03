@@ -12,6 +12,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Architecture', link: '/architecture' },
+      { text: 'API', link: '/api/README' },
       { text: 'GitHub', link: 'https://github.com/eventyay/flowspace' },
     ],
     sidebar: [
@@ -21,9 +22,12 @@ export default defineConfig({
           { text: 'Getting started', link: '/guide/getting-started' },
           { text: 'Deployment', link: '/guide/deployment' },
           { text: 'Eventyay integration', link: '/guide/eventyay-integration' },
+          { text: 'Testing', link: '/guide/testing' },
+          { text: 'Publishing docs', link: '/guide/publishing-docs' },
         ],
       },
       { text: 'Architecture', link: '/architecture' },
+      { text: 'API reference', link: '/api/README' },
     ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/eventyay/flowspace' }],
   },
