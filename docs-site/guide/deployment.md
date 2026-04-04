@@ -25,10 +25,12 @@ Serve `dist/` with nginx or any static host. SPA fallback to `index.html` is req
 
 The included [`nginx/default.conf`](https://github.com/eventyay/flowspace/blob/main/nginx/default.conf) enables gzip, long-cache for hashed assets, and SPA routing.
 
-## Docs site
+## Docs site (`docs.yourdomain.com`)
 
-```bash
-npm run docs:build
-```
+Documentation is a **separate static site** from the Flowspace app:
 
-Deploy `docs-site/.vitepress/dist` to GitHub Pages or any static host. Set repository variable `DOCS_CNAME` to `docs.flowspace.com` (or your domain) for custom DNS.
+- **Build:** `npm run docs:build` (TypeDoc API + VitePress guides)
+- **Deploy:** GitHub Actions workflow [`.github/workflows/docs.yml`](https://github.com/eventyay/flowspace/blob/main/.github/workflows/docs.yml) → GitHub Pages
+- **Custom domain:** set repository variable `DOCS_CNAME` to e.g. `docs.flowspace.com`
+
+See [Publishing docs](/guide/publishing-docs) for the full Sphinx/autodoc-style pipeline, DNS, and `DOCS_BASE_URL` for project Pages URLs.

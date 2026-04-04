@@ -2,7 +2,7 @@
 
 Spatial video lounge for informal online and hybrid events — move freely in a shared 2D space with proximity-based audio. Built for [Eventyay](https://eventyay.com) integration and self-hosted Jitsi.
 
-**Documentation:** [docs.flowspace.com](https://docs.flowspace.com) (configure via GitHub Pages + `DOCS_CNAME`)
+**Documentation:** [docs.flowspace.com](https://docs.flowspace.com) — built with TypeDoc + VitePress, deployed via [GitHub Actions](.github/workflows/docs.yml) to GitHub Pages (`DOCS_CNAME` + `DOCS_BASE_URL` repo variables). See [Publishing docs](docs-site/guide/publishing-docs.md).
 
 ## Quick start
 
@@ -40,6 +40,7 @@ npm run docker:up
 | `npm test` | Vitest unit tests |
 | `npm run docs:dev` | VitePress docs locally |
 | `npm run docs:build` | Build docs to `docs-site/.vitepress/dist` |
+| `npm run test:e2e` | Playwright smoke tests (after `npm run build`) |
 
 ## License
 
