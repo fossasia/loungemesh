@@ -1,52 +1,53 @@
-/* Flowspace theme — cool blue-tinted surfaces */
+/* Flowspace theme — cool blue surfaces */
 :root {
   --font-display: 'Space', system-ui, sans-serif;
   --font-body: 'Space', system-ui, sans-serif;
 
   --color-mono0: #000000;
-  --color-mono10: #272625;
-  --color-mono30: #434241;
+  --color-mono10: #1e2240;
+  --color-mono30: #3b4068;
   /* Between mono30 and mono60 — menu link icons */
-  --color-mono40: #6f6e6d;
-  --color-mono60: #9c9b9a;
-  --color-mono80: #d5d4d3;
-  --color-mono95: #eef1ff;
+  --color-mono40: #6970a0;
+  --color-mono60: #9ba3cc;
+  --color-mono80: #cdd2f0;
+  --color-mono95: #e6eaff;
   --color-mono100: #ffffff;
 
   --color-orange100: #e27022;
-  --color-blue100: #5770eb;
+  --color-blue100: #4f6ef7;
   --color-red100: #e15d4c;
   --color-red120: #f07969;
 
-  --color-text-default: #272625;
-  --color-text-light: #9c9b9a;
+  --color-text-default: #1e2240;
+  --color-text-light: #9ba3cc;
   --color-text-warning: #e15d4c;
-  --color-text-primary: #5770eb;
+  --color-text-primary: #4f6ef7;
 
-  --color-bg-page: #eef1ff;
-  --color-bg-inset: #8b8fa8;
-  --color-bg-card: #ffffff;
+  /* Slightly richer blue background — clearly blue at all display profiles */
+  --color-bg-page: #e4eaff;
+  --color-bg-inset: #7a83b8;
+  --color-bg-card: #f5f7ff;
 
-  --btn-default-bg: #ffffff;
-  --btn-default-bg-hover: #f5f4f3;
-  --btn-default-fg: #434241;
+  --btn-default-bg: #f5f7ff;
+  --btn-default-bg-hover: #e4eaff;
+  --btn-default-fg: #3b4068;
 
-  --btn-primary-bg: #5770eb;
-  --btn-primary-bg-hover: #f5f4f3;
+  --btn-primary-bg: #4f6ef7;
+  --btn-primary-bg-hover: #e4eaff;
   --btn-primary-fg: #ffffff;
 
   --btn-warning-bg: #e15d4c;
   --btn-warning-bg-hover: #f07969;
   --btn-warning-fg: #ffffff;
 
-  --btn-active-bg: #5770eb;
+  --btn-active-bg: #4f6ef7;
   --btn-active-fg: #ffffff;
 
-  --input-bg: #ffffff;
-  --input-fg: #d5d4d3;
-  --line-dark: #434241;
-  --line-default: #9c9b9a;
-  --line-light: #f5f4f3;
+  --input-bg: #f5f7ff;
+  --input-fg: #cdd2f0;
+  --line-dark: #3b4068;
+  --line-default: #9ba3cc;
+  --line-light: #e4eaff;
 
   --radius-sm: 5px;
   --radius-round: 25px;
