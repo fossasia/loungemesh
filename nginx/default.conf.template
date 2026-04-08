@@ -4,6 +4,9 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Serve pre-compressed .gz siblings produced by vite-plugin-compression2.
+    # Falls back to runtime gzip for any file that doesn't have a .gz sibling.
+    gzip_static on;
     gzip on;
     gzip_vary on;
     gzip_comp_level 6;
@@ -33,6 +36,11 @@ server {
 
     location = /favicon.svg {
         add_header Cache-Control "public, max-age=604800";
+        try_files $uri =404;
+    }
+
+    location = /manifest.json {
+        add_header Cache-Control "public, max-age=3600";
         try_files $uri =404;
     }
 

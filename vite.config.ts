@@ -1,9 +1,16 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { fileURLToPath, URL } from 'node:url';
+import { compression } from 'vite-plugin-compression2';
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    // Emit pre-compressed .gz and .br siblings so nginx can serve them
+    // instantly via gzip_static / brotli_static without CPU overhead.
+    compression({ algorithm: 'gzip', exclude: /\.(png|jpe?g|gif|webp|ico|svg)$/ }),
+    compression({ algorithm: 'brotliCompress', exclude: /\.(png|jpe?g|gif|webp|ico|svg)$/ }),
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src-vue', import.meta.url)),

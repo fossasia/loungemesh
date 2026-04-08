@@ -32,6 +32,7 @@
     "typedoc-plugin-markdown": "^4.4.2",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
+    "vite-plugin-compression2": "^2.5.3",
     "vitepress": "^1.6.3",
     "vitest": "^4.1.2"
   },
