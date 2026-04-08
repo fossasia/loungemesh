@@ -1,70 +1,47 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { setJwtRefreshCallback, useEventyayBridge } from './useEvenytayBridge';
 
 describe('useEventyayBridge', () => {
   const originalParent = window.parent;
-  const originalSelf = window.self;
 
   afterEach(() => {
     Object.defineProperty(window, 'parent', { value: originalParent, configurable: true });
-    Object.defineProperty(window, 'self', { value: originalSelf, configurable: true });
     vi.unstubAllEnvs();
   });
 
-  it('detects iframe when parent access throws', async () => {
-    Object.defineProperty(window, 'self', {
-      get() {
-        throw new Error('cross-origin');
-      },
-      configurable: true,
-    });
-    const Comp = defineComponent({
-      setup() {
-        return useEventyayBridge();
-      },
-      template: '<div />',
-    });
+  function setParent(value: object) {
+    Object.defineProperty(window, 'parent', { value, configurable: true });
+  }
+
+  it('detects iframe by checking window.parent !== window', () => {
+    setParent({} as Window);
+    const Comp = defineComponent({ setup: () => useEventyayBridge(), template: '<div />' });
     const wrapper = mount(Comp);
     expect(wrapper.vm.inIframe).toBe(true);
     wrapper.unmount();
-    Object.defineProperty(window, 'self', { value: originalSelf, configurable: true });
   });
 
   it('removes message listener on unmount in iframe', async () => {
     vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com');
     const removeSpy = vi.spyOn(window, 'removeEventListener');
-    const parentWin = { postMessage: vi.fn() };
-    Object.defineProperty(window, 'parent', { value: parentWin, configurable: true });
-    Object.defineProperty(window, 'top', { value: parentWin, configurable: true });
-    Object.defineProperty(window, 'self', { value: window, configurable: true });
+    setParent({ postMessage: vi.fn() });
 
     const wrapper = mount(
-      defineComponent({
-        setup: () => useEventyayBridge(),
-        template: '<div />',
-      }),
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
     );
     await nextTick();
     wrapper.unmount();
     expect(removeSpy).toHaveBeenCalledWith('message', expect.any(Function));
     removeSpy.mockRestore();
-    Object.defineProperty(window, 'parent', { value: originalParent, configurable: true });
-    Object.defineProperty(window, 'top', { value: originalParent, configurable: true });
-    Object.defineProperty(window, 'self', { value: originalSelf, configurable: true });
   });
 
   it('is a no-op outside iframe', async () => {
     const removeSpy = vi.spyOn(window, 'removeEventListener');
-    const Comp = defineComponent({
-      setup() {
-        const bridge = useEventyayBridge();
-        return bridge;
-      },
-      template: '<div />',
-    });
-    const wrapper = mount(Comp);
+    const wrapper = mount(
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
+    );
     expect(wrapper.vm.inIframe).toBe(false);
     wrapper.vm.announce();
     wrapper.vm.notifyJoined(3);
@@ -77,21 +54,13 @@ describe('useEventyayBridge', () => {
   it('posts to parent and handles token messages in iframe', async () => {
     vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com');
     const postMessage = vi.fn();
-    const parentWin = { postMessage };
-    Object.defineProperty(window, 'parent', { value: parentWin, configurable: true });
-    Object.defineProperty(window, 'top', { value: parentWin, configurable: true });
-    Object.defineProperty(window, 'self', { value: window, configurable: true });
-
+    setParent({ postMessage });
     const refresh = vi.fn();
     setJwtRefreshCallback(refresh);
 
-    const Comp = defineComponent({
-      setup() {
-        return useEventyayBridge();
-      },
-      template: '<div />',
-    });
-    const wrapper = mount(Comp);
+    const wrapper = mount(
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
+    );
     await nextTick();
     expect(postMessage).toHaveBeenCalled();
 
@@ -103,6 +72,7 @@ describe('useEventyayBridge', () => {
     );
     expect(refresh).toHaveBeenCalledWith('jwt-1');
 
+    // Message from disallowed origin is ignored
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://evil.com',
@@ -115,15 +85,10 @@ describe('useEventyayBridge', () => {
   it('does not post when allowed origins list is empty', async () => {
     vi.stubEnv('VITE_ALLOW_IFRAME_FROM', '');
     const postMessage = vi.fn();
-    Object.defineProperty(window, 'parent', { value: { postMessage }, configurable: true });
-    Object.defineProperty(window, 'top', { value: { postMessage }, configurable: true });
-    Object.defineProperty(window, 'self', { value: window, configurable: true });
-
-    const Comp = defineComponent({
-      setup: () => useEventyayBridge(),
-      template: '<div />',
-    });
-    const wrapper = mount(Comp);
+    setParent({ postMessage });
+    const wrapper = mount(
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
+    );
     await nextTick();
     expect(postMessage).not.toHaveBeenCalled();
     wrapper.unmount();
@@ -131,22 +96,13 @@ describe('useEventyayBridge', () => {
 
   it('ignores postMessage failures and empty jwt tokens', async () => {
     vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com,https://other.com');
-    const postMessage = vi.fn().mockImplementation(() => {
-      throw new Error('blocked');
-    });
-    const parentWin = { postMessage };
-    Object.defineProperty(window, 'parent', { value: parentWin, configurable: true });
-    Object.defineProperty(window, 'top', { value: parentWin, configurable: true });
-    Object.defineProperty(window, 'self', { value: window, configurable: true });
-
+    const postMessage = vi.fn().mockImplementation(() => { throw new Error('blocked'); });
+    setParent({ postMessage });
     const refresh = vi.fn();
     setJwtRefreshCallback(refresh);
 
     const wrapper = mount(
-      defineComponent({
-        setup: () => useEventyayBridge(),
-        template: '<div />',
-      }),
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
     );
     await nextTick();
     window.dispatchEvent(
@@ -163,15 +119,9 @@ describe('useEventyayBridge', () => {
     vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com');
     const refresh = vi.fn();
     setJwtRefreshCallback(refresh);
-    Object.defineProperty(window, 'parent', { value: { postMessage: vi.fn() }, configurable: true });
-    Object.defineProperty(window, 'top', { value: { postMessage: vi.fn() }, configurable: true });
-    Object.defineProperty(window, 'self', { value: window, configurable: true });
-
+    setParent({ postMessage: vi.fn() });
     const wrapper = mount(
-      defineComponent({
-        setup: () => useEventyayBridge(),
-        template: '<div />',
-      }),
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
     );
     await nextTick();
     window.dispatchEvent(
@@ -188,15 +138,9 @@ describe('useEventyayBridge', () => {
     vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com');
     const refresh = vi.fn();
     setJwtRefreshCallback(refresh);
-    Object.defineProperty(window, 'parent', { value: { postMessage: vi.fn() }, configurable: true });
-    Object.defineProperty(window, 'top', { value: { postMessage: vi.fn() }, configurable: true });
-    Object.defineProperty(window, 'self', { value: window, configurable: true });
-
+    setParent({ postMessage: vi.fn() });
     const wrapper = mount(
-      defineComponent({
-        setup: () => useEventyayBridge(),
-        template: '<div />',
-      }),
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
     );
     await nextTick();
     window.dispatchEvent(
