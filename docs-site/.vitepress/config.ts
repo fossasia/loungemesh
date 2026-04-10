@@ -24,6 +24,8 @@ export default defineConfig({
           { text: 'Eventyay integration', link: '/guide/eventyay-integration' },
           { text: 'Testing', link: '/guide/testing' },
           { text: 'Publishing docs', link: '/guide/publishing-docs' },
+          { text: 'Implementation status', link: '/guide/status' },
+          { text: 'Contributing', link: '/guide/contributing' },
         ],
       },
       { text: 'Architecture', link: '/architecture' },
