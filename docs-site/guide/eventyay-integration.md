@@ -98,8 +98,47 @@ User clicks lounge button in Eventyay
   → fresh JWT injected without page reload
 ```
 
-## Session names & display names
+## Local development with Eventyay on localhost
 
-Eventyay passes the participant's display name in the token response (`display_name` field). Flowspace pre-fills the name field with this value. Participants without an Eventyay session see `"Friendly Sphere"` as the default.
+To test the full integration on your machine:
 
-Room configuration (background image, etc.) is fetched from the Eventyay `GET /v1/events/<id>/flowspace` endpoint when `VITE_EVENTYAY_API_BASE` is set.
+1. **Start Eventyay** on port 8000 with the plugin installed:
+   ```bash
+   cd /path/to/eventyay
+   pip install -e plugins/eventyay-flowspace
+   python manage.py runserver 8000
+   ```
+
+2. **Configure Flowspace** in `.env.local`:
+   ```
+   VITE_EVENTYAY_API_BASE=http://localhost:8000
+   VITE_EVENTYAY_JWT_ENDPOINT=http://localhost:8000/api/v1/flowspace/token/
+   VITE_ALLOW_IFRAME_FROM=http://localhost:8000
+   ```
+
+3. **Start Flowspace**:
+   ```bash
+   npm run dev   # http://localhost:5173
+   ```
+
+4. In Eventyay, navigate to your event → plugin settings → Flowspace rooms.
+   Create a room, set `flowspace_url = http://localhost:5173`.
+
+5. Open the embed URL: `http://localhost:8000/flowspace/<event>/<room>/`
+   — the iframe loads Flowspace; the "Open in new tab" button opens `http://localhost:5173`.
+
+> **Note:** The Jitsi JWT integration requires a running Jitsi instance with a matching `app_secret`.
+> For UI development without Jitsi, leave `VITE_EVENTYAY_JWT_ENDPOINT` unset (open mode).
+
+## Session names and the "not-available" block
+
+When Eventyay creates a Flowspace room, the Jitsi room name is derived as
+`fls-<event-slug>-<room-slug>`. The `secureConferenceName` utility on the
+Flowspace side normalises and re-prefixes the name to prevent collisions with
+other Jitsi rooms on the same server.
+
+Rooms owned by Eventyay are not directly joinable via URL without a valid token.
+Anyone navigating to `/join/<room>` without `?token=` receives the
+`AccessDeniedPage` with reason `no_token`.
+
+

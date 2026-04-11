@@ -19,11 +19,32 @@ npm ci
 npm run build
 ```
 
-Serve `dist/` with nginx or any static host. SPA fallback to `index.html` is required.
+`vite-plugin-compression2` emits `.gz` and `.br` siblings for every JS/CSS/JSON bundle alongside the regular files. The build output in `dist/` is ready for deployment.
 
 ## nginx
 
-The included [`nginx/default.conf`](https://github.com/eventyay/flowspace/blob/main/nginx/default.conf) enables gzip, long-cache for hashed assets, and SPA routing.
+`nginx/default.conf.template` enables:
+
+- `gzip_static on` — serve pre-compressed `.gz` siblings without runtime CPU overhead
+- Runtime gzip fallback for any file without a pre-built `.gz`
+- Long-cache headers for hashed `assets/` and `libs/` (1 year immutable)
+- 1-hour cache for `manifest.json`
+- `Content-Security-Policy: frame-ancestors` controlled by `NGINX_ALLOW_IFRAME_FROM`
+- SPA fallback to `index.html`
+
+## iframe embedding
+
+To allow Eventyay to embed Flowspace in an `<iframe>`, set the runtime variable:
+
+```bash
+NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://video.eventyay.com"
+```
+
+This is substituted into the `Content-Security-Policy` header at container start (no rebuild needed).
+
+## Eventyay plugin
+
+See [Eventyay integration](/guide/eventyay-integration) for the full plugin setup, including JWT credentials, room creation, and localhost testing.
 
 ## Docs site (`docs.yourdomain.com`)
 
@@ -33,4 +54,4 @@ Documentation is a **separate static site** from the Flowspace app:
 - **Deploy:** GitHub Actions workflow [`.github/workflows/docs.yml`](https://github.com/eventyay/flowspace/blob/main/.github/workflows/docs.yml) → GitHub Pages
 - **Custom domain:** set repository variable `DOCS_CNAME` to e.g. `docs.flowspace.com`
 
-See [Publishing docs](/guide/publishing-docs) for the full Sphinx/autodoc-style pipeline, DNS, and `DOCS_BASE_URL` for project Pages URLs.
+See [Publishing docs](/guide/publishing-docs) for the full pipeline, DNS, and `DOCS_BASE_URL` for project Pages URLs.
