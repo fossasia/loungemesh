@@ -8,8 +8,8 @@ export default defineConfig({
     vue(),
     // Emit pre-compressed .gz and .br siblings so nginx can serve them
     // instantly via gzip_static / brotli_static without CPU overhead.
-    compression({ algorithm: 'gzip', exclude: /\.(png|jpe?g|gif|webp|ico|svg)$/ }),
-    compression({ algorithm: 'brotliCompress', exclude: /\.(png|jpe?g|gif|webp|ico|svg)$/ }),
+    compression({ algorithms: ['gzip'], exclude: /\.(png|jpe?g|gif|webp|ico|svg)$/ }),
+    compression({ algorithms: ['brotliCompress'], exclude: /\.(png|jpe?g|gif|webp|ico|svg)$/ }),
   ],
   resolve: {
     alias: {
