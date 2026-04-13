@@ -27,8 +27,11 @@ yarn-debug.log*
 yarn-error.log*
 .cert
 .env
+.env.local
+.env.*
+!.env.example
+docker/.env.jitsi
 .eslintcache
 app
 .env.app
-docker/.env.jitsi
 docker/jitsi-config
