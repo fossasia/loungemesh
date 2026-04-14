@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
@@ -18,6 +19,7 @@ describe('EnterPage', () => {
     expect(wrapper.text()).toContain('Join');
     const push = vi.spyOn(router, 'push');
     await wrapper.find('.btn-primary-round').trigger('click');
+    await flushPromises();
     expect(push).toHaveBeenCalledWith('/session/flowspace');
     wrapper.unmount();
   });

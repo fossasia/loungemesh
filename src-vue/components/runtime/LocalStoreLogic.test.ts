@@ -6,9 +6,15 @@ import { mountWithApp } from '@/test/mountApp';
 import { connectAndJoinTestConference } from '@/test/jitsiTestContext';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { makeTrack } from '@/test/makeTrack';
 import LocalStoreLogic from './LocalStoreLogic.vue';
+import { watchTrackSpeaking } from '@/utils/speakingMeter';
+
+vi.mock('@/utils/speakingMeter', () => ({
+  watchTrackSpeaking: vi.fn(),
+}));
 
 describe('LocalStoreLogic', () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -20,6 +26,7 @@ describe('LocalStoreLogic', () => {
   it('uses proximity worker when available', async () => {
     class MockWorker {
       onmessage: ((e: MessageEvent) => void) | null = null;
+      terminate() {}
       postMessage() {
         this.onmessage?.({
           data: { volumes: [{ id: 'u1', volume: 0.3 }] },
@@ -73,6 +80,7 @@ describe('LocalStoreLogic', () => {
     const volSpy = vi.spyOn(getMediaEngineInstance(), 'setParticipantVolume');
     class MockWorker {
       onmessage: ((e: MessageEvent) => void) | null = null;
+      terminate() {}
       postMessage() {
         this.onmessage?.({
           data: { volumes: [{ id: 'unknown', volume: 0.4 }] },
@@ -141,18 +149,18 @@ describe('LocalStoreLogic', () => {
     const conference = useConferenceStore();
     const local = useLocalStore();
     conference.isJoined = true;
-    vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockRejectedValueOnce(new Error('denied'));
+    vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockRejectedValue(new Error('denied'));
     const { wrapper } = await mountWithApp(LocalStoreLogic);
     await flushPromises();
     expect(local.audio).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('skips track creation when not joined', async () => {
+  it('requests media on mount even when not joined', async () => {
     const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks');
     const { wrapper } = await mountWithApp(LocalStoreLogic);
     await flushPromises();
-    expect(createSpy).not.toHaveBeenCalled();
+    expect(createSpy).toHaveBeenCalled();
     createSpy.mockRestore();
     wrapper.unmount();
   });
@@ -175,6 +183,65 @@ describe('LocalStoreLogic', () => {
     await nextTick();
     expect(addSpy.mock.calls.every(([track]) => track !== undefined)).toBe(true);
     addSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('publishes speaking state via participant property', async () => {
+    vi.mocked(watchTrackSpeaking).mockImplementation((_track, onChange) => {
+      onChange(true);
+      return () => {};
+    });
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    local.audio = makeTrack('audio');
+    const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    expect(local.speaking).toBe(true);
+    expect(propSpy).toHaveBeenCalledWith('speaking', true);
+    propSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('recenters viewport on window resize', async () => {
+    const local = useLocalStore();
+    const resetSpy = vi.spyOn(local, 'resetViewportForRoom');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    window.dispatchEvent(new Event('resize'));
+    expect(resetSpy).toHaveBeenCalled();
+    resetSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('does not request media when connection store disconnects', async () => {
+    const connection = useConnectionStore();
+    connection.connected = true;
+    const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    createSpy.mockClear();
+    connection.connected = false;
+    await flushPromises();
+    expect(createSpy).not.toHaveBeenCalled();
+    createSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('requests media when connection store becomes connected', async () => {
+    const connection = useConnectionStore();
+    const local = useLocalStore();
+    const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    local.audio = undefined;
+    local.video = undefined;
+    createSpy.mockClear();
+    connection.connected = true;
+    await flushPromises();
+    expect(createSpy).toHaveBeenCalled();
+    createSpy.mockRestore();
     wrapper.unmount();
   });
 

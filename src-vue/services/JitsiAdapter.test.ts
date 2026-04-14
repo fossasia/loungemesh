@@ -139,6 +139,70 @@ describe('JitsiAdapter', () => {
     await expect(adapter.joinRoom('r', 'A', {})).rejects.toThrow('not ready');
   });
 
+  it('retries conference join after focus disconnect', async () => {
+    vi.useFakeTimers();
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference.join.mockClear();
+    mock.conference._fire(
+      mock.jsMeet.events.conference.CONFERENCE_FAILED,
+      'conference.focusDisconnected',
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mock.conference.join).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('does not retry join after focus failure when already joined', async () => {
+    vi.useFakeTimers();
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+    mock.conference.join.mockClear();
+    mock.conference._fire(
+      mock.jsMeet.events.conference.CONFERENCE_FAILED,
+      'focus disconnected',
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mock.conference.join).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('skips focus retry when conference reference was cleared', async () => {
+    vi.useFakeTimers();
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(
+      mock.jsMeet.events.conference.CONFERENCE_FAILED,
+      'focus disconnected',
+    );
+    adapter.leaveRoom();
+    mock.conference.join.mockClear();
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mock.conference.join).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('swallows join errors during focus retry', async () => {
+    vi.useFakeTimers();
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference.join.mockImplementation(() => {
+      throw new Error('join boom');
+    });
+    mock.conference._fire(
+      mock.jsMeet.events.conference.CONFERENCE_FAILED,
+      'focus error',
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mock.conference.join).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('handles conference error and failed paths', async () => {
     const onError = vi.fn();
     adapter.on('conferenceError', onError);
@@ -232,7 +296,20 @@ describe('JitsiAdapter', () => {
     mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
 
     const tracks = await adapter.createLocalTracks(['audio']);
+    expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
+      expect.objectContaining({ devices: ['audio'] }),
+    );
     await adapter.addLocalTrack(tracks[0]);
+
+    await adapter.createLocalTracks(['desktop']);
+    expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
+      expect.objectContaining({ devices: ['desktop'] }),
+    );
+
+    await adapter.createLocalTracks([]);
+    expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
+      expect.objectContaining({ devices: ['video'] }),
+    );
     await adapter.replaceLocalTrack(tracks[0], tracks[0]);
     adapter.setDisplayName('A');
     adapter.setLocalParticipantProperty('k', 'v');

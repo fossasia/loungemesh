@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -11,7 +11,13 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import JitsiConnection from './JitsiConnection.vue';
 
 describe('JitsiConnection', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setActivePinia(createPinia());
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   async function mountConnection(route = '/session/room-a') {
     const Parent = defineComponent({
@@ -89,6 +95,7 @@ describe('JitsiConnection', () => {
     await flushPromises();
     const jitsi = getJitsiTestContext();
     jitsi.connection._fire(jitsi.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
 
     expect(joinSpy).toHaveBeenCalledWith('room-join', conference.displayName, expect.any(Object));
@@ -215,6 +222,7 @@ describe('JitsiConnection', () => {
     conference.conferenceObject = undefined;
     joinSpy.mockClear();
     await router.push('/session/room-b');
+    await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
 
     expect(connectSpy.mock.calls.length).toBe(connectsAfterJoin);
@@ -265,6 +273,7 @@ describe('JitsiConnection', () => {
     getJitsiTestContext().connection._fire(
       getJitsiTestContext().jsMeet.events.connection.CONNECTION_ESTABLISHED,
     );
+    await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
     expect(conference.error).toBe('plain failure');
     joinSpy.mockRestore();

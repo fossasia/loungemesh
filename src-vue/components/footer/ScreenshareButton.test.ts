@@ -85,16 +85,13 @@ describe('ScreenshareButton', () => {
     wrapper.unmount();
   });
 
-  it('logs errors when track creation fails', async () => {
+  it('clears sharing state when track creation fails', async () => {
     await connectAndJoinTestConference();
-    const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockRejectedValueOnce(new Error('fail'));
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockRejectedValueOnce(new Error('fail'));
     const { wrapper } = await mountWithApp(ScreenshareButton);
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
-    expect(errSpy).toHaveBeenCalled();
-    createSpy.mockRestore();
-    errSpy.mockRestore();
+    expect(wrapper.find('button.ibtn').classes()).not.toContain('active');
     wrapper.unmount();
   });
 });

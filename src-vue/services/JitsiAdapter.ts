@@ -126,14 +126,25 @@ export class JitsiAdapter implements MediaService {
     });
     conference.on(ev.CONFERENCE_FAILED, (reason: unknown) => {
       const r = String(reason ?? '');
-      // Jitsi fires CONFERENCE_FAILED with AUTHENTICATION_REQUIRED when the JWT expires
       if (r.includes('not-authorized') || r.includes('authentication') || r.includes('auth')) {
         void this.handleTokenExpired();
-      } else {
-        this.emit('conferenceError', r);
-        this.conference = undefined;
-        this.joined = false;
+        return;
       }
+      if (r.toLowerCase().includes('focus')) {
+        window.setTimeout(() => {
+          if (this.conference && !this.joined) {
+            try {
+              conference.join();
+            } catch {
+              /* retry once when jicofo becomes ready */
+            }
+          }
+        }, 1500);
+        return;
+      }
+      this.emit('conferenceError', r);
+      this.conference = undefined;
+      this.joined = false;
     });
     conference.on(ev.TRACK_ADDED, (track: unknown) => {
       const t = track as JitsiTrack;
@@ -165,9 +176,17 @@ export class JitsiAdapter implements MediaService {
 
   async createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<JitsiTrack[]> {
     this.init();
+    const options = { firePermissionPromptIsShownEvent: true };
+    if (devices.includes('desktop')) {
+      return this.jsMeet!.createLocalTracks({
+        devices: ['desktop'],
+        ...options,
+      });
+    }
+    const av = devices.filter((d): d is 'audio' | 'video' => d === 'audio' || d === 'video');
     return this.jsMeet!.createLocalTracks({
-      devices: devices as ('audio' | 'video')[],
-      firePermissionPromptIsShownEvent: true,
+      devices: av.length ? av : ['video'],
+      ...options,
     });
   }
 

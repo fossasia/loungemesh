@@ -37,6 +37,26 @@ describe('localStore', () => {
     expect(store.videoType).toBe('desktop');
   });
 
+  it('publishLocalPosition sends command when id is set', () => {
+    const engine = getMediaEngineInstance();
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    const store = useLocalStore();
+    store.setMyID('me');
+    store.publishLocalPosition();
+    expect(cmdSpy).toHaveBeenCalledWith('pos', expect.stringContaining('"id":"me"'));
+    cmdSpy.mockRestore();
+  });
+
+  it('publishLocalPosition no-ops without id', () => {
+    const engine = getMediaEngineInstance();
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    const store = useLocalStore();
+    store.id = '';
+    store.publishLocalPosition();
+    expect(cmdSpy).not.toHaveBeenCalled();
+    cmdSpy.mockRestore();
+  });
+
   it('resetViewportForRoom centers the user', () => {
     vi.useFakeTimers();
     const store = useLocalStore();

@@ -1,5 +1,22 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { handleSessionConnectionWatch } from './sessionConnectionWatch';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function runWatch(
+  roomId: string,
+  connected: boolean,
+  deps: Parameters<typeof handleSessionConnectionWatch>[2],
+) {
+  const p = handleSessionConnectionWatch(roomId, connected, deps);
+  await vi.advanceTimersByTimeAsync(800);
+  await p;
+}
 
 function makeDeps(overrides: Partial<Parameters<typeof handleSessionConnectionWatch>[2]> = {}) {
   const conferenceStore = {
@@ -14,6 +31,7 @@ function makeDeps(overrides: Partial<Parameters<typeof handleSessionConnectionWa
     }),
     leaveConference: vi.fn(() => {
       conferenceStore.isJoined = false;
+      conferenceStore.conferenceObject = undefined;
     }),
   };
   const deps = {
@@ -73,7 +91,7 @@ describe('handleSessionConnectionWatch', () => {
     const { deps, conferenceStore } = makeDeps();
     conferenceStore.isJoined = true;
     conferenceStore.conferenceName = 'room-a';
-    await handleSessionConnectionWatch('room-b', true, deps);
+    await runWatch('room-b', true, deps);
     expect(deps.leaveRoom).toHaveBeenCalled();
     expect(deps.joinRoom).toHaveBeenCalledWith('room-b', 'Alice', {});
     expect(conferenceStore.conferenceObject).toEqual({ id: 'conf' });
@@ -83,7 +101,7 @@ describe('handleSessionConnectionWatch', () => {
     const { deps, conferenceStore } = makeDeps({
       joinRoom: vi.fn().mockRejectedValue('offline'),
     });
-    await handleSessionConnectionWatch('room-z', true, deps);
+    await runWatch('room-z', true, deps);
     expect(conferenceStore.error).toBe('offline');
     expect(conferenceStore.isJoining).toBe(false);
   });
@@ -92,7 +110,7 @@ describe('handleSessionConnectionWatch', () => {
     const { deps, conferenceStore } = makeDeps({
       joinRoom: vi.fn().mockRejectedValue(new Error('join failed')),
     });
-    await handleSessionConnectionWatch('room-z', true, deps);
+    await runWatch('room-z', true, deps);
     expect(conferenceStore.error).toBe('join failed');
     expect(conferenceStore.isJoining).toBe(false);
   });

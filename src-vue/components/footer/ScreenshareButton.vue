@@ -17,9 +17,10 @@ async function toggleShare() {
   const wantDesktop = oldTrack?.videoType !== 'desktop';
 
   try {
-    const tracks = await engine.createLocalTracks([wantDesktop ? 'desktop' : 'video']);
-    const newTrack = tracks[0];
-    const isDesktop = newTrack?.videoType === 'desktop';
+    const tracks = await engine.createLocalTracks(wantDesktop ? ['desktop'] : ['video']);
+    const newTrack = tracks.find((t) => t.getType?.() === 'video') ?? tracks[0];
+    if (!newTrack) return;
+    const isDesktop = newTrack.videoType === 'desktop';
 
     if (oldTrack) {
       await engine.replaceLocalTrack(oldTrack, newTrack);
@@ -27,13 +28,13 @@ async function toggleShare() {
     } else {
       await engine.addLocalTrack(newTrack);
     }
-    const list = [];
+    const list: typeof tracks = [];
     if (local.audio) list.push(local.audio);
-    if (newTrack) list.push(newTrack);
+    list.push(newTrack);
     local.setLocalTracks(list);
-    sharing.value = !!isDesktop;
-  } catch (e) {
-    console.error(e);
+    sharing.value = isDesktop;
+  } catch {
+    sharing.value = false;
   }
 }
 </script>

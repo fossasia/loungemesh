@@ -7,7 +7,13 @@ import {
   defaultScale,
   initialPanCenterOnUser,
   randomInitialUserPosition,
+  type PanVec,
 } from '@/constants/pan';
+
+function initialLocalViewport(): { pos: PanVec; pan: PanVec; scale: number } {
+  const pos = randomInitialUserPosition();
+  return { pos, pan: initialPanCenterOnUser(pos, defaultScale), scale: defaultScale };
+}
 import { isOnScreen } from '@/utils/vector';
 import { useConferenceStore } from './conferenceStore';
 
@@ -16,6 +22,7 @@ export type Vector2 = { x: number; y: number };
 export type LocalState = {
   id: string;
   mute: boolean;
+  speaking: boolean;
   pos: Vector2;
   pan: Vector2;
   scale: number;
@@ -31,12 +38,15 @@ export type LocalState = {
 };
 
 export const useLocalStore = defineStore('local', {
-  state: (): LocalState => ({
+  state: (): LocalState => {
+    const { pos, pan, scale } = initialLocalViewport();
+    return {
     id: '',
     mute: false,
-    pos: randomInitialUserPosition(),
-    pan: { x: 0, y: 0 },
-    scale: 1,
+    speaking: false,
+    pos,
+    pan,
+    scale,
     audio: undefined,
     video: undefined,
     videoType: 'camera',
@@ -46,7 +56,8 @@ export const useLocalStore = defineStore('local', {
     visibleUsers: [],
     usersOnStage: [],
     selectedUsersOnStage: [],
-  }),
+  };
+  },
   actions: {
     setMyID(id: string) {
       this.id = id;
@@ -65,10 +76,17 @@ export const useLocalStore = defineStore('local', {
         if (window.innerWidth < 200 || window.innerHeight < 200) return;
         const pan = initialPanCenterOnUser(this.pos, defaultScale);
         this.setPanZoom({ pan, scale: defaultScale });
+        this.calculateUsersOnScreen();
       };
       centerNow();
       requestAnimationFrame(centerNow);
       window.setTimeout(centerNow, 150);
+      window.setTimeout(centerNow, 400);
+    },
+    publishLocalPosition() {
+      const id = this.id;
+      if (!id) return;
+      getMediaEngineInstance().sendCommand('pos', JSON.stringify({ ...this.pos, id }));
     },
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');

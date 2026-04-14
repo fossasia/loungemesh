@@ -4,9 +4,11 @@ export type PanVec = { x: number; y: number };
 export const roomSize = { x: 6000, y: 6000 };
 export const userSize = { x: 200, y: 200 };
 
+/** Fixed chrome: header (top-right), footer bar — used to center the local avatar in the visible area. */
+export const viewportChrome = { top: 16, bottom: 88, left: 16, right: 16 };
+
 export function randomInitialUserPosition(): PanVec {
   return {
-    // Start dead-center so the first render is centered like production.
     x: roomSize.x / 2 - userSize.x / 2,
     y: roomSize.y / 2 - userSize.y / 2,
   };
@@ -14,9 +16,15 @@ export function randomInitialUserPosition(): PanVec {
 
 export const minScale = 0.3;
 export const maxScale = 3;
-// Production feels more zoomed out than 1.0; user requested ~25% further out.
 export const defaultScale = 0.65;
-// Pan is stored in SCREEN PIXELS (not world units).
+
+/** Visible area inside the session UI (below header, above footer). */
+export function visibleViewport(): { width: number; height: number } {
+  return {
+    width: Math.max(320, window.innerWidth - viewportChrome.left - viewportChrome.right),
+    height: Math.max(320, window.innerHeight - viewportChrome.top - viewportChrome.bottom),
+  };
+}
 
 export function clampScale(scale: number): number {
   return Math.max(minScale, Math.min(maxScale, scale));
@@ -26,10 +34,9 @@ export function clampScale(scale: number): number {
 export function clampPan(pan: PanVec, scale: number): PanVec {
   const roomW = roomSize.x * scale;
   const roomH = roomSize.y * scale;
-  const dx = window.innerWidth - roomW;
-  const dy = window.innerHeight - roomH;
-  // If room bigger than viewport => dx negative => range [dx, 0]
-  // If room smaller than viewport => dx positive => range [0, dx] (centerable)
+  const { width, height } = visibleViewport();
+  const dx = width - roomW;
+  const dy = height - roomH;
   const minX = Math.min(0, dx);
   const maxX = Math.max(0, dx);
   const minY = Math.min(0, dy);
@@ -40,10 +47,13 @@ export function clampPan(pan: PanVec, scale: number): PanVec {
   };
 }
 
-export function initialPanCenterOnUser(userPos: PanVec, scale = 1): PanVec {
+/** Pan so the local avatar is centered in the visible viewport (not the raw window). */
+export function initialPanCenterOnUser(userPos: PanVec, scale = defaultScale): PanVec {
+  const { width, height } = visibleViewport();
+  const centerX = viewportChrome.left + width / 2;
+  const centerY = viewportChrome.top + height / 2;
   return {
-    x: -userPos.x * scale + (window.innerWidth - userSize.x * scale) / 2,
-    y: -userPos.y * scale + (window.innerHeight - userSize.y * scale) / 2,
+    x: centerX - (userPos.x + userSize.x / 2) * scale,
+    y: centerY - (userPos.y + userSize.y / 2) * scale,
   };
 }
-

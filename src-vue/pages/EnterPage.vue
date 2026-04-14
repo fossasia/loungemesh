@@ -8,10 +8,11 @@ import LocalUser from '@/components/room/LocalUser.vue';
 import FooterBar from '@/components/layout/FooterBar.vue';
 import IconButton from '@/components/ui/IconButton.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
-import Info from '@/components/common/Info.vue';
-import Wave from '@/assets/wave.svg';
+import AppHeader from '@/components/layout/AppHeader.vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
+import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
 import MicIcon from '@/components/icons/MicIcon.vue';
 import MicOffIcon from '@/components/icons/MicOffIcon.vue';
 import PhoneOffIcon from '@/components/icons/PhoneOffIcon.vue';
@@ -21,25 +22,31 @@ const props = defineProps<{ id: string }>();
 const router = useRouter();
 const conference = useConferenceStore();
 const local = useLocalStore();
+const { engine } = useMediaEngine();
 
 watch(
   () => props.id,
   (id) => {
-    if (id) conference.setConferenceName(id);
+    if (id) {
+      conference.setConferenceName(id);
+      local.resetViewportForRoom();
+    }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-function join() {
+async function join() {
+  try {
+    await ensureLocalTracks(local, engine);
+  } catch {
+    /* continue — session will retry */
+  }
   router.push(`/session/${conference.conferenceName}`);
 }
 </script>
 
 <template>
-  <Info>
-    Welcome to our Prototype<br />
-    Please use <b>Chromium</b> or <b>Chrome</b> for now for a stable Experience
-  </Info>
+  <AppHeader />
   <LocalStoreLogic />
   <PanWrapper>
     <Room>
@@ -48,11 +55,7 @@ function join() {
   </PanWrapper>
   <ErrorHandler />
   <div id="centerContainer" class="centerOverlay">
-    <div class="headlineRow">
-      <img :src="Wave" alt="" class="wave" />
-      <h1 class="big">Welcome to Flowspace</h1>
-    </div>
-    <h3 class="sub">Spatial video lounges for informal online events</h3>
+    <p class="sub">Move around the space, then join when you are ready.</p>
   </div>
   <FooterBar>
     <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">
@@ -71,35 +74,18 @@ function join() {
 <style scoped>
 .centerOverlay {
   position: fixed;
-  top: 200px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 90%;
   z-index: 1;
   pointer-events: none;
-}
-.headlineRow {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-}
-.wave {
-  width: 44px;
-  height: 44px;
-}
-.big {
-  margin: 0;
-  font-size: 2.5rem;
-  font-weight: 500;
-  color: var(--color-text-default);
+  text-align: center;
 }
 .sub {
-  margin: 8px 0 0;
+  margin: 0;
   font-weight: 500;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   color: var(--color-mono10);
 }
 .join-ico {

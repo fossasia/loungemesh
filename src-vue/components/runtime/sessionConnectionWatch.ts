@@ -49,6 +49,7 @@ export async function handleSessionConnectionWatch(
 
   deps.conferenceStore.error = undefined;
   deps.conferenceStore.setConferenceName(roomId);
+  await new Promise((r) => window.setTimeout(r, 800));
   try {
     await deps.joinRoom(roomId, deps.conferenceStore.displayName, deps.conferenceOptions);
     deps.conferenceStore.conferenceObject = deps.engine.getConference();

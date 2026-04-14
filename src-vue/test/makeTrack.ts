@@ -16,7 +16,11 @@ export function makeTrack(
     unmute: vi.fn(),
     dispose: vi.fn(),
     getParticipantId: () => participantId,
-    getOriginalStream: () => ({}) as MediaStream,
+    getOriginalStream: () =>
+      ({
+        getAudioTracks: () => [],
+        getVideoTracks: () => [],
+      }) as unknown as MediaStream,
     isLocal: () => false,
   } as unknown as JitsiTrack;
 }
