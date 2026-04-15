@@ -9,6 +9,7 @@ export type Vector2 = { x: number; y: number };
 export type RemoteUser = {
   id: string;
   mute: boolean;
+  speaking: boolean;
   volume: number;
   pos: Vector2;
   audio?: JitsiTrack;
@@ -54,6 +55,7 @@ export const useConferenceStore = defineStore('conference', {
       this.users[id] = {
         id,
         mute: false,
+        speaking: false,
         volume: 1,
         pos: { x: 0, y: 0 },
         properties: {},

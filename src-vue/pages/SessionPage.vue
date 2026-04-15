@@ -10,10 +10,9 @@ import IconButton from '@/components/ui/IconButton.vue';
 import RemoteUsers from '@/components/room/RemoteUsers.vue';
 import LocalUser from '@/components/room/LocalUser.vue';
 import AppHeader from '@/components/layout/AppHeader.vue';
+import ZoomControls from '@/components/layout/ZoomControls.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
-import Info from '@/components/common/Info.vue';
 import { defineAsyncComponent } from 'vue';
-import MoreTab from '@/components/footer/MoreTab.vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
 import StageButton from '@/components/stage/StageButton.vue';
 
@@ -65,7 +64,8 @@ function leave() {
     </Room>
   </PanWrapper>
   <StagePanel />
-  <FooterBar left-text="Flowspace">
+  <FooterBar>
+    <ZoomControls />
     <StageButton />
     <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">
       <template #icon>
@@ -74,10 +74,9 @@ function leave() {
       </template>
     </IconButton>
     <ScreenshareButton />
-    <button type="button" class="btn-leave-call" @click="leave">Leave Call</button>
+    <button type="button" class="btn-leave-call" title="Leave call" @click="leave">Leave Call</button>
     <template #right>
       <ChatPanel />
-      <MoreTab />
     </template>
   </FooterBar>
 </template>

@@ -61,6 +61,11 @@ export function wireStoreSync(engine: MediaService): void {
       ...conferenceStore.users[id].properties,
       ...properties,
     };
+    if ('speaking' in properties) {
+      const speaking =
+        properties.speaking === true || properties.speaking === 'true';
+      conferenceStore.users[id].speaking = speaking;
+    }
   });
   engine.on('command', (_name, payload) => {
     try {

@@ -52,4 +52,26 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(local.id).toBe(before);
   });
+
+  it('syncs speaking participant property', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: 'u1',
+      _properties: { speaking: true },
+    });
+    expect(conference.users.u1.speaking).toBe(true);
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: 'u1',
+      _properties: { speaking: 'false' },
+    });
+    expect(conference.users.u1.speaking).toBe(false);
+  });
 });

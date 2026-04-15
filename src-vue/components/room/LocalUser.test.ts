@@ -62,6 +62,36 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
+  it('hides speaking ring when muted', async () => {
+    const local = useLocalStore();
+    local.speaking = true;
+    local.mute = true;
+    const { wrapper } = await mountWithApp(LocalUser);
+    expect(wrapper.find('.speakRing.active').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows speaking ring and share placeholder', async () => {
+    const local = useLocalStore();
+    local.speaking = true;
+    local.mute = false;
+    local.videoType = 'desktop';
+    local.video = undefined;
+    const { wrapper } = await mountWithApp(LocalUser);
+    expect(wrapper.find('.speakRing.active').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Starting screen share');
+    wrapper.unmount();
+  });
+
+  it('renders circular camera video', async () => {
+    const local = useLocalStore();
+    local.video = makeTrack('video');
+    local.videoType = 'camera';
+    const { wrapper } = await mountWithApp(LocalUser);
+    expect(wrapper.find('video.vid').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('skips drag when not draggable and handles pointerup without drag', async () => {
     const local = useLocalStore();
     local.setMyID('local-1');

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useLocalStore } from '@/stores/localStore';
-import { maxScale, minScale } from '@/constants/pan';
+import { applyZoomStep, clampedPanZoom } from '@/constants/panZoom';
 
 const localStore = useLocalStore();
 const wrapperRef = ref<HTMLDivElement | null>(null);
@@ -29,10 +29,6 @@ let startY = 0;
 let startPanX = 0;
 let startPanY = 0;
 
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
-}
-
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return;
   isPanning = true;
@@ -59,14 +55,13 @@ function onPointerUp() {
 function onWheel(e: WheelEvent) {
   e.preventDefault();
   const delta = -e.deltaY;
-  const step = delta > 0 ? 0.08 : -0.08;
-  const next = clamp(localStore.scale + step, minScale, maxScale);
-  localStore.setPanZoom({ pan: localStore.pan, scale: next });
+  const step = delta > 0 ? 0.1 : -0.1;
+  const next = applyZoomStep(localStore.pan, localStore.scale, step, e.clientX, e.clientY);
+  localStore.setPanZoom(clampedPanZoom(next.pan, next.scale));
   localStore.calculateUsersOnScreen();
 }
 
 onMounted(() => {
-  localStore.resetViewportForRoom();
   localStore.calculateUsersOnScreen();
 });
 </script>
@@ -79,9 +74,10 @@ onMounted(() => {
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
+    @wheel="onWheel"
   >
     <div class="panTranslate" :style="translateStyle">
-      <div class="panScale" :style="scaleStyle" @wheel="onWheel">
+      <div class="panScale" :style="scaleStyle">
         <slot />
       </div>
     </div>

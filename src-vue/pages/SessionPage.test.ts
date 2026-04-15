@@ -18,6 +18,7 @@ const sessionStubs = {
   FooterBar: { template: '<div><slot /><slot name="right" /></div>' },
   StageButton: { template: '<div />' },
   ScreenshareButton: { template: '<div />' },
+  ZoomControls: { template: '<div class="zoom-stub" />' },
 };
 
 describe('SessionPage', () => {

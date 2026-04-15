@@ -8,40 +8,47 @@ import RemoteUser from './RemoteUser.vue';
 describe('RemoteUser', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('positions user without explicit coordinates', async () => {
+  it('defaults position when user pos is missing', async () => {
     const conference = useConferenceStore();
-    conference.addUser('nopos');
-    delete conference.users.nopos.pos;
-    conference.users.nopos.video = makeTrack('video');
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'nopos' } });
-    expect(wrapper.find('.userContainer').attributes('style')).toContain('left: 0px');
+    conference.addUser('u0', { _displayName: 'Anon' } as never);
+    conference.users.u0.pos = undefined as never;
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u0' } });
+    expect((wrapper.element as HTMLElement).style.left).toBe('0px');
     wrapper.unmount();
   });
 
-  it('renders camera video when not desktop', async () => {
+  it('shows speaking ring and desktop video', async () => {
     const conference = useConferenceStore();
-    conference.addUser('cam');
-    conference.users.cam.pos = { x: 1, y: 2 };
-    conference.users.cam.video = makeTrack('video');
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'cam' } });
-    expect(wrapper.find('.userContainer').exists()).toBe(true);
+    conference.addUser('u1', { _displayName: 'Bob' } as never);
+    const u = conference.users.u1;
+    u.speaking = true;
+    u.mute = false;
+    u.pos = { x: 10, y: 20 };
+    u.video = makeTrack('desktop');
+    u.video.videoType = 'desktop';
+
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u1' } });
+    expect(wrapper.find('.speakRing.active').exists()).toBe(true);
     wrapper.unmount();
   });
 
-  it('renders desktop video and mute indicator', async () => {
+  it('treats onStage string property as presenting', async () => {
     const conference = useConferenceStore();
-    conference.addUser('desk');
-    conference.users.desk.pos = { x: 0, y: 0 };
-    conference.users.desk.video = makeTrack('desktop');
-    conference.users.desk.mute = true;
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'desk' } });
-    expect(wrapper.find('.userContainer').exists()).toBe(true);
+    conference.addUser('u3', { _displayName: 'Sam' } as never);
+    conference.users.u3.properties = { onStage: 'true' };
+    conference.users.u3.pos = { x: 0, y: 0 };
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u3' } });
+    expect(wrapper.text()).toContain('Presenting');
     wrapper.unmount();
   });
 
-  it('renders nothing for unknown user ids', async () => {
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'missing' } });
-    expect(wrapper.find('.userContainer').exists()).toBe(false);
+  it('renders on-stage backdrop', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u2', { _displayName: 'Pat' } as never);
+    conference.users.u2.properties = { onStage: true };
+    conference.users.u2.pos = { x: 0, y: 0 };
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u2' } });
+    expect(wrapper.text()).toContain('Presenting');
     wrapper.unmount();
   });
 });

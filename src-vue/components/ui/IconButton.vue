@@ -18,6 +18,8 @@ withDefaults(
     class="ibtn"
     :class="{ active: !!active, warning: !!warning, ghost, primary }"
     type="button"
+    :title="label"
+    :aria-label="label"
     v-bind="$attrs"
   >
     <span class="icon"><slot name="icon" /></span>

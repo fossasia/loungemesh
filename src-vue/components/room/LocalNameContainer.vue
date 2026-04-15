@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import NameTag from './overlays/NameTag.vue';
 
 const conference = useConferenceStore();
+const { engine } = useMediaEngine();
 const active = ref(false);
 const draft = ref(conference.displayName);
 
@@ -11,7 +13,7 @@ watch(
   () => conference.displayName,
   (v) => {
     if (!active.value) draft.value = v;
-  }
+  },
 );
 
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -25,7 +27,9 @@ function openEdit() {
 function commit() {
   active.value = false;
   const n = draft.value.trim();
-  conference.setDisplayName(n.length ? n : conference.displayName);
+  const name = n.length ? n : conference.displayName;
+  conference.setDisplayName(name);
+  engine.setDisplayName(name);
 }
 
 function onKeydown(e: KeyboardEvent) {
