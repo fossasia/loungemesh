@@ -14,13 +14,8 @@ defineProps<{
 </template>
 
 <style scoped>
-/* Legacy `MenuCard` from src/components/common/Menu/Menu.tsx */
 .menuCard {
-  width: 270px;
-  padding: 15px;
-  top: 15px;
-  right: 15px;
-  bottom: 80px;
+  position: fixed;
+  z-index: 10001;
 }
 </style>
-

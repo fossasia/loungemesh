@@ -10,5 +10,5 @@ export function displayNameForMessage(
     return 'You';
   }
   const name = users[id]?.user?._displayName?.trim();
-  return name ? name : 'You';
+  return name || 'Guest';
 }

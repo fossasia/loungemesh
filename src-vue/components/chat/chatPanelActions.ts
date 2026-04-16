@@ -1,3 +1,13 @@
+import { insertEmojiAtCaret } from './insertEmoji';
+
+/** Insert emoji when the textarea ref is mounted. */
+export function addEmojiToInput(
+  input: HTMLTextAreaElement | null | undefined,
+  emoji: string,
+): void {
+  if (input) insertEmojiAtCaret(input, emoji);
+}
+
 /** Handle chat textarea key events. Returns true when the event was consumed. */
 export function handleChatKeydown(
   e: KeyboardEvent,

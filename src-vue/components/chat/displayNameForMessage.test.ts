@@ -15,10 +15,10 @@ describe('displayNameForMessage', () => {
     expect(displayNameForMessage('bob', 'me', users)).toBe('Bob');
   });
 
-  it('falls back to You for unknown or blank names', () => {
-    expect(displayNameForMessage('ghost', 'me', users)).toBe('You');
-    expect(displayNameForMessage('blank', 'me', users)).toBe('You');
-    expect(displayNameForMessage('', 'me', users)).toBe('You');
+  it('falls back to Guest for unknown or blank names', () => {
+    expect(displayNameForMessage('ghost', 'me', users)).toBe('Guest');
+    expect(displayNameForMessage('blank', 'me', users)).toBe('Guest');
+    expect(displayNameForMessage('', 'me', users)).toBe('Guest');
     expect(displayNameForMessage('bob', '', users)).toBe('Bob');
   });
 });

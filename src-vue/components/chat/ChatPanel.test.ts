@@ -49,7 +49,7 @@ describe('ChatPanel', () => {
     conference.messages.push({ id: 'local-1', text: 'scroll', nr: 4 });
     await flushPromises();
     await nextTick();
-    const chatRoot = wrapper.find('.contentArea').element as HTMLElement;
+    const chatRoot = wrapper.find('.messages').element as HTMLElement;
     Object.defineProperty(chatRoot, 'scrollHeight', { value: 400, configurable: true });
     conference.messages.push({ id: 'local-1', text: 'scroll-more', nr: 5 });
     await flushPromises();
@@ -64,7 +64,7 @@ describe('ChatPanel', () => {
     conference.messages = [{ id: 'someone', text: 'ping', nr: 0 }];
     const { wrapper } = await mountWithApp(ChatPanel);
     await wrapper.find('button.ibtn').trigger('click');
-    expect(wrapper.text()).toContain('You');
+    expect(wrapper.text()).toContain('Guest');
     wrapper.unmount();
   });
 
@@ -82,6 +82,7 @@ describe('ChatPanel', () => {
       { id: 'bob', text: 'before https://link.test/path after', nr: 3 },
       { id: 'ghost', text: 'anon', nr: 4 },
       { id: 'named', text: 'blank name', nr: 5 },
+      { id: 'ghost', text: 'guest label', nr: 7 },
       { id: 'bob', text: 'https://only.example', nr: 6 },
     ];
 
@@ -89,6 +90,7 @@ describe('ChatPanel', () => {
     await wrapper.find('button.ibtn').trigger('click');
     expect(wrapper.text()).toContain('You');
     expect(wrapper.text()).toContain('Bob');
+    expect(wrapper.text()).toContain('Guest');
     expect(wrapper.find('a[href="https://link.test/path"]').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -100,7 +102,7 @@ describe('ChatPanel', () => {
     conference.messages = [{ id: 'u1', text: 'outside', nr: 1 }];
     await flushPromises();
     await nextTick();
-    expect(wrapper.find('.contentArea').exists()).toBe(false);
+    expect(wrapper.find('.messages').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -110,7 +112,7 @@ describe('ChatPanel', () => {
     const { wrapper } = await mountWithApp(ChatPanel);
     conference.messages.push({ id: 'u1', text: 'new', nr: 1 });
     await flushPromises();
-    expect(wrapper.find('.contentArea').exists()).toBe(false);
+    expect(wrapper.find('.messages').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -126,12 +128,44 @@ describe('ChatPanel', () => {
     wrapper.unmount();
   });
 
+  it('scrolls when messages change while panel is closed', async () => {
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    conference.messages = [{ id: 'u1', text: 'hi', nr: 1 }];
+    await flushPromises();
+    expect(wrapper.find('.messages').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows empty state when there are no messages', async () => {
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    conference.messages = [];
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    expect(wrapper.text()).toContain('No messages yet');
+    wrapper.unmount();
+  });
+
+  it('inserts emoji from the picker', async () => {
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const textarea = wrapper.find('textarea');
+    await textarea.setValue('hi ');
+    await wrapper.find('.emojiBtn').trigger('click');
+    expect((textarea.element as HTMLTextAreaElement).value).toContain('😀');
+    wrapper.unmount();
+  });
+
   it('closes via MenuCard and scrolls when messages arrive', async () => {
     const conference = useConferenceStore();
     conference.conferenceObject = {} as never;
     const { wrapper } = await mountWithApp(ChatPanel);
     await wrapper.find('button.ibtn').trigger('click');
-    const chatRoot = wrapper.find('.contentArea').element as HTMLElement;
+    const chatRoot = wrapper.find('.messages').element as HTMLElement;
     Object.defineProperty(chatRoot, 'scrollHeight', { value: 200, configurable: true });
     conference.messages = [{ id: 'u1', text: 'a', nr: 1 }];
     await flushPromises();
@@ -142,7 +176,7 @@ describe('ChatPanel', () => {
     await nextTick();
     await wrapper.find('.close').trigger('click');
     await nextTick();
-    expect(wrapper.find('.contentArea').exists()).toBe(false);
+    expect(wrapper.find('.messages').exists()).toBe(false);
     wrapper.unmount();
   });
 });

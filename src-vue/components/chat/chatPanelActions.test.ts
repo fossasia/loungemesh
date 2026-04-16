@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  addEmojiToInput,
   commitChatSend,
   handleChatKeydown,
   prepareChatSend,
@@ -50,6 +51,17 @@ describe('chatPanelActions', () => {
     expect(send).toHaveBeenCalledTimes(1);
     commitChatSend('hello', false, send, clear);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds emoji when input exists', () => {
+    const el = document.createElement('textarea');
+    el.value = 'hi';
+    addEmojiToInput(el, '👍');
+    expect(el.value).toBe('hi👍');
+  });
+
+  it('skips emoji when input is missing', () => {
+    expect(() => addEmojiToInput(null, '👍')).not.toThrow();
   });
 
   it('scrolls only when the chat root exists', () => {
