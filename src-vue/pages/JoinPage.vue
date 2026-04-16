@@ -6,6 +6,8 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAccessGuard } from '@/composables/useAccessGuard';
+import { useConferenceStore } from '@/stores/conferenceStore';
+import { formatSphereName } from '@/utils/formatSphereName';
 import AccessDeniedPage from '@/pages/AccessDeniedPage.vue';
 
 const props = defineProps<{ id: string }>();
@@ -16,6 +18,9 @@ const deniedReason = ref<string | undefined>(undefined);
 onMounted(async () => {
   const result = await check(props.id);
   if (result.status === 'granted') {
+    if (result.displayName?.trim()) {
+      useConferenceStore().setDisplayName(formatSphereName(result.displayName));
+    }
     await router.replace({ name: 'session', params: { id: props.id } });
   } else if (result.status === 'denied') {
     deniedReason.value = result.reason;

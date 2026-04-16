@@ -2,22 +2,37 @@
 import { ref } from 'vue';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
 
+const username = ref('');
 const sessionName = ref('');
 
 const emit = defineEmits<{
-  submit: [name: string];
+  submit: [payload: { displayName: string; sessionName: string }];
 }>();
 
 function onSubmit(e: Event) {
   e.preventDefault();
-  const name = (sessionName.value || conferenceNameDefault).trim();
-  if (name.length > 0) emit('submit', name);
+  const user = username.value.trim();
+  const room = (sessionName.value || conferenceNameDefault).trim();
+  if (room.length > 0) {
+    emit('submit', { displayName: user, sessionName: room });
+  }
 }
 </script>
 
 <template>
   <form class="form" @submit="onSubmit">
-    <label class="label" for="sessionName">Set Session Name</label>
+    <label class="label" for="username">Your name</label>
+    <input
+      id="username"
+      v-model="username"
+      class="input full"
+      type="text"
+      name="username"
+      placeholder="e.g. Alex"
+      autocomplete="nickname"
+    />
+
+    <label class="label roomLabel" for="sessionName">Session name</label>
     <fieldset class="fieldset">
       <input
         id="sessionName"
@@ -33,7 +48,6 @@ function onSubmit(e: Event) {
 </template>
 
 <style scoped>
-/* Legacy `NameInputForm` from src/pages/Home/elements/NameInputForm.tsx */
 .form {
   width: 340px;
   margin: auto;
@@ -42,6 +56,10 @@ function onSubmit(e: Event) {
 .label {
   font-size: var(--fs-small);
   color: var(--color-text-default);
+}
+.roomLabel {
+  display: block;
+  margin-top: 16px;
 }
 .fieldset {
   border: none;
@@ -62,18 +80,16 @@ function onSubmit(e: Event) {
   padding-left: 20px;
   font-family: var(--font-body);
 }
+.input.full {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: var(--radius-sm);
+}
 .input:hover {
   border: 1px solid var(--color-blue100);
 }
-.input:hover::placeholder {
-  color: var(--color-blue100);
-}
 .input:focus {
   outline: none;
-  font-size: var(--fs-body);
-}
-.input::placeholder {
-  font-size: var(--fs-body);
 }
 .join {
   height: 50px;

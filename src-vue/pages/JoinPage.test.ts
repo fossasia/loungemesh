@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
-import { createPinia } from 'pinia';
+import { createPinia, setActivePinia } from 'pinia';
+import { useConferenceStore } from '@/stores/conferenceStore';
 import { mount } from '@vue/test-utils';
 import { createTestRouter } from '@/test/mountApp';
 import JoinPage from './JoinPage.vue';
@@ -18,6 +19,24 @@ describe('JoinPage', () => {
   beforeEach(() => {
     check.mockReset();
     state.value = { status: 'idle' };
+  });
+
+  it('applies Eventyay display name before redirect', async () => {
+    setActivePinia(createPinia());
+    check.mockImplementation(async () => {
+      state.value = { status: 'granted' };
+      return { status: 'granted', jwt: null, displayName: 'Alex', jitsiRoom: 'room-a' };
+    });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const router = await createTestRouter('/join/room-a?token=t');
+    const wrapper = mount(JoinPage, {
+      props: { id: 'room-a' },
+      global: { plugins: [pinia, router] },
+    });
+    await flushPromises();
+    expect(useConferenceStore().displayName).toBe("Alex's Sphere");
+    wrapper.unmount();
   });
 
   it('redirects to session when access is granted', async () => {

@@ -7,26 +7,33 @@ import NameInputForm from './NameInputForm.vue';
 describe('NameInputForm', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('emits trimmed custom session name', async () => {
+  it('emits display name and trimmed session name', async () => {
     const { wrapper } = await mountWithApp(NameInputForm);
-    await wrapper.find('input').setValue('  my-room  ');
+    const inputs = wrapper.findAll('input[type="text"]');
+    await inputs[0].setValue('Alex');
+    await inputs[1].setValue('  my-room  ');
     await wrapper.find('form').trigger('submit');
-    expect(wrapper.emitted('submit')?.[0]).toEqual(['my-room']);
+    expect(wrapper.emitted('submit')?.[0]).toEqual([
+      { displayName: 'Alex', sessionName: 'my-room' },
+    ]);
     wrapper.unmount();
   });
 
-  it('does not emit when trimmed name is empty', async () => {
+  it('does not emit when session name is empty after trim', async () => {
     const { wrapper } = await mountWithApp(NameInputForm);
-    await wrapper.find('input').setValue('   ');
+    const inputs = wrapper.findAll('input[type="text"]');
+    await inputs[1].setValue('   ');
     await wrapper.find('form').trigger('submit');
     expect(wrapper.emitted('submit')).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('emits default session name when input is empty', async () => {
+  it('emits default session name when room input is empty', async () => {
     const { wrapper } = await mountWithApp(NameInputForm);
     await wrapper.find('form').trigger('submit');
-    expect(wrapper.emitted('submit')?.[0]).toEqual([conferenceNameDefault]);
+    expect(wrapper.emitted('submit')?.[0]).toEqual([
+      { displayName: '', sessionName: conferenceNameDefault },
+    ]);
     wrapper.unmount();
   });
 });

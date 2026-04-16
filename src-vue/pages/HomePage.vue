@@ -1,75 +1,68 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import Info from '@/components/common/Info.vue';
 import AppHeader from '@/components/layout/AppHeader.vue';
 import NameInputForm from '@/components/home/NameInputForm.vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
-import Wave from '@/assets/wave.svg';
+import { formatSphereName } from '@/utils/formatSphereName';
 
 const router = useRouter();
 const conference = useConferenceStore();
 
-function goSession(name: string) {
-  conference.setConferenceName(name);
-  router.push(`/session/${name}`);
+function goSession(payload: { displayName: string; sessionName: string }) {
+  const name = formatSphereName(payload.displayName);
+  conference.setDisplayName(name);
+  conference.setConferenceName(payload.sessionName);
+  router.push(`/session/${payload.sessionName}`);
 }
 </script>
 
 <template>
-  <AppHeader />
-  <Info>
-    Welcome to our Prototype<br />
-    Please use <b>Chromium</b> or <b>Chrome</b> for now for a stable Experience
-  </Info>
-  <main class="page">
-    <div class="center">
-      <div class="headlineRow">
-        <img :src="Wave" alt="" class="wave" />
-        <h1 class="big">Welcome to Flowspace</h1>
+  <div class="home">
+    <AppHeader variant="home" />
+    <main class="page">
+      <div class="center">
+        <h1 class="title">Flowspace</h1>
+        <p class="sub">Spatial video lounges for informal online events</p>
+        <NameInputForm class="formWrap" @submit="goSession" />
       </div>
-      <h3 class="sub">Spatial video lounges for informal online events</h3>
-      <NameInputForm class="formWrap" @submit="goSession" />
-    </div>
-  </main>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.page {
-  height: 100%;
-}
-.center {
-  height: 100%;
+.home {
+  min-height: 100%;
   display: flex;
   flex-direction: column;
+}
+.page {
+  flex: 1;
+  display: flex;
+  align-items: center;
   justify-content: center;
+}
+.center {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   padding: 32px;
+  max-width: 420px;
+  width: 100%;
 }
-.headlineRow {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-}
-.wave {
-  width: 44px;
-  height: 44px;
-}
-.big {
-  font-size: 2.5rem;
-  font-weight: 500;
+.title {
+  margin: 0 0 8px;
+  font-size: 2rem;
+  font-weight: var(--fw-medium);
   color: var(--color-text-default);
-  margin: 0;
 }
 .sub {
   font-weight: 500;
-  font-size: 1.5rem;
-  margin: 0;
-  margin-top: 4px;
+  font-size: 1.25rem;
+  margin: 0 0 32px;
   color: var(--color-mono10);
+  text-align: center;
 }
 .formWrap {
-  margin-top: 40px;
+  width: 100%;
 }
 </style>
