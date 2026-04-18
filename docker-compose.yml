@@ -1,13 +1,29 @@
 # Flowspace (Vue SPA) + local Jitsi Meet (docker-jitsi-meet stack).
 #
-# 1) node docker/setup-jitsi-env.mjs
-# 2) docker compose --env-file docker/.env.jitsi up --build
+#   docker compose up -d --build
 #
-# UI: http://localhost:8880  ·  Jitsi web (XMPP/BOSH): PUBLIC_URL from docker/.env.jitsi (default :8001)
-#
-# If build args don’t pick up PUBLIC_URL, always pass --env-file docker/.env.jitsi
+# Flowspace UI: http://localhost:8780
+# Jitsi web:    http://localhost:8001  (PUBLIC_URL in .env)
 
 services:
+  init:
+    image: busybox:1.36
+    volumes:
+      - .:/work
+    working_dir: /work
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p docker/jitsi-config/web/crontabs
+        mkdir -p docker/jitsi-config/transcripts
+        mkdir -p docker/jitsi-config/prosody/config
+        mkdir -p docker/jitsi-config/prosody/prosody-plugins-custom
+        mkdir -p docker/jitsi-config/jicofo
+        mkdir -p docker/jitsi-config/jvb
+    restart: "no"
+
   flowspace:
     build:
       context: .
@@ -20,26 +36,31 @@ services:
         VITE_EVENTYAY_API_BASE: ${VITE_EVENTYAY_API_BASE-}
         VITE_SESSION_PREFIX: ${VITE_SESSION_PREFIX-}
     ports:
-      - "${FLOWSPACE_PORT:-8880}:80"
+      - "${FLOWSPACE_PORT:-8780}:80"
     depends_on:
-      - jitsi-web
+      init:
+        condition: service_completed_successfully
+      jitsi-web:
+        condition: service_started
     restart: unless-stopped
 
-  # --- upstream Jitsi images (web renamed to avoid clashing with old service name) ---
   jitsi-web:
     image: jitsi/web:${JITSI_IMAGE_VERSION:-stable}
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "${HTTP_PORT:-8000}:80"
-      - "${HTTPS_PORT:-8443}:443"
+      - "${HTTP_PORT:-8001}:80"
+      - "${HTTPS_PORT:-8444}:443"
     volumes:
       - ${CONFIG:-./docker/jitsi-config}/web:/config:Z
       - ${CONFIG:-./docker/jitsi-config}/web/crontabs:/var/spool/cron/crontabs:Z
       - ${CONFIG:-./docker/jitsi-config}/transcripts:/usr/share/jitsi-meet/transcripts:Z
     env_file:
-      - ./docker/.env.jitsi
+      - .env
     depends_on:
-      - jvb
+      init:
+        condition: service_completed_successfully
+      jvb:
+        condition: service_started
     networks:
       meet.jitsi:
 
@@ -55,7 +76,10 @@ services:
       - ${CONFIG:-./docker/jitsi-config}/prosody/config:/config:Z
       - ${CONFIG:-./docker/jitsi-config}/prosody/prosody-plugins-custom:/prosody-plugins-custom:Z
     env_file:
-      - ./docker/.env.jitsi
+      - .env
+    depends_on:
+      init:
+        condition: service_completed_successfully
     networks:
       meet.jitsi:
         aliases:
@@ -69,9 +93,12 @@ services:
     volumes:
       - ${CONFIG:-./docker/jitsi-config}/jicofo:/config:Z
     env_file:
-      - ./docker/.env.jitsi
+      - .env
     depends_on:
-      - prosody
+      init:
+        condition: service_completed_successfully
+      prosody:
+        condition: service_started
     networks:
       meet.jitsi:
 
@@ -84,9 +111,12 @@ services:
     volumes:
       - ${CONFIG:-./docker/jitsi-config}/jvb:/config:Z
     env_file:
-      - ./docker/.env.jitsi
+      - .env
     depends_on:
-      - prosody
+      init:
+        condition: service_completed_successfully
+      prosody:
+        condition: service_started
     networks:
       meet.jitsi:
 

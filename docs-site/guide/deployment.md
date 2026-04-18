@@ -3,11 +3,10 @@
 ## Docker (recommended)
 
 ```bash
-npm run docker:jitsi-env
-npm run docker:up
+docker compose up -d --build
 ```
 
-- Flowspace SPA: `http://localhost:8880`
+- Flowspace SPA: `http://localhost:8780` (override with `FLOWSPACE_PORT`, default **8780** — not 8880, which Eventyay video uses locally)
 - Jitsi web: port `8001` (see `docker/env.jitsi.example`)
 
 Build args for the SPA image: `VITE_JITSI_PUBLIC_URL`, `VITE_XMPP_DOMAIN`, `VITE_XMPP_MUC_DOMAIN`, `VITE_SESSION_PREFIX`.

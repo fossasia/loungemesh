@@ -5,8 +5,8 @@ dist
 .cursor
 *.log
 .DS_Store
-.env
-.env.*
+.env.local
+.env.*.local
 coverage
 *.pdf
 agent-transcripts
@@ -15,5 +15,4 @@ mcps
 deploy
 docs
 docker/jitsi-config
-docker/.env.jitsi
 vitest.config.ts

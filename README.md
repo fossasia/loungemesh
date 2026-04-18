@@ -17,12 +17,13 @@ Open [http://localhost:5173](http://localhost:5173).
 ## Docker (SPA + Jitsi stack)
 
 ```bash
-npm run docker:jitsi-env
-npm run docker:up
+docker compose up -d --build
 ```
 
-- Flowspace: http://localhost:8880  
-- Jitsi: see `docker/env.jitsi.example`
+- Flowspace: http://localhost:8780  
+- Jitsi: http://localhost:8001  
+
+Optional: `npm run docker:jitsi-env` rotates Jitsi passwords in `.env` if you need a clean Prosody state.
 
 ## Stack
 

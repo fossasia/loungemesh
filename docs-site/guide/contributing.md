@@ -15,9 +15,8 @@ npm run dev                  # http://localhost:5173
 For a full local stack with Jitsi:
 
 ```bash
-node docker/setup-jitsi-env.mjs
-docker compose --env-file docker/.env.jitsi up --build
-# Flowspace → http://localhost:8880
+docker compose up -d --build
+# Flowspace → http://localhost:8780
 # Jitsi web → http://localhost:8001
 ```
 
