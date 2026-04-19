@@ -5,12 +5,16 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { conferenceOptions } from '@/config/jitsiOptions';
 import { handleSessionConnectionWatch } from './sessionConnectionWatch';
+import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 const route = useRoute();
 const { engine, connected, connect, joinRoom, leaveRoom, disconnect } = useMediaEngine();
 const conferenceStore = useConferenceStore();
+const localStore = useLocalStore();
 
 onBeforeUnmount(() => {
+  localStore.stopAllLocalMedia();
   leaveRoom();
   conferenceStore.leaveConference();
   disconnect();
@@ -27,6 +31,7 @@ watch(
       conferenceStore,
       engine,
       conferenceOptions,
+      resetSessionForJoin: () => useSessionFeaturesStore().resetHostForJoin(),
     });
   },
   { immediate: true },

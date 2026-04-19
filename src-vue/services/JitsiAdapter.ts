@@ -120,9 +120,9 @@ export class JitsiAdapter implements MediaService {
       this.emit('messageReceived', String(id), String(text), Number(nr));
     });
     conference.on(ev.CONFERENCE_ERROR, () => {
-      this.emit('conferenceError', conferenceErrorDetail(connection.xmpp));
-      this.conference = undefined;
-      this.joined = false;
+      if (this.joined) return;
+      const detail = conferenceErrorDetail(connection.xmpp);
+      if (detail) this.emit('conferenceError', detail);
     });
     conference.on(ev.CONFERENCE_FAILED, (reason: unknown) => {
       const r = String(reason ?? '');
@@ -159,9 +159,23 @@ export class JitsiAdapter implements MediaService {
       if (id && props) this.emit('participantPropertyChanged', id, props);
     });
 
-    conference.addCommandListener('pos', (payload: { value: string }) => {
-      this.emit('command', 'pos', payload);
-    });
+    const sessionCommands = [
+      'pos',
+      'host',
+      'lobby',
+      'react',
+      'poll',
+      'notes',
+      'mod',
+      'wb',
+      'access',
+      'chat',
+    ] as const;
+    for (const cmd of sessionCommands) {
+      conference.addCommandListener(cmd, (payload: { value: string }) => {
+        this.emit('command', cmd, payload);
+      });
+    }
 
     conference.join();
     this.conference = conference;
@@ -217,8 +231,14 @@ export class JitsiAdapter implements MediaService {
     this.conference?.setLocalParticipantProperty(key, value);
   }
 
-  sendTextMessage(text: string): void {
-    this.conference?.sendTextMessage(text);
+  sendTextMessage(text: string): boolean {
+    if (!this.conference) return false;
+    try {
+      this.conference.sendTextMessage(text);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   sendCommand(name: string, value: string): void {

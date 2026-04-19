@@ -1,0 +1,167 @@
+import { defineStore } from 'pinia';
+import { useLocalStore } from '@/stores/localStore';
+import {
+  mergeWhiteboardStroke,
+  type WhiteboardStroke,
+} from '@/utils/whiteboardSync';
+import {
+  defaultUserGrants,
+  type FeatureKey,
+  type UserGrants,
+} from '@/types/userGrants';
+import {
+  effectiveGrants,
+  legacyAccessToDefaults,
+  mergeGrants,
+  type AccessCommandPayload,
+} from '@/utils/sessionAccess';
+
+export type LobbyEntry = { id: string; name: string };
+export type PollOption = { id: string; label: string; votes: number };
+export type ActivePoll = {
+  id: string;
+  question: string;
+  options: PollOption[];
+  open: boolean;
+};
+export type UserReaction = { emoji: string; at: number };
+export type { WhiteboardStroke };
+
+export const useSessionFeaturesStore = defineStore('sessionFeatures', {
+  state: () => ({
+    hostId: '',
+    lobbyEnabled: false,
+    lobbyApproved: {} as Record<string, boolean>,
+    lobbyWaiting: [] as LobbyEntry[],
+    localLobbyPending: false,
+    handRaised: false,
+    userReactions: {} as Record<string, UserReaction>,
+    activePoll: null as ActivePoll | null,
+    myPollVote: '',
+    sharedNotes: '',
+    whiteboardStrokes: [] as WhiteboardStroke[],
+    roomDefaults: defaultUserGrants(),
+    userGrants: {} as Record<string, Partial<UserGrants>>,
+    panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'notes' | 'whiteboard',
+    pendingHostClaim: false,
+  }),
+  getters: {
+    isHost(): boolean {
+      const local = useLocalStore();
+      if (!local.id) return false;
+      if (!this.hostId) return true;
+      return this.hostId === local.id;
+    },
+    localGrants(): UserGrants {
+      const local = useLocalStore();
+      return effectiveGrants(
+        local.id,
+        this.roomDefaults,
+        this.userGrants,
+        this.isHost,
+      );
+    },
+    canUseNotes(): boolean {
+      return this.localGrants.notes;
+    },
+    canUseWhiteboard(): boolean {
+      return this.localGrants.whiteboard;
+    },
+    canUsePoll(): boolean {
+      return this.localGrants.poll;
+    },
+    canUseStage(): boolean {
+      return this.localGrants.stage;
+    },
+    canClearWhiteboard(): boolean {
+      return this.isHost;
+    },
+    isLobbyBlocked(): boolean {
+      if (!this.lobbyEnabled) return false;
+      if (this.isHost) return false;
+      const local = useLocalStore();
+      if (!local.id) return this.localLobbyPending;
+      return this.localLobbyPending || !this.lobbyApproved[local.id];
+    },
+    grantsForUser:
+      (state) =>
+      (userId: string): UserGrants =>
+        effectiveGrants(userId, state.roomDefaults, state.userGrants, userId === state.hostId),
+  },
+  actions: {
+    setHost(id: string) {
+      this.hostId = id;
+    },
+    approveLobby(id: string) {
+      this.lobbyApproved[id] = true;
+      this.lobbyWaiting = this.lobbyWaiting.filter((e) => e.id !== id);
+    },
+    addLobbyWaiter(entry: LobbyEntry) {
+      if (!this.lobbyWaiting.some((e) => e.id === entry.id)) {
+        this.lobbyWaiting.push(entry);
+      }
+    },
+    setReaction(userId: string, emoji: string) {
+      const at = Date.now();
+      this.userReactions[userId] = { emoji, at };
+      window.setTimeout(() => {
+        if (this.userReactions[userId]?.at === at) {
+          delete this.userReactions[userId];
+        }
+      }, 4000);
+    },
+    applyPoll(poll: ActivePoll | null) {
+      if (!poll) {
+        this.activePoll = null;
+        this.myPollVote = '';
+        return;
+      }
+      if (this.activePoll?.id !== poll.id) this.myPollVote = '';
+      this.activePoll = poll;
+    },
+    addWhiteboardStroke(stroke: WhiteboardStroke) {
+      this.whiteboardStrokes = mergeWhiteboardStroke(this.whiteboardStrokes, stroke);
+    },
+    clearWhiteboard() {
+      this.whiteboardStrokes = [];
+    },
+    setRoomDefault(key: FeatureKey, value: boolean) {
+      this.roomDefaults = { ...this.roomDefaults, [key]: value };
+    },
+    setUserGrant(userId: string, key: FeatureKey, value: boolean) {
+      const current = this.grantsForUser(userId);
+      this.userGrants[userId] = { ...current, [key]: value };
+    },
+    applyAccessUpdate(data: AccessCommandPayload & { notes?: boolean; whiteboard?: boolean }) {
+      const legacy = legacyAccessToDefaults(data);
+      if (Object.keys(legacy).length) {
+        this.roomDefaults = mergeGrants(this.roomDefaults, legacy);
+      }
+      if (data.defaults) {
+        this.roomDefaults = mergeGrants(this.roomDefaults, data.defaults);
+      }
+      if (data.userId && data.grants) {
+        const base = this.grantsForUser(data.userId);
+        this.userGrants[data.userId] = mergeGrants(base, data.grants);
+      }
+    },
+    togglePanel(name: typeof this.panel) {
+      if (name === 'notes' && !this.canUseNotes) return;
+      if (name === 'whiteboard' && !this.canUseWhiteboard) return;
+      this.panel = this.panel === name ? '' : name;
+    },
+    resetHostForJoin() {
+      this.hostId = '';
+      this.pendingHostClaim = true;
+    },
+    resetForLeave() {
+      this.hostId = '';
+      this.panel = '';
+      this.localLobbyPending = false;
+      this.lobbyWaiting = [];
+      this.pendingHostClaim = false;
+      this.roomDefaults = defaultUserGrants();
+      this.userGrants = {};
+    },
+  },
+});

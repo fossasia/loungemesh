@@ -71,6 +71,29 @@ describe('JitsiAdapter', () => {
     expect(mock.connection.connect).toHaveBeenCalledTimes(calls);
   });
 
+  it('ignores conference errors after the room is joined', async () => {
+    const onError = vi.fn();
+    adapter.on('conferenceError', onError);
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'Alice', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+    mock.connection.xmpp = { lastErrorMsg: 'transient glitch' };
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_ERROR);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('does not emit conference error when xmpp has no detail', async () => {
+    const onError = vi.fn();
+    adapter.on('conferenceError', onError);
+    mock.connection.xmpp = {};
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'Alice', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_ERROR);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('uses connection xmpp detail for conference errors', async () => {
     const onError = vi.fn();
     adapter.on('conferenceError', onError);
@@ -325,6 +348,22 @@ describe('JitsiAdapter', () => {
     });
     expect(adapter.getLocalUserId()).toBe('local-1');
     expect(adapter.getConference()).toBe(mock.conference);
+    expect(adapter.sendTextMessage('hello')).toBe(true);
+  });
+
+  it('returns false when sending chat without a conference', async () => {
+    expect(adapter.sendTextMessage('nope')).toBe(false);
+  });
+
+  it('returns false when sendTextMessage throws', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+    vi.mocked(mock.conference.sendTextMessage).mockImplementation(() => {
+      throw new Error('chat failed');
+    });
+    expect(adapter.sendTextMessage('boom')).toBe(false);
   });
 
   it('disconnects and removes listeners', async () => {
