@@ -27,13 +27,19 @@ export function handleChatKeydown(
   return false;
 }
 
+/** Whether the client can send chat (conference handle is ready). */
+export function canSendChat(hasConference: boolean): boolean {
+  return hasConference;
+}
+
 /** Send a chat message when input and conference state allow it. */
 export function prepareChatSend(
   raw: string,
   hasConference: boolean,
-): { ok: true; text: string } | { ok: false } {
+): { ok: true; text: string } | { ok: false; reason: 'empty' | 'not_ready' } {
   const text = raw.trim();
-  if (!text || !hasConference) return { ok: false };
+  if (!text) return { ok: false, reason: 'empty' };
+  if (!canSendChat(hasConference)) return { ok: false, reason: 'not_ready' };
   return { ok: true, text };
 }
 
@@ -42,15 +48,40 @@ export function scrollChatToBottom(el: HTMLElement | null): void {
   if (el) el.scrollTop = el.scrollHeight;
 }
 
+export type ChatSendResult =
+  | { ok: true; messageId: string }
+  | { ok: false; reason: 'empty' | 'not_ready' | 'send_failed' };
+
+export type ChatEditResult = { ok: true } | { ok: false; reason: 'empty' | 'not_ready' };
+
 /** Send chat text when validation passes. */
 export function commitChatSend(
   raw: string,
   hasConference: boolean,
-  send: (text: string) => void,
-  clear: () => void,
-): void {
+  send: (text: string) => boolean,
+  onSent: (text: string, messageId: string) => void,
+): ChatSendResult {
   const prepared = prepareChatSend(raw, hasConference);
-  if (!prepared.ok) return;
-  send(prepared.text);
-  clear();
+  if (!prepared.ok) return prepared;
+  const delivered = send(prepared.text);
+  if (!delivered) return { ok: false, reason: 'send_failed' };
+  const messageId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `m-${Date.now()}`;
+  onSent(prepared.text, messageId);
+  return { ok: true, messageId };
+}
+
+/** Publish a chat edit to the room via conference command. */
+export function commitChatEdit(
+  raw: string,
+  hasConference: boolean,
+  publish: (messageId: string, text: string, editedAt: number) => void,
+  messageId: string,
+): ChatEditResult {
+  const prepared = prepareChatSend(raw, hasConference);
+  if (!prepared.ok) return prepared;
+  publish(messageId, prepared.text, Date.now());
+  return { ok: true };
 }

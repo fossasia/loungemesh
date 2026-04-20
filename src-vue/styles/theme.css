@@ -43,6 +43,10 @@
   --btn-active-bg: #4f6ef7;
   --btn-active-fg: #ffffff;
 
+  --btn-highlight-bg: #f0c14b;
+  --btn-highlight-bg-hover: #f5d078;
+  --btn-highlight-fg: #1e2240;
+
   --input-bg: #f5f7ff;
   --input-fg: #cdd2f0;
   --line-dark: #3b4068;

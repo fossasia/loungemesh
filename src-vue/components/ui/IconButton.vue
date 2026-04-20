@@ -5,6 +5,7 @@ withDefaults(
   defineProps<{
     label: string;
     active?: boolean;
+    highlight?: boolean;
     warning?: boolean;
     ghost?: boolean;
     primary?: boolean;
@@ -16,7 +17,7 @@ withDefaults(
 <template>
   <button
     class="ibtn"
-    :class="{ active: !!active, warning: !!warning, ghost, primary }"
+    :class="{ active: !!active, highlight: !!highlight, warning: !!warning, ghost, primary }"
     type="button"
     :title="label"
     :aria-label="label"
@@ -60,6 +61,10 @@ withDefaults(
   stroke: var(--btn-active-fg);
 }
 
+.ibtn.highlight :deep(svg) {
+  stroke: var(--btn-highlight-fg);
+}
+
 .ibtn.warning :deep(svg) {
   stroke: var(--btn-warning-fg);
 }
@@ -99,6 +104,17 @@ withDefaults(
 .ibtn.active {
   color: var(--btn-active-fg);
   background-color: var(--btn-active-bg);
+}
+
+.ibtn.highlight {
+  color: var(--btn-highlight-fg);
+  background-color: var(--btn-highlight-bg);
+}
+.ibtn.highlight:hover {
+  background-color: var(--btn-highlight-bg-hover);
+}
+.ibtn.highlight:active {
+  background-color: var(--color-mono80);
 }
 
 .ibtn.warning {
