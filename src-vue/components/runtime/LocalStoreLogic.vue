@@ -140,6 +140,14 @@ watch(
 watch(() => localStore.audio, bindSpeakingMonitor, { immediate: true });
 
 watch(
+  () => conferenceStore.users,
+  () => {
+    localStore.ensureRoomBounds();
+  },
+  { deep: true },
+);
+
+watch(
   () => ({ pos: localStore.pos, id: localStore.id }),
   ({ pos, id }) => {
     if (!id) return;

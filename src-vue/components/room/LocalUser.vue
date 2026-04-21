@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { worldToRoom } from '@/constants/pan';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import UserBackdrop from './overlays/UserBackdrop.vue';
 import LocalAudioRing from './overlays/LocalAudioRing.vue';
 import LocalNameContainer from './LocalNameContainer.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
-import SpeakingRing from './overlays/SpeakingRing.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -15,22 +16,29 @@ const props = withDefaults(
 );
 
 const local = useLocalStore();
+const features = useSessionFeaturesStore();
 const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
 
 let dragging = false;
 let clickDelta = { x: 0, y: 0 };
 
-const style = computed(() => ({
-  position: 'absolute' as const,
-  width: '200px',
-  left: `${local.pos.x}px`,
-  top: `${local.pos.y}px`,
-}));
+const style = computed(() => {
+  const display = worldToRoom(local.pos, local.roomBounds);
+  return {
+    position: 'absolute' as const,
+    width: '200px',
+    left: `${display.x}px`,
+    top: `${display.y}px`,
+  };
+});
 
 const userId = computed(() => local.id || 'localUser');
 const isDesktop = computed(() => local.videoType === 'desktop');
 const hasVideo = computed(() => !!local.video);
+const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
+const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
+const handUp = computed(() => features.handRaised);
 
 function attach() {
   if (local.video && videoEl.value) {
@@ -75,8 +83,8 @@ function onPointerMove(e: PointerEvent) {
   if (!dragging) return;
   const scale = local.scale || 1;
   const pan = local.pan;
-  const xPos = Math.trunc((e.clientX - pan.x) / scale - clickDelta.x);
-  const yPos = Math.trunc((e.clientY - pan.y) / scale - clickDelta.y);
+  const xPos = (e.clientX - pan.x) / scale - clickDelta.x;
+  const yPos = (e.clientY - pan.y) / scale - clickDelta.y;
   local.setLocalPosition({ x: xPos, y: yPos });
 }
 
@@ -108,21 +116,24 @@ onBeforeUnmount(detach);
   >
     <LocalAudioRing />
     <div class="videoContainer" :class="{ desktop: isDesktop }">
-      <SpeakingRing :active="local.speaking && !local.mute" />
       <UserBackdrop :onStage="local.onStage" />
       <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
       <video
-        v-show="hasVideo"
+        v-show="showCameraVideo"
         ref="videoEl"
         autoplay
         playsinline
         muted
-        :class="isDesktop ? 'desktopVid' : 'vid'"
+        :class="[
+          isDesktop ? 'desktopVid' : 'vid',
+          { speaking: local.speaking && !local.mute && showCameraVideo },
+        ]"
       />
       <div v-if="isDesktop && !hasVideo" class="sharePlaceholder">Starting screen share…</div>
     </div>
     <audio ref="audioEl" autoplay muted />
-    <LocalNameContainer />
+    <span v-if="reaction" class="floatReact">{{ reaction }}</span>
+    <LocalNameContainer :hand-up="handUp" />
   </div>
 </template>
 
@@ -141,6 +152,8 @@ onBeforeUnmount(detach);
   max-width: 360px;
 }
 .vid {
+  position: relative;
+  z-index: 1;
   width: 200px;
   height: 200px;
   border-radius: 999px;
@@ -159,6 +172,11 @@ onBeforeUnmount(detach);
   object-fit: contain;
   background: #0f172a;
   border: 4px solid var(--color-mono60);
+}
+.vid.speaking,
+.desktopVid.speaking {
+  border-color: var(--color-blue100);
+  box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.28);
 }
 .sharePlaceholder {
   width: 280px;
@@ -181,5 +199,13 @@ onBeforeUnmount(detach);
 }
 .local:active {
   cursor: grabbing;
+}
+.floatReact {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 1.5rem;
+  z-index: 5;
+  pointer-events: none;
 }
 </style>

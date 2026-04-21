@@ -4,17 +4,27 @@ import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   clampPan,
   clampScale,
+  computeRoomBounds,
   defaultScale,
   initialPanCenterOnUser,
-  randomInitialUserPosition,
+  spreadInitialUserPosition,
   type PanVec,
+  type RoomBounds,
 } from '@/constants/pan';
 
-function initialLocalViewport(): { pos: PanVec; pan: PanVec; scale: number } {
-  const pos = randomInitialUserPosition();
-  return { pos, pan: initialPanCenterOnUser(pos, defaultScale), scale: defaultScale };
+function initialLocalViewport(): { pos: PanVec; pan: PanVec; scale: number; roomBounds: RoomBounds } {
+  const pos = spreadInitialUserPosition([]);
+  const roomBounds = computeRoomBounds([pos]);
+  return {
+    pos,
+    pan: initialPanCenterOnUser(pos, defaultScale),
+    scale: defaultScale,
+    roomBounds,
+  };
 }
 import { isOnScreen } from '@/utils/vector';
+import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
+import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
 import { useConferenceStore } from './conferenceStore';
 
 export type Vector2 = { x: number; y: number };
@@ -22,10 +32,12 @@ export type Vector2 = { x: number; y: number };
 export type LocalState = {
   id: string;
   mute: boolean;
+  cameraOff: boolean;
   speaking: boolean;
   pos: Vector2;
   pan: Vector2;
   scale: number;
+  roomBounds: RoomBounds;
   audio?: JitsiTrack;
   video?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
@@ -39,14 +51,16 @@ export type LocalState = {
 
 export const useLocalStore = defineStore('local', {
   state: (): LocalState => {
-    const { pos, pan, scale } = initialLocalViewport();
+    const { pos, pan, scale, roomBounds } = initialLocalViewport();
     return {
     id: '',
     mute: false,
+    cameraOff: false,
     speaking: false,
     pos,
     pan,
     scale,
+    roomBounds,
     audio: undefined,
     video: undefined,
     videoType: 'camera',
@@ -64,14 +78,26 @@ export const useLocalStore = defineStore('local', {
     },
     setLocalPosition(pos: Vector2) {
       this.pos = pos;
+      this.ensureRoomBounds();
+    },
+    ensureRoomBounds() {
+      const conference = useConferenceStore();
+      const positions = [
+        this.pos,
+        ...Object.values(conference.users).map((u) => u.pos),
+      ];
+      this.roomBounds = computeRoomBounds(positions, this.roomBounds);
     },
     setPanZoom(payload: { pan: Vector2; scale: number }) {
+      this.ensureRoomBounds();
       const scale = clampScale(payload.scale);
       this.scale = scale;
-      this.pan = clampPan(payload.pan, scale);
+      this.pan = clampPan(payload.pan, scale, this.roomBounds);
     },
     resetViewportForRoom() {
-      this.setLocalPosition(randomInitialUserPosition());
+      const conference = useConferenceStore();
+      const existing = Object.values(conference.users).map((u) => u.pos);
+      this.setLocalPosition(spreadInitialUserPosition(existing));
       const centerNow = () => {
         if (window.innerWidth < 200 || window.innerHeight < 200) return;
         const pan = initialPanCenterOnUser(this.pos, defaultScale);
@@ -179,6 +205,68 @@ export const useLocalStore = defineStore('local', {
         await audioTrack.mute();
         this.mute = true;
       }
+    },
+    async toggleCamera() {
+      if (this.cameraOff) {
+        await this.enableCamera();
+        return;
+      }
+      await this.disableCamera();
+    },
+    async enableCamera() {
+      const engine = getMediaEngineInstance();
+      if (this.video && this.videoType === 'camera') {
+        this.cameraOff = false;
+        if (this.video.isMuted()) await this.video.unmute();
+        return;
+      }
+      try {
+        const tracks = await engine.createLocalTracks(['video']);
+        const created = tracks.find((t) => t.getType() === 'video');
+        if (!created) return;
+        disposeJitsiTrack(this.video);
+        this.video = created;
+        this.videoType = 'camera';
+        this.cameraOff = false;
+        if (engine.isJoined()) {
+          try {
+            await engine.addLocalTrack(created);
+          } catch {
+            /* already added */
+          }
+        }
+      } catch {
+        /* user denied or device unavailable */
+      }
+    },
+    async disableCamera() {
+      const engine = getMediaEngineInstance();
+      const track = this.video;
+      if (!track) {
+        this.cameraOff = true;
+        return;
+      }
+      if (engine.isJoined()) {
+        try {
+          await track.mute();
+        } catch {
+          /* ignore */
+        }
+      }
+      disposeJitsiTrack(track);
+      this.video = undefined;
+      this.videoType = 'camera';
+      this.cameraOff = true;
+    },
+    stopAllLocalMedia() {
+      const engine = getMediaEngineInstance();
+      releaseLocalMediaTracks([this.audio, this.video], engine.getConference());
+      this.audio = undefined;
+      this.video = undefined;
+      this.videoType = 'camera';
+      this.speaking = false;
+      this.cameraOff = true;
+      this.mute = true;
     },
   },
 });

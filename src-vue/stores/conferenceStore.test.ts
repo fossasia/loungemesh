@@ -22,7 +22,7 @@ describe('conferenceStore', () => {
       id: 'u1',
       mute: false,
       volume: 1,
-      pos: { x: 0, y: 0 },
+      pos: { x: 2900, y: 2900 },
       properties: {},
     });
   });
@@ -66,10 +66,30 @@ describe('conferenceStore', () => {
 
   it('sendTextMessage delegates to media engine', () => {
     const store = useConferenceStore();
-    const spy = vi.spyOn(getMediaEngineInstance(), 'sendTextMessage');
-    store.sendTextMessage('hello');
+    const spy = vi.spyOn(getMediaEngineInstance(), 'sendTextMessage').mockReturnValue(true);
+    expect(store.sendTextMessage('hello')).toBe(true);
     expect(spy).toHaveBeenCalledWith('hello');
     spy.mockRestore();
+  });
+
+  it('ingests chat messages and replaces optimistic sends', () => {
+    const store = useConferenceStore();
+    store.appendChatMessage({
+      id: 'me',
+      text: 'hi',
+      nr: -1,
+      messageId: 'm-local',
+      history: [],
+    });
+    store.ingestChatMessage('me', 'hi', 42);
+    expect(store.messages[0]).toMatchObject({ id: 'me', text: 'hi', nr: 42 });
+    store.ingestChatMessage('me', 'hi', 42);
+    expect(store.messages).toHaveLength(1);
+    store.editChatMessage(store.messages[0].messageId, 'edited', 99);
+    expect(store.messages[0].text).toBe('edited');
+    expect(store.messages[0].history).toEqual(['hi']);
+    store.ingestChatMessage('other', 'yo', 43);
+    expect(store.messages).toHaveLength(2);
   });
 
   it('leaveConference resets state', () => {

@@ -1,5 +1,5 @@
-import type { PanVec } from '@/constants/pan';
-import { clampPan, clampScale } from '@/constants/pan';
+import type { PanVec, RoomBounds } from '@/constants/pan';
+import { clampPan, clampScale, defaultRoomBounds } from '@/constants/pan';
 
 /** Zoom toward a screen point (cursor); keeps that point fixed on screen. */
 export function panForZoomAtPoint(
@@ -21,6 +21,16 @@ export function panForZoomAtPoint(
   };
 }
 
+/** Scale delta from a wheel / trackpad gesture (clamped per event). */
+export function wheelScaleDelta(e: WheelEvent): number {
+  let dy = -e.deltaY;
+  if (e.deltaMode === 1) dy *= 0.2;
+  else if (e.deltaMode === 2) dy *= 1.5;
+  const sens = e.ctrlKey ? 0.0025 : 0.0006;
+  const step = dy * sens;
+  return Math.max(-0.05, Math.min(0.05, step));
+}
+
 export function applyZoomStep(
   pan: PanVec,
   scale: number,
@@ -31,7 +41,11 @@ export function applyZoomStep(
   return panForZoomAtPoint(pan, scale, scale + step, anchorX, anchorY);
 }
 
-export function clampedPanZoom(pan: PanVec, scale: number): { pan: PanVec; scale: number } {
+export function clampedPanZoom(
+  pan: PanVec,
+  scale: number,
+  bounds: RoomBounds = defaultRoomBounds(),
+): { pan: PanVec; scale: number } {
   const s = clampScale(scale);
-  return { pan: clampPan(pan, s), scale: s };
+  return { pan: clampPan(pan, s, bounds), scale: s };
 }

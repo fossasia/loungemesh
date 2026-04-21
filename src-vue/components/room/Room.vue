@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { roomSize } from '@/constants/pan';
+import { useLocalStore } from '@/stores/localStore';
 
 const props = defineProps<{ identifier?: string }>();
 
+const local = useLocalStore();
 const backgroundUrl = ref('');
 
 /** Optional room wallpaper from Eventyay JSON:API — only when `VITE_EVENTYAY_API_BASE` is set. */
@@ -30,12 +31,16 @@ watch(
   { immediate: true }
 );
 
-const style = computed(() => ({
-  width: `${roomSize.x}px`,
-  height: `${roomSize.y}px`,
-  backgroundImage: backgroundUrl.value ? `url("${backgroundUrl.value}")` : undefined,
-  backgroundSize: backgroundUrl.value ? 'cover' : undefined,
-}));
+const style = computed(() => {
+  const { origin, size } = local.roomBounds;
+  return {
+    width: `${size.x}px`,
+    height: `${size.y}px`,
+    transform: `translate(${origin.x}px, ${origin.y}px)`,
+    backgroundImage: backgroundUrl.value ? `url("${backgroundUrl.value}")` : undefined,
+    backgroundSize: backgroundUrl.value ? 'cover' : undefined,
+  };
+});
 </script>
 
 <template>

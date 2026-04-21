@@ -245,6 +245,19 @@ describe('LocalStoreLogic', () => {
     wrapper.unmount();
   });
 
+  it('expands room bounds when remote users change', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const boundsSpy = vi.spyOn(local, 'ensureRoomBounds');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    boundsSpy.mockClear();
+    conference.addUser('peer');
+    await flushPromises();
+    expect(boundsSpy).toHaveBeenCalled();
+    boundsSpy.mockRestore();
+    wrapper.unmount();
+  });
+
   it('adds local tracks to conference when joined', async () => {
     const { conference } = await connectAndJoinTestConference();
     conference.isJoined = true;

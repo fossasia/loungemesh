@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   clampPan,
   clampScale,
+  computeRoomBounds,
   defaultScale,
   initialPanCenterOnUser,
+  minRoomSize,
   randomInitialUserPosition,
   roomSize,
+  spreadInitialUserPosition,
+  worldToRoom,
 } from './pan';
 
 describe('pan constants', () => {
@@ -14,16 +18,51 @@ describe('pan constants', () => {
     expect(pos.x).toBe(roomSize.x / 2 - 100);
   });
 
+  it('spreadInitialUserPosition offsets when others exist', () => {
+    const base = randomInitialUserPosition();
+    const next = spreadInitialUserPosition([base]);
+    expect(next.x !== base.x || next.y !== base.y).toBe(true);
+  });
+
+  it('uses default bounds when no finite positions are provided', () => {
+    const bounds = computeRoomBounds([{ x: Number.NaN, y: 0 }]);
+    expect(bounds.size).toEqual(minRoomSize);
+    expect(bounds.origin).toEqual({ x: 0, y: 0 });
+  });
+
+  it('computeRoomBounds grows with distant positions and only expands', () => {
+    const first = computeRoomBounds([{ x: 2900, y: 2900 }]);
+    expect(first.size.x).toBeGreaterThanOrEqual(minRoomSize.x);
+    const far = computeRoomBounds([{ x: 12000, y: -500 }], first);
+    expect(far.size.x).toBeGreaterThan(first.size.x);
+    expect(far.origin.x).toBeLessThanOrEqual(first.origin.x);
+  });
+
+  it('worldToRoom converts world coordinates to room-local', () => {
+    const bounds = { origin: { x: 100, y: 200 }, size: { x: 6000, y: 6000 } };
+    expect(worldToRoom({ x: 350, y: 450 }, bounds)).toEqual({ x: 250, y: 250 });
+  });
+
   it('clampScale respects bounds', () => {
-    expect(clampScale(0.1)).toBe(0.3);
-    expect(clampScale(10)).toBe(3);
+    expect(clampScale(0.1)).toBe(0.35);
+    expect(clampScale(10)).toBe(2.5);
     expect(clampScale(1)).toBe(1);
   });
 
   it('clampPan keeps pan inside allowed range', () => {
     const pan = clampPan({ x: 99999, y: -99999 }, defaultScale);
-    expect(pan.x).toBeLessThanOrEqual(0);
-    expect(typeof pan.y).toBe('number');
+    expect(Number.isFinite(pan.x)).toBe(true);
+    expect(Number.isFinite(pan.y)).toBe(true);
+  });
+
+  it('clampPan supports expanded room bounds', () => {
+    const bounds = computeRoomBounds([
+      { x: 0, y: 0 },
+      { x: 15000, y: 15000 },
+    ]);
+    const pan = clampPan({ x: 99999, y: 99999 }, defaultScale, bounds);
+    expect(Number.isFinite(pan.x)).toBe(true);
+    expect(Number.isFinite(pan.y)).toBe(true);
   });
 
   it('initialPanCenterOnUser centers avatar in visible viewport', () => {

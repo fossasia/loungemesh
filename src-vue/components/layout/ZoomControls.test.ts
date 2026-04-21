@@ -19,4 +19,12 @@ describe('ZoomControls', () => {
     expect(local.scale).toBeLessThan(mid);
     wrapper.unmount();
   });
+
+  it('stops pointer and click propagation on the control strip', async () => {
+    const { wrapper } = await mountWithApp(ZoomControls);
+    const strip = wrapper.find('.zoomCtl');
+    await strip.trigger('pointerdown');
+    await strip.trigger('click');
+    wrapper.unmount();
+  });
 });

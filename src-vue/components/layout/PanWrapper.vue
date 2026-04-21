@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useLocalStore } from '@/stores/localStore';
-import { applyZoomStep, clampedPanZoom } from '@/constants/panZoom';
+import { applyZoomStep, clampedPanZoom, wheelScaleDelta } from '@/constants/panZoom';
+import ZoomControls from '@/components/layout/ZoomControls.vue';
 
 const localStore = useLocalStore();
+const isPanning = ref(false);
 const wrapperRef = ref<HTMLDivElement | null>(null);
 
-// Keep pan in screen pixels and scale separately (matches expected UX math).
 const translateStyle = computed(() => {
   const { pan } = localStore;
   return {
@@ -23,15 +24,19 @@ const scaleStyle = computed(() => {
   };
 });
 
-let isPanning = false;
 let startX = 0;
 let startY = 0;
 let startPanX = 0;
 let startPanY = 0;
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return !!target.closest('button, a, input, textarea, select, .zoomCtl, .ibtn');
+}
+
 function onPointerDown(e: PointerEvent) {
-  if (e.button !== 0) return;
-  isPanning = true;
+  if (e.button !== 0 || isInteractiveTarget(e.target)) return;
+  isPanning.value = true;
   startX = e.clientX;
   startY = e.clientY;
   startPanX = localStore.pan.x;
@@ -40,24 +45,23 @@ function onPointerDown(e: PointerEvent) {
 }
 
 function onPointerMove(e: PointerEvent) {
-  if (!isPanning) return;
+  if (!isPanning.value) return;
   const dx = e.clientX - startX;
   const dy = e.clientY - startY;
-  // Pan is stored in screen pixels.
   localStore.setPanZoom({ pan: { x: startPanX + dx, y: startPanY + dy }, scale: localStore.scale });
   localStore.calculateUsersOnScreen();
 }
 
 function onPointerUp() {
-  isPanning = false;
+  isPanning.value = false;
 }
 
 function onWheel(e: WheelEvent) {
+  if (isInteractiveTarget(e.target)) return;
   e.preventDefault();
-  const delta = -e.deltaY;
-  const step = delta > 0 ? 0.1 : -0.1;
+  const step = wheelScaleDelta(e);
   const next = applyZoomStep(localStore.pan, localStore.scale, step, e.clientX, e.clientY);
-  localStore.setPanZoom(clampedPanZoom(next.pan, next.scale));
+  localStore.setPanZoom(clampedPanZoom(next.pan, next.scale, localStore.roomBounds));
   localStore.calculateUsersOnScreen();
 }
 
@@ -67,6 +71,7 @@ onMounted(() => {
 </script>
 
 <template>
+  <ZoomControls class="zoomCorner" />
   <div
     ref="wrapperRef"
     class="panRoot"
@@ -76,8 +81,8 @@ onMounted(() => {
     @pointercancel="onPointerUp"
     @wheel="onWheel"
   >
-    <div class="panTranslate" :style="translateStyle">
-      <div class="panScale" :style="scaleStyle">
+    <div class="panTranslate" :class="{ panning: isPanning }" :style="translateStyle">
+      <div class="panScale" :class="{ panning: isPanning }" :style="scaleStyle">
         <slot />
       </div>
     </div>
@@ -92,28 +97,34 @@ onMounted(() => {
   touch-action: none;
   width: 100vw;
   height: 100vh;
-  /* Same tone as room canvas — matches production spatial “light field” */
   background-color: var(--color-mono95);
-}
-.panInner {
-  width: 1px;
-  height: 1px;
-  cursor: grab;
-  display: inline-flex;
+  text-align: left;
 }
 .panTranslate {
   width: 1px;
   height: 1px;
   display: inline-flex;
+  transition: transform 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 .panScale {
   width: 1px;
   height: 1px;
   cursor: grab;
   display: inline-flex;
+  transition: transform 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.panTranslate.panning,
+.panScale.panning {
+  transition: none;
 }
 .panScale:active {
   cursor: grabbing;
 }
+.zoomCorner {
+  position: fixed;
+  left: 14px;
+  bottom: 96px;
+  z-index: 6000;
+  pointer-events: auto;
+}
 </style>
-
