@@ -19,6 +19,7 @@ export type SessionConnectionDeps = {
   conferenceStore: SessionConferenceState;
   engine: MediaService;
   conferenceOptions: Record<string, unknown>;
+  resetSessionForJoin?: () => void;
 };
 
 /** Handle route / connection changes for the session Jitsi lifecycle. */
@@ -49,10 +50,15 @@ export async function handleSessionConnectionWatch(
 
   deps.conferenceStore.error = undefined;
   deps.conferenceStore.setConferenceName(roomId);
+  deps.resetSessionForJoin?.();
   await new Promise((r) => window.setTimeout(r, 800));
   try {
     await deps.joinRoom(roomId, deps.conferenceStore.displayName, deps.conferenceOptions);
     deps.conferenceStore.conferenceObject = deps.engine.getConference();
+    if (deps.engine.isJoined()) {
+      deps.conferenceStore.isJoined = true;
+      deps.conferenceStore.isJoining = false;
+    }
   } catch (e: unknown) {
     deps.conferenceStore.error = e instanceof Error ? e.message : String(e);
     deps.conferenceStore.isJoining = false;

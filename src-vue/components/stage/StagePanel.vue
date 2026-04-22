@@ -5,8 +5,7 @@ import { useLocalStore } from '@/stores/localStore';
 import StageVideoAttach from '@/components/stage/StageVideoAttach.vue';
 import StageUser from '@/components/stage/components/StageUser.vue';
 import IconButton from '@/components/ui/IconButton.vue';
-import EyeOffIcon from '@/components/icons/EyeOffIcon.vue';
-import VolumeXIcon from '@/components/icons/VolumeXIcon.vue';
+import AppIcon from '@/components/ui/AppIcon.vue';
 import { remoteStageUsers as listRemoteStageUsers } from '@/components/stage/remoteStageUsers';
 
 const conference = useConferenceStore();
@@ -31,10 +30,10 @@ const vol = computed(() => (local.stageMute ? 0 : 0.8));
             warning
             @click="local.toggleStage()"
           >
-            <template #icon><EyeOffIcon /></template>
+            <template #icon><AppIcon name="eye-off" /></template>
           </IconButton>
           <IconButton v-else label="hide" ghost @click="local.toggleStage()">
-            <template #icon><EyeOffIcon /></template>
+            <template #icon><AppIcon name="eye-off" /></template>
           </IconButton>
 
           <IconButton
@@ -44,10 +43,10 @@ const vol = computed(() => (local.stageMute ? 0 : 0.8));
             warning
             @click="local.toggleStageMute()"
           >
-            <template #icon><VolumeXIcon /></template>
+            <template #icon><AppIcon name="volume-x" /></template>
           </IconButton>
           <IconButton v-if="local.stageVisible && !local.stageMute" label="mute" ghost @click="local.toggleStageMute()">
-            <template #icon><VolumeXIcon /></template>
+            <template #icon><AppIcon name="volume-x" /></template>
           </IconButton>
         </div>
 

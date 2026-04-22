@@ -200,6 +200,65 @@ describe('useMediaEngine', () => {
     expect(conference.users.u2.pos).toEqual({ x: 9, y: 8 });
   });
 
+  it('reuses media engine wiring on subsequent calls', () => {
+    const api1 = useMediaEngine();
+    const api2 = useMediaEngine();
+    expect(api1.engine).toBe(api2.engine);
+  });
+
+  it('connects without a stored jwt when none is passed', async () => {
+    clearStoredAccess();
+    const jitsi = getJitsiTestContext();
+    const connectSpy = vi.spyOn(getMediaEngineInstance(), 'connect');
+    const api = useMediaEngine();
+    await api.connect();
+    jitsi.connection._fire(jitsi.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    expect(connectSpy).toHaveBeenCalledWith(undefined);
+  });
+
+  it('records conference errors after the room disconnects', async () => {
+    const jitsi = getJitsiTestContext();
+    const api = useMediaEngine();
+    const ev = jitsi.jsMeet.events;
+    await api.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await api.joinRoom('room', 'Alice', {});
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    api.leaveRoom();
+    jitsi.conference._fire(ev.conference.CONFERENCE_ERROR);
+    expect(api.joined.value).toBe(false);
+    expect(api.engineError.value).toBeTruthy();
+  });
+
+  it('ignores empty conference errors after leave', async () => {
+    const jitsi = getJitsiTestContext();
+    const api = useMediaEngine();
+    const ev = jitsi.jsMeet.events;
+    await api.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await api.joinRoom('room', 'Alice', {});
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    api.leaveRoom();
+    jitsi.connection.xmpp = {};
+    jitsi.conference._fire(ev.conference.CONFERENCE_ERROR);
+    expect(api.engineError.value).toBeUndefined();
+  });
+
+  it('keeps joined state when conference errors during an active call', async () => {
+    const jitsi = getJitsiTestContext();
+    const api = useMediaEngine();
+    const ev = jitsi.jsMeet.events;
+    await api.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await api.joinRoom('room', 'Alice', {});
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(api.joined.value).toBe(true);
+    vi.spyOn(getMediaEngineInstance(), 'isJoined').mockReturnValue(true);
+    jitsi.conference._fire(ev.conference.CONFERENCE_FAILED, 'room unavailable');
+    expect(api.joined.value).toBe(true);
+    expect(api.engineError.value).toBeUndefined();
+  });
+
   it('rethrows joinRoom errors and clears isJoining', async () => {
     const jitsi = getJitsiTestContext();
     const engine = getMediaEngineInstance();

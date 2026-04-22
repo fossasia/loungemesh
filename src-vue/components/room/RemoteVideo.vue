@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
 
-const props = defineProps<{ id: string; track?: JitsiTrackLike }>();
+const props = defineProps<{ id: string; track?: JitsiTrackLike; speaking?: boolean }>();
 const el = ref<HTMLVideoElement | null>(null);
 
 onMounted(() => {
@@ -23,7 +23,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <video ref="el" autoplay playsinline class="remoteVideo" :id="`${id}video`" />
+  <video
+    ref="el"
+    autoplay
+    playsinline
+    class="remoteVideo"
+    :class="{ speaking: !!speaking }"
+    :id="`${id}video`"
+  />
 </template>
 
 <style scoped>
@@ -33,6 +40,12 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   object-fit: cover;
   background: #0f172a;
+  border: 4px solid var(--color-mono60);
+  box-sizing: border-box;
+}
+.remoteVideo.speaking {
+  border-color: var(--color-blue100);
+  box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.28);
 }
 </style>
 

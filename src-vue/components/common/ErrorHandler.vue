@@ -2,12 +2,20 @@
 import { computed } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
+import { shouldShowConferenceError } from '@/services/conferenceErrorDetail';
 import Info from '@/components/common/Info.vue';
 
 const conf = useConferenceStore();
 const conn = useConnectionStore();
 
-const errors = computed(() => [conn.error, conf.error].filter(Boolean) as string[]);
+const errors = computed(() => {
+  const items: string[] = [];
+  if (conn.error?.trim()) items.push(conn.error);
+  if (shouldShowConferenceError(conf.error, conf.isJoined)) {
+    items.push(conf.error!);
+  }
+  return items;
+});
 
 function clearErrors() {
   conn.$patch({ error: undefined });

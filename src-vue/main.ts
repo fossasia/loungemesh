@@ -6,14 +6,23 @@ import './styles/global.css';
 
 import App from './App.vue';
 import { routes } from './router/routes';
+import { useLocalStore } from '@/stores/localStore';
+
+const mediaRoutes = new Set(['session', 'enter']);
 
 export function bootstrap(mountSelector = '#app') {
   const app = createApp(App);
-  app.use(createPinia());
+  const pinia = createPinia();
+  app.use(pinia);
 
   const router = createRouter({
     history: createWebHistory(),
     routes,
+  });
+  router.beforeEach((to, from) => {
+    if (mediaRoutes.has(String(from.name)) && to.name === 'home') {
+      useLocalStore(pinia).stopAllLocalMedia();
+    }
   });
   app.use(router);
 

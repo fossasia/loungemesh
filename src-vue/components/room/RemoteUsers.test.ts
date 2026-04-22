@@ -3,6 +3,7 @@ import { nextTick } from 'vue';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import RemoteUsers from './RemoteUsers.vue';
 
@@ -24,6 +25,25 @@ describe('RemoteUsers', () => {
     conference.users.a.pos = { x: 10, y: 20 };
     conference.users.a.mute = false;
     await nextTick();
+    wrapper.unmount();
+  });
+
+  it('filters users in lobby mode until approved', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    features.lobbyApproved.host = true;
+    conference.addUser('host');
+    conference.addUser('guest');
+    conference.users.host.pos = { x: 0, y: 0 };
+    conference.users.guest.pos = { x: 1, y: 1 };
+
+    const { wrapper } = await mountWithApp(RemoteUsers);
+    expect(wrapper.findAll('.userContainer').length).toBe(1);
+    features.approveLobby('guest');
+    await nextTick();
+    expect(wrapper.findAll('.userContainer').length).toBe(2);
     wrapper.unmount();
   });
 

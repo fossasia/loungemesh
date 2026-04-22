@@ -58,7 +58,7 @@ export interface MediaService {
   setReceiverConstraints(constraints: ReceiverConstraints): void;
   setDisplayName(name: string): void;
   setLocalParticipantProperty(key: string, value: unknown): void;
-  sendTextMessage(text: string): void;
+  sendTextMessage(text: string): boolean;
   sendCommand(name: string, value: string): void;
   getLocalUserId(): string | undefined;
   getConference(): import('@/types/jitsi').JitsiConference | undefined;

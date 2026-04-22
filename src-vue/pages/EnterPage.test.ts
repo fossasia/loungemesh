@@ -4,8 +4,7 @@ import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
-import MicIcon from '@/components/icons/MicIcon.vue';
-import MicOffIcon from '@/components/icons/MicOffIcon.vue';
+import AppIcon from '@/components/ui/AppIcon.vue';
 import EnterPage from './EnterPage.vue';
 
 describe('EnterPage', () => {
@@ -24,24 +23,33 @@ describe('EnterPage', () => {
     wrapper.unmount();
   });
 
-  it('shows MicIcon when unmuted and MicOffIcon when muted', async () => {
+  it('shows mic and camera controls', async () => {
     const local = useLocalStore();
     local.mute = false;
-    const unmuted = await mountWithApp(EnterPage, {
+    local.cameraOff = false;
+    const { wrapper } = await mountWithApp(EnterPage, {
       route: '/enter/flowspace',
       props: { id: 'flowspace' },
     });
-    expect(unmuted.wrapper.findComponent(MicIcon).exists()).toBe(true);
-    expect(unmuted.wrapper.findComponent(MicOffIcon).exists()).toBe(false);
-    unmuted.wrapper.unmount();
+    const labels = wrapper.findAll('button.ibtn').map((b) => b.attributes('aria-label'));
+    expect(labels).toContain('Mute');
+    expect(labels).toContain('Turn off camera');
+    expect(wrapper.findAllComponents(AppIcon).length).toBeGreaterThan(0);
+    wrapper.unmount();
+  });
 
+  it('shows off-state labels when camera and mic are disabled', async () => {
+    const local = useLocalStore();
     local.mute = true;
-    const muted = await mountWithApp(EnterPage, {
+    local.cameraOff = true;
+    const { wrapper } = await mountWithApp(EnterPage, {
       route: '/enter/flowspace',
       props: { id: 'flowspace' },
     });
-    expect(muted.wrapper.html()).toContain('sr-only');
-    muted.wrapper.unmount();
+    const labels = wrapper.findAll('button.ibtn').map((b) => b.attributes('aria-label'));
+    expect(labels).toContain('Unmute');
+    expect(labels).toContain('Turn on camera');
+    wrapper.unmount();
   });
 
   it('skips conference name when id prop is empty', async () => {
@@ -55,14 +63,43 @@ describe('EnterPage', () => {
     wrapper.unmount();
   });
 
-  it('toggles mute from footer control', async () => {
+  it('toggles camera and mute from footer', async () => {
     const local = useLocalStore();
-    local.mute = false;
+    const cameraSpy = vi.spyOn(local, 'toggleCamera').mockResolvedValue(undefined);
+    const muteSpy = vi.spyOn(local, 'toggleMute').mockResolvedValue(undefined);
     const { wrapper } = await mountWithApp(EnterPage, {
       route: '/enter/flowspace',
       props: { id: 'flowspace' },
     });
-    await wrapper.find('button.ibtn').trigger('click');
+    await wrapper.find('[aria-label="Turn off camera"]').trigger('click');
+    await wrapper.find('[aria-label="Mute"]').trigger('click');
+    expect(cameraSpy).toHaveBeenCalled();
+    expect(muteSpy).toHaveBeenCalled();
     wrapper.unmount();
+  });
+
+  it('stops media when leaving without joining', async () => {
+    const local = useLocalStore();
+    const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
+    const { wrapper } = await mountWithApp(EnterPage, {
+      route: '/enter/flowspace',
+      props: { id: 'flowspace' },
+    });
+    wrapper.unmount();
+    expect(stopSpy).toHaveBeenCalled();
+  });
+
+  it('does not stop media when navigating to session', async () => {
+    const local = useLocalStore();
+    const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
+    const { wrapper, router } = await mountWithApp(EnterPage, {
+      route: '/enter/flowspace',
+      props: { id: 'flowspace' },
+    });
+    vi.spyOn(router, 'push').mockResolvedValue(undefined as never);
+    await wrapper.find('.btn-primary-round').trigger('click');
+    await flushPromises();
+    wrapper.unmount();
+    expect(stopSpy).not.toHaveBeenCalled();
   });
 });

@@ -54,8 +54,10 @@ export function useMediaEngine() {
     joined.value = true;
   });
   engine.on('conferenceError', (d) => {
-    joined.value = false;
-    engineError.value = d;
+    if (!engine.isJoined()) {
+      joined.value = false;
+      engineError.value = d;
+    }
   });
 
   return {

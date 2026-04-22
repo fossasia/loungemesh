@@ -50,3 +50,24 @@ Object.defineProperty(window, 'innerHeight', { value: 720, writable: true, confi
 
 HTMLElement.prototype.setPointerCapture = vi.fn();
 HTMLElement.prototype.releasePointerCapture = vi.fn();
+
+class MockResizeObserver {
+  private readonly cb: ResizeObserverCallback;
+  observe = vi.fn();
+  disconnect = vi.fn();
+  unobserve = vi.fn();
+  constructor(cb: ResizeObserverCallback) {
+    this.cb = cb;
+    (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver = this;
+  }
+  /** Trigger a resize notification (tests only). */
+  trigger() {
+    this.cb([], this as unknown as ResizeObserver);
+  }
+}
+// @ts-expect-error test shim
+globalThis.ResizeObserver = MockResizeObserver;
+
+export function triggerLastResizeObserver() {
+  (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver?.trigger();
+}

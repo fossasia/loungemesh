@@ -10,10 +10,14 @@ withDefaults(
 </script>
 
 <template>
-  <a class="hdr" :class="variant" href="/" rel="home">
+  <a v-if="variant === 'home'" class="hdr home" href="/" rel="home">
     <img :src="logo" alt="Flowspace" class="logo" width="32" height="32" />
     <span class="brand"><slot>Flowspace</slot></span>
   </a>
+  <div v-else class="sessionBrand" aria-hidden="true">
+    <img :src="logo" alt="" class="logoMark" width="40" height="40" />
+    <span class="brandWord">Flowspace</span>
+  </div>
 </template>
 
 <style scoped>
@@ -30,13 +34,6 @@ withDefaults(
   background: var(--color-bg-card);
   box-shadow: 0 1px 4px rgba(79, 110, 247, 0.12);
 }
-.hdr.session {
-  position: fixed;
-  margin: 10px 0;
-  right: 10px;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-}
 .hdr.home {
   position: static;
   align-self: center;
@@ -49,5 +46,28 @@ withDefaults(
 }
 .brand {
   line-height: 1;
+}
+.sessionBrand {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  left: auto;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.22;
+}
+.logoMark {
+  flex-shrink: 0;
+  filter: saturate(0.85);
+}
+.brandWord {
+  font-weight: var(--fw-medium);
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  color: var(--color-mono30);
 }
 </style>

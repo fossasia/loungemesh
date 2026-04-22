@@ -1,13 +1,18 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
-import { setJwtRefreshCallback, useEventyayBridge } from './useEvenytayBridge';
+import {
+  resetJwtRefreshCallback,
+  setJwtRefreshCallback,
+  useEventyayBridge,
+} from './useEvenytayBridge';
 
 describe('useEventyayBridge', () => {
   const originalParent = window.parent;
 
   afterEach(() => {
     Object.defineProperty(window, 'parent', { value: originalParent, configurable: true });
+    resetJwtRefreshCallback();
     vi.unstubAllEnvs();
   });
 
@@ -72,6 +77,13 @@ describe('useEventyayBridge', () => {
     );
     expect(refresh).toHaveBeenCalledWith('jwt-1');
 
+    wrapper.vm.notifyJoined(4);
+    wrapper.vm.notifyLeft(2);
+    expect(postMessage).toHaveBeenCalledWith(
+      { source: 'flowspace', type: 'participant_joined', count: 4 },
+      'https://eventyay.com',
+    );
+
     // Message from disallowed origin is ignored
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -129,6 +141,60 @@ describe('useEventyayBridge', () => {
         origin: 'https://eventyay.com',
         data: { source: 'eventyay', type: 'other:event' },
       }),
+    );
+    expect(refresh).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('accepts token messages when allowed origins is empty', async () => {
+    vi.stubEnv('VITE_ALLOW_IFRAME_FROM', '');
+    const refresh = vi.fn();
+    setJwtRefreshCallback(refresh);
+    setParent({ postMessage: vi.fn() });
+    const wrapper = mount(
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
+    );
+    await nextTick();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://any.example',
+        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'jwt-open' },
+      }),
+    );
+    expect(refresh).toHaveBeenCalledWith('jwt-open');
+    wrapper.unmount();
+  });
+
+  it('ignores jwt refresh when callback is not registered', async () => {
+    vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com');
+    resetJwtRefreshCallback();
+    const refresh = vi.fn();
+    setParent({ postMessage: vi.fn() });
+    const wrapper = mount(
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
+    );
+    await nextTick();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://eventyay.com',
+        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'jwt-2' },
+      }),
+    );
+    expect(refresh).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('ignores empty message payloads', async () => {
+    vi.stubEnv('VITE_ALLOW_IFRAME_FROM', 'https://eventyay.com');
+    const refresh = vi.fn();
+    setJwtRefreshCallback(refresh);
+    setParent({ postMessage: vi.fn() });
+    const wrapper = mount(
+      defineComponent({ setup: () => useEventyayBridge(), template: '<div />' }),
+    );
+    await nextTick();
+    window.dispatchEvent(
+      new MessageEvent('message', { origin: 'https://eventyay.com', data: null }),
     );
     expect(refresh).not.toHaveBeenCalled();
     wrapper.unmount();

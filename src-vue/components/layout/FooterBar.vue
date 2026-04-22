@@ -44,6 +44,7 @@ defineProps<{
   align-items: center;
   margin: 10px;
   gap: 10px;
+  overflow: visible;
 }
 .center :deep(button) {
   margin: 0 5px;

@@ -10,7 +10,6 @@ import IconButton from '@/components/ui/IconButton.vue';
 import RemoteUsers from '@/components/room/RemoteUsers.vue';
 import LocalUser from '@/components/room/LocalUser.vue';
 import AppHeader from '@/components/layout/AppHeader.vue';
-import ZoomControls from '@/components/layout/ZoomControls.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
@@ -18,20 +17,33 @@ import StageButton from '@/components/stage/StageButton.vue';
 
 const ChatPanel = defineAsyncComponent(() => import('@/components/chat/ChatPanel.vue'));
 const StagePanel = defineAsyncComponent(() => import('@/components/stage/StagePanel.vue'));
+const SessionTools = defineAsyncComponent(() => import('@/components/session/SessionTools.vue'));
+const SessionFeaturePanels = defineAsyncComponent(
+  () => import('@/components/session/SessionFeaturePanels.vue'),
+);
+const LobbyOverlay = defineAsyncComponent(() => import('@/components/session/LobbyOverlay.vue'));
+const WhiteboardOverlay = defineAsyncComponent(
+  () => import('@/components/session/WhiteboardOverlay.vue'),
+);
 import { useLocalStore } from '@/stores/localStore';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
-import MicIcon from '@/components/icons/MicIcon.vue';
-import MicOffIcon from '@/components/icons/MicOffIcon.vue';
+import AppIcon from '@/components/ui/AppIcon.vue';
+import { sessionIdentifier } from '@/utils/sessionIdentifier';
 
 /** Absorbs `props: true` route param so it is not forwarded as a stray DOM attribute (multi-root page). */
-defineProps<{ id: string }>();
+/* v8 ignore next */
+const props = defineProps<{ id: string }>();
 
 const route = useRoute();
-const identifier = computed(() => String(route.params.id ?? ''));
+const identifier = computed(() =>
+  sessionIdentifier(route.params.id ?? props.id),
+);
 
 const local = useLocalStore();
 const conf = useConferenceStore();
+const features = useSessionFeaturesStore();
 const { disconnect, leaveRoom, engine } = useMediaEngine();
 const router = useRouter();
 
@@ -39,12 +51,21 @@ const router = useRouter();
 watch(
   () => identifier.value,
   () => local.resetViewportForRoom(),
-  { immediate: true }
+  { immediate: true },
+);
+
+watch(
+  () => props.id,
+  (id) => {
+    if (id) conf.setConferenceName(id);
+  },
+  { immediate: true },
 );
 
 function leave() {
   local.setOnStage(false);
   engine.setLocalParticipantProperty('onStage', false);
+  local.stopAllLocalMedia();
   leaveRoom();
   conf.leaveConference();
   disconnect();
@@ -53,32 +74,56 @@ function leave() {
 </script>
 
 <template>
+  <div class="sessionRoot" :data-session-id="props.id">
   <ErrorHandler />
   <AppHeader />
   <JitsiConnection />
   <LocalStoreLogic />
+  <LobbyOverlay />
   <PanWrapper>
     <Room :identifier="identifier">
       <RemoteUsers />
       <LocalUser />
     </Room>
   </PanWrapper>
+  <SessionFeaturePanels />
+  <WhiteboardOverlay
+    v-if="features.panel === 'whiteboard'"
+    :on-close="() => (features.panel = '')"
+  />
   <StagePanel />
   <FooterBar>
-    <ZoomControls />
+    <SessionTools />
     <StageButton />
+    <IconButton
+      :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
+      :warning="local.cameraOff"
+      @click="local.toggleCamera()"
+    >
+      <template #icon>
+        <AppIcon :name="local.cameraOff ? 'video-off' : 'video'" />
+      </template>
+    </IconButton>
     <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">
       <template #icon>
-        <MicOffIcon v-if="local.mute" />
-        <MicIcon v-else />
+        <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
     <ScreenshareButton />
     <button type="button" class="btn-leave-call" title="Leave call" @click="leave">Leave Call</button>
     <template #right>
+      <IconButton
+        v-if="features.isHost"
+        label="Moderator"
+        :active="features.panel === 'moderator'"
+        @click="features.togglePanel('moderator')"
+      >
+        <template #icon><AppIcon name="more-vertical" /></template>
+      </IconButton>
       <ChatPanel />
     </template>
   </FooterBar>
+  </div>
 </template>
 
 <style scoped>

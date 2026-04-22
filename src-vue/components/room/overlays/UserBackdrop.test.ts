@@ -9,9 +9,10 @@ describe('UserBackdrop', () => {
     wrapper.unmount();
   });
 
-  it('shows reload hint when not on stage', async () => {
+  it('shows user avatar when not on stage', async () => {
     const { wrapper } = await mountWithApp(UserBackdrop, { props: { onStage: false } });
-    expect(wrapper.text()).toContain('reload');
+    expect(wrapper.find('.base.avatar').exists()).toBe(true);
+    expect(wrapper.find('svg').exists()).toBe(true);
     wrapper.unmount();
   });
 });

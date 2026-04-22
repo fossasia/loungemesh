@@ -2,13 +2,16 @@
 import { onBeforeUnmount } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import IconButton from '@/components/ui/IconButton.vue';
-import StageIcon from '@/components/icons/StageIcon.vue';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
+const features = useSessionFeaturesStore();
 
 function toggle() {
+  if (!features.canUseStage && !local.onStage) return;
   const next = !local.onStage;
   local.setOnStage(next);
   conference.conferenceObject?.setLocalParticipantProperty?.('onStage', next);
@@ -20,15 +23,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <IconButton label="Stage" :active="local.onStage" @click="toggle">
-    <template #icon><StageIcon class="svg" /></template>
+  <IconButton
+    label="Stage"
+    :active="local.onStage"
+    :title="features.canUseStage ? 'Stage' : 'Stage — ask host for access'"
+    @click="toggle"
+  >
+    <template #icon><AppIcon name="stage" /></template>
   </IconButton>
 </template>
-
-<style scoped>
-.svg :deep(path),
-.svg :deep(rect),
-.svg :deep(ellipse) {
-  stroke: var(--btn-default-fg);
-}
-</style>

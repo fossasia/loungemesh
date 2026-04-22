@@ -15,7 +15,9 @@ defineProps<{
         <span class="sr">Close</span>
       </button>
     </div>
-    <slot />
+    <div class="content">
+      <slot />
+    </div>
   </div>
 </template>
 
@@ -31,10 +33,18 @@ defineProps<{
   flex-direction: column;
 }
 .header {
-  padding: 8px 0;
+  padding: 12px 12px 8px;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  align-items: center;
+}
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 12px;
 }
 .title {
   font-weight: var(--fw-medium);

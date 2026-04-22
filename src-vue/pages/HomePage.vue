@@ -1,12 +1,19 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppHeader from '@/components/layout/AppHeader.vue';
 import NameInputForm from '@/components/home/NameInputForm.vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useLocalStore } from '@/stores/localStore';
 import { formatSphereName } from '@/utils/formatSphereName';
 
 const router = useRouter();
 const conference = useConferenceStore();
+const local = useLocalStore();
+
+onMounted(() => {
+  local.stopAllLocalMedia();
+});
 
 function goSession(payload: { displayName: string; sessionName: string }) {
   const name = formatSphereName(payload.displayName);

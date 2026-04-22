@@ -88,13 +88,22 @@ describe('handleSessionConnectionWatch', () => {
   });
 
   it('switches rooms and joins when connected', async () => {
-    const { deps, conferenceStore } = makeDeps();
+    const resetSessionForJoin = vi.fn();
+    const { deps, conferenceStore } = makeDeps({
+      resetSessionForJoin,
+      engine: {
+        getConference: vi.fn(() => ({ id: 'conf' })),
+        isJoined: vi.fn(() => true),
+      } as never,
+    });
     conferenceStore.isJoined = true;
     conferenceStore.conferenceName = 'room-a';
     await runWatch('room-b', true, deps);
+    expect(resetSessionForJoin).toHaveBeenCalled();
     expect(deps.leaveRoom).toHaveBeenCalled();
     expect(deps.joinRoom).toHaveBeenCalledWith('room-b', 'Alice', {});
     expect(conferenceStore.conferenceObject).toEqual({ id: 'conf' });
+    expect(conferenceStore.isJoined).toBe(true);
   });
 
   it('records non-Error join failures', async () => {

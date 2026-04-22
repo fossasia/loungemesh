@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
+
+defineProps<{
+  handUp?: boolean;
+}>();
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import NameTag from './overlays/NameTag.vue';
@@ -65,6 +69,7 @@ function onKeydown(e: KeyboardEvent) {
     @keydown.enter.prevent="openEdit"
     @keydown.space.prevent="openEdit"
   >
+    <span v-if="handUp" class="handBadge">✋</span>
     {{ conference.displayName }}
   </NameTag>
 </template>
@@ -92,5 +97,8 @@ function onKeydown(e: KeyboardEvent) {
 }
 .nameTagClick {
   cursor: pointer;
+}
+.handBadge {
+  margin-right: 4px;
 }
 </style>

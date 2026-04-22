@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import LocalStoreLogic from '@/components/runtime/LocalStoreLogic.vue';
 import PanWrapper from '@/components/layout/PanWrapper.vue';
@@ -13,9 +13,8 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
-import MicIcon from '@/components/icons/MicIcon.vue';
-import MicOffIcon from '@/components/icons/MicOffIcon.vue';
-import PhoneOffIcon from '@/components/icons/PhoneOffIcon.vue';
+import { joinFromEnterPage } from '@/utils/enterPageJoin';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 const props = defineProps<{ id: string }>();
 
@@ -23,6 +22,7 @@ const router = useRouter();
 const conference = useConferenceStore();
 const local = useLocalStore();
 const { engine } = useMediaEngine();
+const joiningSession = ref(false);
 
 watch(
   () => props.id,
@@ -36,13 +36,15 @@ watch(
 );
 
 async function join() {
-  try {
-    await ensureLocalTracks(local, engine);
-  } catch {
-    /* continue — session will retry */
-  }
-  router.push(`/session/${conference.conferenceName}`);
+  joiningSession.value = true;
+  await joinFromEnterPage(local, engine, conference, router, ensureLocalTracks);
 }
+
+onBeforeUnmount(() => {
+  if (!joiningSession.value) {
+    local.stopAllLocalMedia();
+  }
+});
 </script>
 
 <template>
@@ -58,14 +60,26 @@ async function join() {
     <p class="sub">Move around the space, then join when you are ready.</p>
   </div>
   <FooterBar>
-    <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">
+    <IconButton
+      :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
+      :warning="local.cameraOff"
+      @click="local.toggleCamera()"
+    >
       <template #icon>
-        <MicOffIcon v-if="local.mute" />
-        <MicIcon v-else />
+        <AppIcon :name="local.cameraOff ? 'video-off' : 'video'" />
+      </template>
+    </IconButton>
+    <IconButton
+      :label="local.mute ? 'Unmute' : 'Mute'"
+      :warning="local.mute"
+      @click="local.toggleMute()"
+    >
+      <template #icon>
+        <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
     <button type="button" class="btn-primary-round" @click="join">
-      <PhoneOffIcon class="join-ico" aria-hidden="true" />
+      <AppIcon name="arrow-right" class="join-ico" />
       Join
     </button>
   </FooterBar>
@@ -89,8 +103,6 @@ async function join() {
   color: var(--color-mono10);
 }
 .join-ico {
-  width: 22px;
-  height: 22px;
   flex-shrink: 0;
 }
 </style>

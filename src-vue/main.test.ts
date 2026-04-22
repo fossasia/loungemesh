@@ -15,4 +15,17 @@ describe('bootstrap', () => {
     await import('./main');
     expect(document.querySelector('#app')?.innerHTML.length).toBeGreaterThan(0);
   });
+
+  it('stops local media when navigating from session to home', async () => {
+    vi.resetModules();
+    const { bootstrap } = await import('./main');
+    const { useLocalStore } = await import('@/stores/localStore');
+    document.body.innerHTML = '<div id="app"></div>';
+    const { router } = bootstrap('#app');
+    const local = useLocalStore();
+    const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
+    await router.push({ name: 'session', params: { id: 'room' } });
+    await router.push({ name: 'home' });
+    expect(stopSpy).toHaveBeenCalled();
+  });
 });

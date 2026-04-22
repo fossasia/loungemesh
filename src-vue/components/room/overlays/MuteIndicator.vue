@@ -1,41 +1,59 @@
 <script setup lang="ts">
-import MuteCatSmall from '@/assets/muteCatSmall.svg';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 withDefaults(
   defineProps<{
     clickable?: boolean;
   }>(),
-  { clickable: false }
+  { clickable: false },
 );
 
 const emit = defineEmits<{ click: [] }>();
 </script>
 
 <template>
-  <div class="muteContainer" :class="{ clickable }" @click="clickable && emit('click')">
-    <img :src="MuteCatSmall" alt="" />
-  </div>
+  <button
+    v-if="clickable"
+    type="button"
+    class="muteBtn"
+    aria-label="Unmute"
+    @click.stop="emit('click')"
+  >
+    <AppIcon name="mic-off" :size="18" />
+  </button>
+  <span v-else class="muteBadge" aria-label="Muted">
+    <AppIcon name="mic-off" :size="18" />
+  </span>
 </template>
 
 <style scoped>
-/* Legacy `MuteContainer` from src/components/User/RemoteUser/MuteIndicator.tsx */
-.muteContainer {
+.muteBtn,
+.muteBadge {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  transform: none;
-  font-size: 2.5rem;
-  cursor: default;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-round);
+  border: 2px solid var(--color-mono60);
+  background: var(--btn-warning-bg);
+  color: var(--btn-warning-fg);
+  box-sizing: border-box;
   pointer-events: none;
 }
-.muteContainer img {
-  width: 34px;
-  height: 34px;
-  display: block;
-}
-.muteContainer.clickable {
+.muteBtn {
   cursor: pointer;
   pointer-events: auto;
 }
+.muteBtn:hover {
+  background: var(--btn-warning-bg-hover);
+  border-color: var(--color-red100);
+}
+.muteBtn:active {
+  background: var(--color-mono0);
+}
 </style>
-

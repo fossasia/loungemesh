@@ -19,4 +19,12 @@ describe('ErrorHandler', () => {
     expect(conn.error).toBeUndefined();
     wrapper.unmount();
   });
+
+  it('hides generic conference errors while joined', async () => {
+    const conf = useConferenceStore();
+    conf.$patch({ error: 'conference_error', isJoined: true });
+    const { wrapper } = await mountWithApp(ErrorHandler);
+    expect(wrapper.text()).not.toContain('conference_error');
+    wrapper.unmount();
+  });
 });

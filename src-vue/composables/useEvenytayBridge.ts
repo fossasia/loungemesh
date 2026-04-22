@@ -50,6 +50,10 @@ export function setJwtRefreshCallback(fn: (jwt: string) => void): void {
   _jwtRefreshCallback = fn;
 }
 
+export function resetJwtRefreshCallback(): void {
+  _jwtRefreshCallback = null;
+}
+
 export function useEventyayBridge() {
   const inIframe = isInIframe();
 

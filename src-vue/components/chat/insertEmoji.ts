@@ -21,4 +21,4 @@ export function insertEmojiAtCaret(textarea: HTMLTextAreaElement, emoji: string)
   textarea.focus();
 }
 
-export const CHAT_EMOJIS = ['😀', '😂', '👍', '❤️', '🎉', '🔥', '👋', '🙌', '😮', '🤔'] as const;
+export { CHAT_EMOJIS } from '@/constants/sessionEmojis';

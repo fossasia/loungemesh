@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import LocalUser from './LocalUser.vue';
 
@@ -62,24 +63,34 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
-  it('hides speaking ring when muted', async () => {
+  it('hides speaking highlight when muted', async () => {
     const local = useLocalStore();
     local.speaking = true;
     local.mute = true;
     const { wrapper } = await mountWithApp(LocalUser);
-    expect(wrapper.find('.speakRing.active').exists()).toBe(false);
+    expect(wrapper.find('video.speaking').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('shows speaking ring and share placeholder', async () => {
+  it('shows speaking highlight and share placeholder', async () => {
     const local = useLocalStore();
     local.speaking = true;
     local.mute = false;
     local.videoType = 'desktop';
     local.video = undefined;
     const { wrapper } = await mountWithApp(LocalUser);
-    expect(wrapper.find('.speakRing.active').exists()).toBe(true);
+    expect(wrapper.find('video.speaking').exists()).toBe(false);
     expect(wrapper.text()).toContain('Starting screen share');
+    wrapper.unmount();
+  });
+
+  it('shows avatar backdrop when camera is off', async () => {
+    const local = useLocalStore();
+    local.cameraOff = true;
+    local.video = undefined;
+    const { wrapper } = await mountWithApp(LocalUser);
+    expect(wrapper.find('video.vid').isVisible()).toBe(false);
+    expect(wrapper.find('.base.avatar').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -89,6 +100,19 @@ describe('LocalUser', () => {
     local.videoType = 'camera';
     const { wrapper } = await mountWithApp(LocalUser);
     expect(wrapper.find('video.vid').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('shows reaction overlay and raised hand on the name tag', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('local-1');
+    features.handRaised = true;
+    features.setReaction('local-1', '👍');
+
+    const { wrapper } = await mountWithApp(LocalUser);
+    expect(wrapper.find('.floatReact').text()).toBe('👍');
+    expect(wrapper.find('.handBadge').exists()).toBe(true);
     wrapper.unmount();
   });
 

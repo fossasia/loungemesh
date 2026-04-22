@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import RemoteUser from './RemoteUser.vue';
 
@@ -17,18 +18,27 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
-  it('shows speaking ring and desktop video', async () => {
+  it('shows speaking highlight on camera video', async () => {
     const conference = useConferenceStore();
     conference.addUser('u1', { _displayName: 'Bob' } as never);
     const u = conference.users.u1;
     u.speaking = true;
     u.mute = false;
     u.pos = { x: 10, y: 20 };
-    u.video = makeTrack('desktop');
-    u.video.videoType = 'desktop';
+    u.video = makeTrack('video');
 
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u1' } });
-    expect(wrapper.find('.speakRing.active').exists()).toBe(true);
+    expect(wrapper.find('video.speaking').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('renders desktop share layout', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u1', { _displayName: 'Bob' } as never);
+    conference.users.u1.pos = { x: 0, y: 0 };
+    conference.users.u1.video = makeTrack('desktop');
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u1' } });
+    expect(wrapper.find('.desktopVideo').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -39,6 +49,19 @@ describe('RemoteUser', () => {
     conference.users.u3.pos = { x: 0, y: 0 };
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u3' } });
     expect(wrapper.text()).toContain('Presenting');
+    wrapper.unmount();
+  });
+
+  it('shows reaction emoji and raised hand', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u4', { _displayName: 'Lee' } as never);
+    conference.users.u4.pos = { x: 0, y: 0 };
+    conference.users.u4.properties = { handRaised: true };
+    features.setReaction('u4', '🎉');
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u4' } });
+    expect(wrapper.text()).toContain('🎉');
+    expect(wrapper.text()).toContain('✋');
     wrapper.unmount();
   });
 

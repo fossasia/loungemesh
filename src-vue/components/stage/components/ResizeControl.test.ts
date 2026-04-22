@@ -10,4 +10,10 @@ describe('ResizeControl', () => {
     expect(onClick).toHaveBeenCalled();
     wrapper.unmount();
   });
+
+  it('handles click without onClick handler', async () => {
+    const { wrapper } = await mountWithApp(ResizeControl);
+    await wrapper.find('.resizeContainer').trigger('click');
+    wrapper.unmount();
+  });
 });
