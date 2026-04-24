@@ -4,10 +4,13 @@
 #
 # Flowspace UI: http://localhost:8780
 # Jitsi web:    http://localhost:8001  (PUBLIC_URL in .env)
+#
+# Image versions are pinned here so Dependabot can open update PRs automatically.
+# Do NOT use ${JITSI_IMAGE_VERSION} or floating tags like :stable — pin explicitly.
 
 services:
   init:
-    image: busybox:1.36
+    image: busybox:1.37.0
     volumes:
       - .:/work
     working_dir: /work
@@ -45,7 +48,7 @@ services:
     restart: unless-stopped
 
   jitsi-web:
-    image: jitsi/web:${JITSI_IMAGE_VERSION:-stable}
+    image: jitsi/web:stable-9953
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "${HTTP_PORT:-8001}:80"
@@ -65,7 +68,7 @@ services:
       meet.jitsi:
 
   prosody:
-    image: jitsi/prosody:${JITSI_IMAGE_VERSION:-stable}
+    image: jitsi/prosody:stable-9953
     restart: ${RESTART_POLICY:-unless-stopped}
     expose:
       - "5222"
@@ -86,7 +89,7 @@ services:
           - ${XMPP_SERVER:-xmpp.meet.jitsi}
 
   jicofo:
-    image: jitsi/jicofo:${JITSI_IMAGE_VERSION:-stable}
+    image: jitsi/jicofo:stable-9953
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "127.0.0.1:${JICOFO_REST_PORT:-8888}:8888"
@@ -103,7 +106,7 @@ services:
       meet.jitsi:
 
   jvb:
-    image: jitsi/jvb:${JITSI_IMAGE_VERSION:-stable}
+    image: jitsi/jvb:stable-9953
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "${JVB_PORT:-10000}:${JVB_PORT:-10000}/udp"

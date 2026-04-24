@@ -1,5 +1,6 @@
 # --- build: embed Vite `VITE_*` vars at compile time ---
-FROM node:20-alpine AS build
+# Image versions are pinned so Dependabot can open update PRs automatically.
+FROM node:20.19-alpine3.21 AS build
 
 WORKDIR /app
 
@@ -35,7 +36,7 @@ ENV VITE_JITSI_PUBLIC_URL=$VITE_JITSI_PUBLIC_URL \
 RUN npm run build
 
 # --- runtime: static SPA served by nginx ---
-FROM nginx:stable-alpine
+FROM nginx:1.27-alpine
 
 # The official nginx image processes *.conf.template via envsubst before start.
 # NGINX_ALLOW_IFRAME_FROM sets CSP frame-ancestors at runtime without a rebuild.
