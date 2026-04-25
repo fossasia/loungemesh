@@ -9,24 +9,6 @@
 # Do NOT use ${JITSI_IMAGE_VERSION} or floating tags like :stable — pin explicitly.
 
 services:
-  init:
-    image: busybox:1.37.0
-    volumes:
-      - .:/work
-    working_dir: /work
-    command:
-      - sh
-      - -c
-      - |
-        set -e
-        mkdir -p docker/jitsi-config/web/crontabs
-        mkdir -p docker/jitsi-config/transcripts
-        mkdir -p docker/jitsi-config/prosody/config
-        mkdir -p docker/jitsi-config/prosody/prosody-plugins-custom
-        mkdir -p docker/jitsi-config/jicofo
-        mkdir -p docker/jitsi-config/jvb
-    restart: "no"
-
   flowspace:
     build:
       context: .
@@ -41,14 +23,12 @@ services:
     ports:
       - "${FLOWSPACE_PORT:-8780}:80"
     depends_on:
-      init:
-        condition: service_completed_successfully
       jitsi-web:
         condition: service_started
     restart: unless-stopped
 
   jitsi-web:
-    image: jitsi/web:stable-9953
+    image: jitsi/web:stable-10888
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "${HTTP_PORT:-8001}:80"
@@ -60,15 +40,13 @@ services:
     env_file:
       - .env
     depends_on:
-      init:
-        condition: service_completed_successfully
       jvb:
         condition: service_started
     networks:
       meet.jitsi:
 
   prosody:
-    image: jitsi/prosody:stable-9953
+    image: jitsi/prosody:stable-10888
     restart: ${RESTART_POLICY:-unless-stopped}
     expose:
       - "5222"
@@ -80,16 +58,14 @@ services:
       - ${CONFIG:-./docker/jitsi-config}/prosody/prosody-plugins-custom:/prosody-plugins-custom:Z
     env_file:
       - .env
-    depends_on:
-      init:
-        condition: service_completed_successfully
+    depends_on: {}
     networks:
       meet.jitsi:
         aliases:
           - ${XMPP_SERVER:-xmpp.meet.jitsi}
 
   jicofo:
-    image: jitsi/jicofo:stable-9953
+    image: jitsi/jicofo:stable-10888
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "127.0.0.1:${JICOFO_REST_PORT:-8888}:8888"
@@ -98,15 +74,13 @@ services:
     env_file:
       - .env
     depends_on:
-      init:
-        condition: service_completed_successfully
       prosody:
         condition: service_started
     networks:
       meet.jitsi:
 
   jvb:
-    image: jitsi/jvb:stable-9953
+    image: jitsi/jvb:stable-10888
     restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "${JVB_PORT:-10000}:${JVB_PORT:-10000}/udp"
@@ -116,8 +90,6 @@ services:
     env_file:
       - .env
     depends_on:
-      init:
-        condition: service_completed_successfully
       prosody:
         condition: service_started
     networks:
