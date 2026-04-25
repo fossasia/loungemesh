@@ -1,5 +1,11 @@
 version: 2
 updates:
+  # Keep the Node.js runtime version (read by all workflows and Dockerfile) up to date.
+  - package-ecosystem: "node-version"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
   # Keep all npm deps (including minor/patch) up to date.
   - package-ecosystem: "npm"
     directory: "/"
