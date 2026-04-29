@@ -7,8 +7,8 @@ Spatial video lounge for informal online and hybrid events — move freely in a 
 ## Quick start
 
 ```bash
-cp .env.example .env.local
 npm install
+npm run setup
 npm run dev
 ```
 
@@ -17,13 +17,12 @@ Open [http://localhost:5173](http://localhost:5173).
 ## Docker (SPA + Jitsi stack)
 
 ```bash
-docker compose up -d --build
+npm run setup
+npm run docker:up
 ```
 
 - Flowspace: http://localhost:8780  
 - Jitsi: http://localhost:8001  
-
-Optional: `npm run docker:jitsi-env` rotates Jitsi passwords in `.env` if you need a clean Prosody state.
 
 ## Stack
 
@@ -42,6 +41,9 @@ Optional: `npm run docker:jitsi-env` rotates Jitsi passwords in `.env` if you ne
 | `npm run docs:dev` | VitePress docs locally |
 | `npm run docs:build` | Build docs to `docs-site/.vitepress/dist` |
 | `npm run test:e2e` | Playwright smoke tests (after `npm run build`) |
+| `npm run setup` | Create `.env` for local dev + Docker |
+| `npm run setup:prod` | Create production `.env` (server) |
+| `npm run deploy` | Rebuild Docker stack on server |
 
 ## License
 

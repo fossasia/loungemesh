@@ -54,7 +54,7 @@ export const useConferenceStore = defineStore('conference', {
      * Nested track objects (JitsiTrack) are intentionally NOT deeply observed —
      * they are opaque SDK objects that change by reference, not property mutation.
      */
-    users: shallowReactive({}),
+    users: shallowReactive({}) as Record<string, RemoteUser>,
     displayName: 'Friendly Sphere',
     error: undefined,
     messages: [],

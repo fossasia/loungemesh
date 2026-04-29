@@ -9,8 +9,8 @@
 ## Development
 
 ```bash
-cp .env.example .env.local
 npm install
+npm run setup
 npm run dev
 ```
 
@@ -19,7 +19,8 @@ Open `http://localhost:5173` in your browser.
 ## Docker (SPA + Jitsi)
 
 ```bash
-docker compose up -d --build
+npm run setup
+npm run docker:up
 ```
 
 | Service | URL |
@@ -32,7 +33,7 @@ Port **8780** is the default so Flowspace does not conflict with Eventyay’s vi
 
 ## Environment variables
 
-See [.env.example](https://github.com/eventyay/flowspace/blob/main/.env.example) in the repository root. Key variables:
+Copy `env.development.example` to `.env` via `npm run setup`, or see [env.development.example](https://github.com/eventyay/flowspace/blob/main/env.development.example). Key variables:
 
 | Variable | Purpose |
 |----------|---------|

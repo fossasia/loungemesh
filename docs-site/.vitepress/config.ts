@@ -21,6 +21,7 @@ export default defineConfig({
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
           { text: 'Deployment', link: '/guide/deployment' },
+          { text: 'AWS free-tier deploy', link: '/guide/aws-deployment' },
           { text: 'Eventyay integration', link: '/guide/eventyay-integration' },
           { text: 'Testing', link: '/guide/testing' },
           { text: 'Publishing docs', link: '/guide/publishing-docs' },

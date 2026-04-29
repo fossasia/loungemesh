@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
@@ -8,6 +8,7 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import SessionPage from './SessionPage.vue';
 
+/** Stub async SessionPage children so imports do not finish after test teardown. */
 const sessionStubs = {
   LocalStoreLogic: { template: '<div />' },
   JitsiConnection: { template: '<div />' },
@@ -22,10 +23,17 @@ const sessionStubs = {
   SessionTools: { template: '<div class="session-tools-stub" />' },
   SessionFeaturePanels: { template: '<div class="session-panels-stub" />' },
   LobbyOverlay: { template: '<div />' },
+  ChatPanel: { template: '<div class="chat-stub" />' },
+  StagePanel: { template: '<div />' },
+  WhiteboardOverlay: { template: '<div />' },
 };
 
 describe('SessionPage', () => {
   beforeEach(() => setActivePinia(createPinia()));
+
+  afterEach(async () => {
+    await flushPromises();
+  });
 
   it('hides moderator control for non-host participants', async () => {
     const features = useSessionFeaturesStore();
@@ -125,6 +133,35 @@ describe('SessionPage', () => {
       global: { stubs: sessionStubs },
     });
     expect(wrapper.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('toggles camera from the footer control', async () => {
+    const local = useLocalStore();
+    local.cameraOff = false;
+    const toggleSpy = vi.spyOn(local, 'toggleCamera').mockResolvedValue(undefined);
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/flowspace',
+      props: { id: 'flowspace' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    await wrapper.find('[aria-label="Turn off camera"]').trigger('click');
+    expect(toggleSpy).toHaveBeenCalled();
+    wrapper.unmount();
+    await flushPromises();
+  });
+
+  it('shows camera-on label when camera is off', async () => {
+    const local = useLocalStore();
+    local.cameraOff = true;
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/flowspace',
+      props: { id: 'flowspace' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="Turn on camera"]').exists()).toBe(true);
     wrapper.unmount();
   });
 

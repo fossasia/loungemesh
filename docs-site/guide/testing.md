@@ -9,7 +9,12 @@ Flowspace uses **three separate quality layers**. They are not interchangeable: 
 - **Thresholds:** 100% lines, statements, functions, and branches (`vitest.config.ts`)
 - **Style:** Colocated `*.test.ts` beside the module under test; pure logic extracted to `.ts` helpers when Vue SFC branch coverage is brittle
 
-CI runs `npm run typecheck` then `npm run test:coverage` on every push and PR.
+CI (`.github/workflows/ci.yml`) on every push/PR to **`main`**, **`master`**, and **`dev`**:
+
+1. `test-and-build` — typecheck, Vitest coverage, Vite build, docs build  
+2. `docker` — `docker compose config` with `env.development.example`  
+3. `e2e` — Playwright after production build  
+4. `deploy` — on push to **`main`**, **`master`**, or **`dev`** when `DEPLOY_HOST` is set (after all jobs pass)
 
 ## API reference (TypeDoc)
 
@@ -28,6 +33,7 @@ Hand-written guides live in `docs-site/`:
 |------|---------|
 | [Getting started](/guide/getting-started) | Dev setup, env vars |
 | [Deployment](/guide/deployment) | Docker / static hosting |
+| [AWS free-tier deploy](/guide/aws-deployment) | EC2 + Caddy + CI SSH deploy |
 | [Eventyay integration](/guide/eventyay-integration) | Plugin, JWT, iframe |
 | [Architecture](/architecture) | System diagram and module map |
 | [Publishing docs](/guide/publishing-docs) | TypeDoc + VitePress + GitHub Pages deploy |
@@ -39,7 +45,7 @@ There is **no automated “documentation coverage” percentage**. Keeping docs 
 
 - **Command:** `npx playwright test` (starts `vite preview` on port 4173 after `npm run build`)
 - **Scope today:** Smoke tests for static routes and primary navigation — not full WebRTC / Jitsi conferences
-- **CI:** `.github/workflows/ci.yml` job `e2e` after `test-and-build`
+- **CI:** job `e2e` (parallel with `docker`, both need `test-and-build`)
 
 ### What e2e does not cover yet
 
@@ -56,4 +62,4 @@ npx playwright test
 npx playwright test --ui
 ```
 
-To exercise **restricted join** (`/join/:id` without `?token=`), build with Eventyay env vars set (see `.env.example`) so `VITE_EVENTYAY_API_BASE` is defined; the default CI/preview build uses **open mode**.
+To exercise **restricted join** (`/join/:id` without `?token=`), uncomment Eventyay vars in `.env` after `npm run setup`; the default CI/preview build uses **open mode**.

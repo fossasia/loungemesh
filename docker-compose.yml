@@ -14,7 +14,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_JITSI_PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8001}
+        VITE_JITSI_PUBLIC_URL: ${VITE_JITSI_PUBLIC_URL:-http://localhost:8001}
         VITE_XMPP_DOMAIN: ${XMPP_DOMAIN:-meet.jitsi}
         VITE_XMPP_MUC_DOMAIN: ${XMPP_MUC_DOMAIN:-muc.meet.jitsi}
         VITE_USE_WEBSOCKET: "true"

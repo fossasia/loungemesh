@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Routes and navigation', () => {
   test('home form navigates to a named session', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('Set Session Name').fill('e2e-room');
+    await page.getByLabel('Session name').fill('e2e-room');
     await page.getByRole('button', { name: 'Join' }).click();
     await expect(page).toHaveURL(/\/session\/e2e-room$/);
     await expect(page.getByRole('button', { name: 'Leave Call' })).toBeVisible();
@@ -11,7 +11,7 @@ test.describe('Routes and navigation', () => {
 
   test('enter lobby joins the session', async ({ page }) => {
     await page.goto('/enter/flowspace');
-    await expect(page.getByRole('heading', { name: /Welcome to Flowspace/i })).toBeVisible();
+    await expect(page.getByText(/Move around the space/i)).toBeVisible();
     await page.getByRole('button', { name: 'Join' }).click();
     await expect(page).toHaveURL(/\/session\/flowspace$/);
     await expect(page.getByRole('button', { name: 'Mute' })).toBeVisible();

@@ -1,4 +1,5 @@
 import type { MediaService } from '@/services/MediaService';
+import type { JitsiTrack } from '@/types/jitsi';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import type { useLocalStore } from '@/stores/localStore';
 
@@ -33,7 +34,7 @@ export async function restoreCameraVideo(
     await engine.replaceLocalTrack(oldTrack, camera);
     disposeJitsiTrack(oldTrack);
 
-    const list = [];
+    const list: JitsiTrack[] = [];
     if (local.audio) list.push(local.audio);
     list.push(camera);
     local.setLocalTracks(list);

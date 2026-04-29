@@ -31,9 +31,10 @@ test.describe('Session shell', () => {
     await expect(input).toHaveValue('my-room');
   });
 
-  test('enter page renders welcome heading', async ({ page }) => {
+  test('enter page renders lobby prompt', async ({ page }) => {
     await page.goto('/enter/networking');
-    await expect(page.getByRole('heading', { name: /Welcome to Flowspace/i })).toBeVisible();
+    await expect(page.getByText(/Move around the space/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Join' })).toBeVisible();
   });
 
   test('bare /join redirects away from undefined route', async ({ page }) => {

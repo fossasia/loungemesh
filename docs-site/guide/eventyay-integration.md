@@ -109,7 +109,7 @@ To test the full integration on your machine:
    python manage.py runserver 8000
    ```
 
-2. **Configure Flowspace** in `.env.local`:
+2. **Configure Flowspace** in `.env` (after `npm run setup`, uncomment Eventyay vars):
    ```
    VITE_EVENTYAY_API_BASE=http://localhost:8000
    VITE_EVENTYAY_JWT_ENDPOINT=http://localhost:8000/api/v1/flowspace/token/

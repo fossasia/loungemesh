@@ -44,7 +44,7 @@ export function createNotesPushScheduler(
   publish: (text: string) => void,
   delayMs = 400,
 ): { push: () => void; dispose: () => void } {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const push = () => {
     if (!canPublishSharedNotes(canUseNotes())) return;
     window.clearTimeout(timer);

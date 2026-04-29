@@ -430,6 +430,23 @@ describe('ChatPanel', () => {
     wrapper.unmount();
   });
 
+  it('shows an error when edit text is only whitespace', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    conference.conferenceObject = {} as never;
+    conference.isJoined = true;
+    conference.messages = [chatMsg('me', 'original', 1)];
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    await wrapper.find('.linkBtn.subtle').trigger('click');
+    await wrapper.find('.editTa').setValue('   ');
+    await wrapper.find('.editActions .linkBtn').trigger('click');
+    expect(wrapper.find('.chatErr').text()).toContain('Could not save');
+    expect(conference.messages[0].text).toBe('original');
+    wrapper.unmount();
+  });
+
   it('shows an error when edit cannot be published', async () => {
     const conference = useConferenceStore();
     const local = useLocalStore();

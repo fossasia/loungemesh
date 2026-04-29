@@ -1,56 +1,52 @@
 # Deployment
 
-## Docker (recommended)
+For AWS free-tier + auto-deploy CI, see [AWS free-tier deploy](/guide/aws-deployment).
+
+## Local / Docker
 
 ```bash
-docker compose up -d --build
+npm run setup          # env.development.example → .env (Jitsi passwords included)
+npm run docker:up      # Flowspace :8780, Jitsi :8001
 ```
 
-- Flowspace SPA: `http://localhost:8780` (override with `FLOWSPACE_PORT`, default **8780** — not 8880, which Eventyay video uses locally)
-- Jitsi web: port `8001` (see `docker/env.jitsi.example`)
+Or `docker compose up -d --build` after `npm run setup`.
 
-Build args for the SPA image: `VITE_JITSI_PUBLIC_URL`, `VITE_XMPP_DOMAIN`, `VITE_XMPP_MUC_DOMAIN`, `VITE_SESSION_PREFIX`.
+## Production server
 
-## Production build
+First time (or new host/IP):
+
+```bash
+npm run setup:prod -- --jitsi-host=jitsi.example.com --public-ip=1.2.3.4
+npm run deploy
+```
+
+Redeploy after `git pull` — **no manual `.env` edits**; `npm run deploy` merges `env.production.example` into `.env` (passwords kept) and rebuilds.
+
+Or use `./scripts/bootstrap-server.sh` (see AWS guide).
+
+## Production build (static only)
 
 ```bash
 npm ci
 npm run build
 ```
 
-`vite-plugin-compression2` emits `.gz` and `.br` siblings for every JS/CSS/JSON bundle alongside the regular files. The build output in `dist/` is ready for deployment.
+`vite-plugin-compression2` emits `.gz` and `.br` siblings. Output in `dist/`.
 
 ## nginx
 
-`nginx/default.conf.template` enables:
-
-- `gzip_static on` — serve pre-compressed `.gz` siblings without runtime CPU overhead
-- Runtime gzip fallback for any file without a pre-built `.gz`
-- Long-cache headers for hashed `assets/` and `libs/` (1 year immutable)
-- 1-hour cache for `manifest.json`
-- `Content-Security-Policy: frame-ancestors` controlled by `NGINX_ALLOW_IFRAME_FROM`
-- SPA fallback to `index.html`
+`nginx/default.conf.template` enables gzip_static, long-cache assets, CSP `frame-ancestors` via `NGINX_ALLOW_IFRAME_FROM`, SPA fallback.
 
 ## iframe embedding
-
-To allow Eventyay to embed Flowspace in an `<iframe>`, set the runtime variable:
 
 ```bash
 NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://video.eventyay.com"
 ```
 
-This is substituted into the `Content-Security-Policy` header at container start (no rebuild needed).
-
 ## Eventyay plugin
 
-See [Eventyay integration](/guide/eventyay-integration) for the full plugin setup, including JWT credentials, room creation, and localhost testing.
+See [Eventyay integration](/guide/eventyay-integration).
 
-## Docs site (`docs.yourdomain.com`)
+## Docs site
 
-Documentation is a **separate static site** from the Flowspace app:
-
-- **Build:** `npm run docs:build` (TypeDoc API + VitePress guides)
-- **Deploy:** GitHub Actions workflow [`.github/workflows/docs.yml`](https://github.com/eventyay/flowspace/blob/main/.github/workflows/docs.yml) → GitHub Pages
-- **Custom domain:** set repository variable `DOCS_CNAME` to e.g. `docs.flowspace.com`
-
-See [Publishing docs](/guide/publishing-docs) for the full pipeline, DNS, and `DOCS_BASE_URL` for project Pages URLs.
+See [Publishing docs](/guide/publishing-docs).

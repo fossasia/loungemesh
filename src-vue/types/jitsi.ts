@@ -76,7 +76,7 @@ export interface JitsiMeetJS {
     options: Record<string, unknown>,
   ) => JitsiConnection;
   createLocalTracks(options: {
-    devices: ('audio' | 'video')[];
+    devices: ('audio' | 'video' | 'desktop')[];
     firePermissionPromptIsShownEvent?: boolean;
   }): Promise<JitsiTrack[]>;
 }

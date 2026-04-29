@@ -63,7 +63,7 @@ The deploy workflow runs `npm run docs:build` with `DOCS_BASE_URL` so asset link
 
 | Host | Deployed by | Content |
 |------|-------------|---------|
-| `flowspace.example.com` | Your app pipeline (`deploy.yml`, Docker, etc.) | Vue SPA (`dist/`) |
+| `flowspace.example.com` | CI deploy job (`ci.yml`, Docker, etc.) | Vue SPA (`dist/`) |
 | `docs.flowspace.com` | `docs.yml` | VitePress static site only |
 
 Docs and app are **two static sites**; only the docs workflow touches GitHub Pages.

@@ -8,14 +8,15 @@ Thank you for your interest in Flowspace. This guide covers how to set up your e
 git clone https://github.com/fossasia/flowspace.git
 cd flowspace
 npm install
-cp .env.example .env.local   # adjust as needed
+npm run setup
 npm run dev                  # http://localhost:5173
 ```
 
 For a full local stack with Jitsi:
 
 ```bash
-docker compose up -d --build
+npm run setup
+npm run docker:up
 # Flowspace → http://localhost:8780
 # Jitsi web → http://localhost:8001
 ```

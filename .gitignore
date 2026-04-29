@@ -26,10 +26,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .cert
+
 .env
 .env.local
+.env.production
+.env.development
 .env.*
-!.env.example
+!env.development.example
+!env.production.example
 docker/.env.jitsi
 .eslintcache
 app
