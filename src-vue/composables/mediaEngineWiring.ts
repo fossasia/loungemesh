@@ -1,3 +1,4 @@
+import { markRaw } from 'vue';
 import type { MediaService } from '@/services/MediaService';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
@@ -24,7 +25,7 @@ export function wireStoreSync(engine: MediaService): void {
       isJoined: true,
       isJoining: false,
       error: undefined,
-      conferenceObject: engine.getConference(),
+      conferenceObject: markRaw(engine.getConference() as object),
     });
     const id = engine.getLocalUserId();
     const local = useLocalStore();

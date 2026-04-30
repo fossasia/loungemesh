@@ -156,9 +156,9 @@ watch(
     if (worker && workerReady) {
       const users = Object.values(conferenceStore.users).map((u) => ({
         id: u.id,
-        pos: u.pos,
+        pos: { x: u.pos.x, y: u.pos.y },
       }));
-      worker.postMessage({ myPos: pos, users });
+      worker.postMessage({ myPos: { x: pos.x, y: pos.y }, users });
     } else {
       applyVolumes(pos);
       localStore.calculateUsersOnScreen();

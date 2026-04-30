@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { shallowReactive } from 'vue';
+import { markRaw, shallowReactive } from 'vue';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import type { JitsiConference, JitsiTrack } from '@/types/jitsi';
@@ -72,7 +72,7 @@ export const useConferenceStore = defineStore('conference', {
         volume: 1,
         pos: spreadInitialUserPosition(existing),
         properties: {},
-        ...(user ? { user } : {}),
+        ...(user ? { user: markRaw(user as object) } : {}),
       };
     },
     removeUser(id: string) {

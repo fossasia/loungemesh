@@ -1,3 +1,5 @@
+import { markRaw } from 'vue';
+
 export type JoinConferenceState = {
   isJoining: boolean;
 };
@@ -27,10 +29,10 @@ export async function runConferenceJoin(
   conferenceOptions: Record<string, unknown>,
 ): Promise<void> {
   store.isJoining = true;
-  store.conferenceObject = engine.getConference();
+  store.conferenceObject = markRaw(engine.getConference() as object);
   try {
     await engine.joinRoom(room, displayName, conferenceOptions);
-    store.conferenceObject = engine.getConference();
+    store.conferenceObject = markRaw(engine.getConference() as object);
   } catch (e) {
     store.isJoining = false;
     throw e;
