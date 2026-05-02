@@ -80,11 +80,6 @@ describe('handleSessionConnectionWatch', () => {
     joined.conferenceStore.conferenceName = 'room-a';
     await handleSessionConnectionWatch('room-a', true, joined.deps);
     expect(joined.deps.joinRoom).not.toHaveBeenCalled();
-
-    const hasConf = makeDeps();
-    hasConf.conferenceStore.conferenceObject = { id: 'conf' };
-    await handleSessionConnectionWatch('room-b', true, hasConf.deps);
-    expect(hasConf.deps.joinRoom).not.toHaveBeenCalled();
   });
 
   it('switches rooms and joins when connected', async () => {
@@ -103,7 +98,6 @@ describe('handleSessionConnectionWatch', () => {
     expect(deps.leaveRoom).toHaveBeenCalled();
     expect(deps.joinRoom).toHaveBeenCalledWith('room-b', 'Alice', {});
     expect(conferenceStore.conferenceObject).toEqual({ id: 'conf' });
-    expect(conferenceStore.isJoined).toBe(true);
   });
 
   it('records non-Error join failures', async () => {

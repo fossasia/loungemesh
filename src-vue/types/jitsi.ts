@@ -23,10 +23,17 @@ export interface ReceiverConstraints {
   constraints: Record<string, unknown>;
 }
 
+export interface JitsiParticipant {
+  getId(): string;
+  getDisplayName(): string;
+  getTracks(): JitsiTrack[];
+}
+
 export interface JitsiConference {
   join(): void;
   leave(): void;
   myUserId(): string;
+  getParticipants(): JitsiParticipant[];
   getLocalVideoTrack?(): JitsiTrack | undefined;
   setDisplayName(name: string): void;
   sendTextMessage(text: string): void;
@@ -60,8 +67,11 @@ export interface JitsiMeetJSEvents {
     CONFERENCE_FAILED: string;
     CONFERENCE_ERROR: string;
     TRACK_ADDED: string;
+    TRACK_MUTE_CHANGED: string;
+    TRACK_REMOVED: string;
     MESSAGE_RECEIVED: string;
     PARTICIPANT_PROPERTY_CHANGED: string;
+    DISPLAY_NAME_CHANGED: string;
   };
 }
 

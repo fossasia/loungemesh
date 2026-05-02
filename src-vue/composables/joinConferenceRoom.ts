@@ -29,10 +29,16 @@ export async function runConferenceJoin(
   conferenceOptions: Record<string, unknown>,
 ): Promise<void> {
   store.isJoining = true;
-  store.conferenceObject = markRaw(engine.getConference() as object);
+  const existing = engine.getConference();
+  if (existing) {
+    store.conferenceObject = markRaw(existing as object);
+  }
   try {
     await engine.joinRoom(room, displayName, conferenceOptions);
-    store.conferenceObject = markRaw(engine.getConference() as object);
+    const conf = engine.getConference();
+    if (conf) {
+      store.conferenceObject = markRaw(conf as object);
+    }
   } catch (e) {
     store.isJoining = false;
     throw e;

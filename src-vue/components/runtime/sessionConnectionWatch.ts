@@ -1,3 +1,4 @@
+import { markRaw } from 'vue';
 import type { MediaService } from '@/services/MediaService';
 import { shouldSkipConferenceJoin } from '@/composables/joinConferenceRoom';
 
@@ -45,8 +46,7 @@ export async function handleSessionConnectionWatch(
     deps.leaveRoom();
     deps.conferenceStore.leaveConference();
   }
-  if (deps.conferenceStore.isJoined) return;
-  if (deps.conferenceStore.conferenceObject) return;
+  if (deps.conferenceStore.isJoined && deps.conferenceStore.conferenceName === roomId) return;
 
   deps.conferenceStore.error = undefined;
   deps.conferenceStore.setConferenceName(roomId);
@@ -54,10 +54,9 @@ export async function handleSessionConnectionWatch(
   await new Promise((r) => window.setTimeout(r, 800));
   try {
     await deps.joinRoom(roomId, deps.conferenceStore.displayName, deps.conferenceOptions);
-    deps.conferenceStore.conferenceObject = deps.engine.getConference();
-    if (deps.engine.isJoined()) {
-      deps.conferenceStore.isJoined = true;
-      deps.conferenceStore.isJoining = false;
+    const conf = deps.engine.getConference();
+    if (conf) {
+      deps.conferenceStore.conferenceObject = markRaw(conf as object);
     }
   } catch (e: unknown) {
     deps.conferenceStore.error = e instanceof Error ? e.message : String(e);

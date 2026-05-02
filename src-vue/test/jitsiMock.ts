@@ -20,14 +20,24 @@ export function installJitsiMock(): JitsiMockHandles {
   const conferenceHandlers = new Map<string, Handler>();
   const connectionHandlers = new Map<string, Handler>();
 
+  const remoteTracks: JitsiTrack[] = [];
+
   const conference = {
     _handlers: conferenceHandlers,
+    _remoteTracks: remoteTracks,
     _fire(event: string, ...args: unknown[]) {
       conferenceHandlers.get(event)?.(...args);
     },
     join: vi.fn(),
     leave: vi.fn(),
     myUserId: vi.fn(() => 'local-1'),
+    getParticipants: vi.fn(() => [
+      {
+        getId: () => 'remote-1',
+        getDisplayName: () => 'Remote',
+        getTracks: () => remoteTracks,
+      },
+    ]),
     setDisplayName: vi.fn(),
     sendTextMessage: vi.fn(),
     sendCommand: vi.fn(),
@@ -71,8 +81,11 @@ export function installJitsiMock(): JitsiMockHandles {
       CONFERENCE_FAILED: 'conference.conferenceFailed',
       CONFERENCE_ERROR: 'conference.conferenceError',
       TRACK_ADDED: 'conference.trackAdded',
+      TRACK_MUTE_CHANGED: 'conference.trackMuteChanged',
+      TRACK_REMOVED: 'conference.trackRemoved',
       MESSAGE_RECEIVED: 'conference.messageReceived',
       PARTICIPANT_PROPERTY_CHANGED: 'conference.participantPropertyChanged',
+      DISPLAY_NAME_CHANGED: 'conference.displayNameChanged',
     },
   };
 

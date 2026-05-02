@@ -7,6 +7,7 @@ import { mountWithApp } from '@/test/mountApp';
 import { getJitsiTestContext } from '@/test/jitsiTestContext';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useConnectionStore } from '@/stores/connectionStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import JitsiConnection from './JitsiConnection.vue';
 
@@ -90,11 +91,12 @@ describe('JitsiConnection', () => {
     const conference = useConferenceStore();
     const engine = getMediaEngineInstance();
     const joinSpy = vi.spyOn(engine, 'joinRoom');
-
     const { wrapper } = await mountConnection('/session/room-join');
     await flushPromises();
     const jitsi = getJitsiTestContext();
     jitsi.connection._fire(jitsi.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await flushPromises();
+    expect(useConnectionStore().connected).toBe(true);
     await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
 
@@ -222,6 +224,7 @@ describe('JitsiConnection', () => {
     conference.conferenceObject = undefined;
     joinSpy.mockClear();
     await router.push('/session/room-b');
+    await flushPromises();
     await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
 
@@ -273,6 +276,7 @@ describe('JitsiConnection', () => {
     getJitsiTestContext().connection._fire(
       getJitsiTestContext().jsMeet.events.connection.CONNECTION_ESTABLISHED,
     );
+    await flushPromises();
     await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
     expect(conference.error).toBe('plain failure');
