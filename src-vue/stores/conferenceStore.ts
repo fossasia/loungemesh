@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia';
-import { markRaw, shallowReactive } from 'vue';
+import { markRaw } from 'vue';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import type { JitsiConference, JitsiTrack } from '@/types/jitsi';
 import { spreadInitialUserPosition } from '@/constants/pan';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
 import { applyChatEdit, createChatMessage } from '@/utils/chatMessage';
+import { displayNameFromParticipant } from '@/utils/jitsiParticipant';
 
 export type Vector2 = { x: number; y: number };
 
@@ -19,7 +21,8 @@ export type RemoteUser = {
   video?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   properties: Record<string, unknown>;
-  user?: unknown;
+  /** Plain display-name snapshot — never store a Jitsi participant object. */
+  user?: { _displayName?: string };
 };
 
 export type ChatMessage = {
@@ -37,6 +40,8 @@ export type ConferenceState = {
   isJoined: boolean;
   isJoining: boolean;
   users: Record<string, RemoteUser>;
+  /** Bumped whenever `users` is replaced so dependents can watch a stable signal. */
+  usersEpoch: number;
   displayName: string;
   error?: string;
   messages: ChatMessage[];
@@ -49,12 +54,8 @@ export const useConferenceStore = defineStore('conference', {
     conferenceName: conferenceNameDefault,
     isJoined: false,
     isJoining: false,
-    /**
-     * shallowReactive: each RemoteUser object is reactive at the top level only.
-     * Nested track objects (JitsiTrack) are intentionally NOT deeply observed —
-     * they are opaque SDK objects that change by reference, not property mutation.
-     */
-    users: shallowReactive({}) as Record<string, RemoteUser>,
+    users: {},
+    usersEpoch: 0,
     displayName: 'Friendly Sphere',
     error: undefined,
     messages: [],
@@ -63,27 +64,78 @@ export const useConferenceStore = defineStore('conference', {
     setConferenceName(name: string) {
       this.conferenceName = name;
     },
-    addUser(id: string, user?: unknown) {
+    commitUsers(next: Record<string, RemoteUser>) {
+      this.users = next;
+      this.usersEpoch += 1;
+    },
+    patchUser(id: string, patch: Partial<RemoteUser>, bumpEpoch = true) {
+      const user = this.users[id];
+      if (!user) return;
+      this.users = { ...this.users, [id]: { ...user, ...patch } };
+      if (bumpEpoch) this.usersEpoch += 1;
+    },
+    addUser(id: string, participant?: unknown) {
+      const displayName = displayNameFromParticipant(participant);
+      if (this.users[id]) {
+        if (displayName) this.updateUserDisplayName(id, displayName);
+        return;
+      }
+      const local = useLocalStore();
       const existing = Object.values(this.users).map((u) => u.pos);
-      this.users[id] = {
-        id,
-        mute: false,
-        speaking: false,
-        volume: 1,
-        pos: spreadInitialUserPosition(existing),
-        properties: {},
-        ...(user ? { user: markRaw(user as object) } : {}),
-      };
+      if (local.id && local.id !== id) {
+        existing.push(local.pos);
+      }
+      this.commitUsers({
+        ...this.users,
+        [id]: {
+          id,
+          mute: false,
+          speaking: false,
+          volume: 1,
+          pos: spreadInitialUserPosition(existing),
+          properties: {},
+          ...(displayName ? { user: { _displayName: displayName } } : {}),
+        },
+      });
+    },
+    setUserTrack(id: string, kind: 'audio' | 'video', track: JitsiTrack) {
+      if (!this.users[id]) return;
+      if (kind === 'audio') {
+        this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
+      } else {
+        this.patchUser(id, {
+          video: markRaw(track),
+          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
+        });
+      }
+    },
+    clearUserTrack(id: string, kind: 'audio' | 'video') {
+      if (!this.users[id]) return;
+      if (kind === 'audio') {
+        this.patchUser(id, { audio: undefined, mute: false });
+      } else {
+        this.patchUser(id, { video: undefined, videoType: undefined });
+      }
     },
     removeUser(id: string) {
-      delete this.users[id];
+      if (!(id in this.users)) return;
+      const next = { ...this.users };
+      delete next[id];
+      this.commitUsers(next);
     },
     setDisplayName(name: string) {
       this.displayName = name;
     },
+    updateUserDisplayName(id: string, name: string) {
+      const trimmed = name.trim();
+      if (!trimmed || !this.users[id]) return;
+      this.patchUser(id, {
+        user: { ...this.users[id].user, _displayName: trimmed },
+      });
+    },
     updateUserPosition(id: string, pos: Vector2) {
       if (!this.users[id]) return;
-      this.users[id].pos = pos;
+      this.patchUser(id, { pos });
     },
     sendTextMessage(txt: string): boolean {
       return getMediaEngineInstance().sendTextMessage(txt);
@@ -115,6 +167,7 @@ export const useConferenceStore = defineStore('conference', {
       this.isJoined = false;
       this.isJoining = false;
       this.users = {};
+      this.usersEpoch += 1;
       this.messages = [];
       this.error = undefined;
       useSessionFeaturesStore().resetForLeave();

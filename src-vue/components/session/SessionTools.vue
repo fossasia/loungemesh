@@ -27,10 +27,12 @@ function toggleHand() {
   engine.setLocalParticipantProperty('handRaised', features.handRaised);
   const id = engine.getLocalUserId();
   if (id && conference.users[id]) {
-    conference.users[id].properties = {
-      ...conference.users[id].properties,
-      handRaised: features.handRaised,
-    };
+    conference.patchUser(id, {
+      properties: {
+        ...conference.users[id].properties,
+        handRaised: features.handRaised,
+      },
+    });
   }
 }
 

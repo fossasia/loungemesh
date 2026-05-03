@@ -9,6 +9,7 @@ import {
   randomInitialUserPosition,
   roomSize,
   spreadInitialUserPosition,
+  spheresOverlap,
   worldToRoom,
 } from './pan';
 
@@ -18,10 +19,18 @@ describe('pan constants', () => {
     expect(pos.x).toBe(roomSize.x / 2 - 100);
   });
 
-  it('spreadInitialUserPosition offsets when others exist', () => {
+  it('spreadInitialUserPosition avoids overlapping spheres', () => {
     const base = randomInitialUserPosition();
     const next = spreadInitialUserPosition([base]);
+    expect(spheresOverlap(base, next)).toBe(false);
     expect(next.x !== base.x || next.y !== base.y).toBe(true);
+  });
+
+  it('spheresOverlap detects box intersection', () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 100, y: 0 };
+    expect(spheresOverlap(a, b)).toBe(true);
+    expect(spheresOverlap(a, { x: 200, y: 0 })).toBe(false);
   });
 
   it('uses default bounds when no finite positions are provided', () => {

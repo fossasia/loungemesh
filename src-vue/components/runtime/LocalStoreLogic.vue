@@ -9,6 +9,7 @@ import { throttle } from '@/utils/throttle';
 import { getVolumeByDistance } from '@/utils/vector';
 import { applyWorkerVolume } from '@/components/runtime/applyWorkerVolume';
 import { watchTrackSpeaking } from '@/utils/speakingMeter';
+import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 
 const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
@@ -42,9 +43,20 @@ function applyVolumes(myPos: { x: number; y: number }) {
   for (const key of Object.keys(conferenceStore.users)) {
     const u = conferenceStore.users[key];
     const vol = getVolumeByDistance(myPos, u.pos);
-    u.volume = vol;
+    if (u.volume !== vol) {
+      conferenceStore.patchUser(key, { volume: vol }, false);
+    }
     setParticipantVolume(key, vol);
   }
+}
+
+function postWorkerUpdate(myPos: { x: number; y: number }) {
+  if (!worker || !workerReady) return;
+  const users = Object.values(conferenceStore.users).map((u) => ({
+    id: u.id,
+    pos: { x: u.pos.x, y: u.pos.y },
+  }));
+  worker.postMessage({ myPos: { x: myPos.x, y: myPos.y }, users });
 }
 
 function initProximityWorker() {
@@ -55,7 +67,13 @@ function initProximityWorker() {
     });
     worker.onmessage = (e: MessageEvent<{ volumes: Array<{ id: string; volume: number }> }>) => {
       for (const { id, volume } of e.data.volumes) {
-        applyWorkerVolume(id, volume, conferenceStore.users, setParticipantVolume);
+        applyWorkerVolume(
+          id,
+          volume,
+          conferenceStore.users,
+          (userId, patch) => conferenceStore.patchUser(userId, patch, false),
+          setParticipantVolume,
+        );
       }
       localStore.calculateUsersOnScreen();
     };
@@ -84,6 +102,7 @@ async function addLocalTracksToConference() {
       /* already added */
     }
   }
+  scheduleReceiverRefresh();
 }
 
 function onResize() {
@@ -130,21 +149,26 @@ watch(
 );
 
 watch(
-  () => [conferenceStore.isJoined, localStore.audio, localStore.video],
+  () => [conferenceStore.isJoined, localStore.audio, localStore.video] as const,
   () => {
     void addLocalTracksToConference();
   },
-  { deep: true },
 );
 
 watch(() => localStore.audio, bindSpeakingMonitor, { immediate: true });
 
 watch(
-  () => conferenceStore.users,
+  () => conferenceStore.usersEpoch,
   () => {
     localStore.ensureRoomBounds();
+    if (!localStore.id) return;
+    if (worker && workerReady) {
+      postWorkerUpdate(localStore.pos);
+    } else {
+      applyVolumes(localStore.pos);
+      localStore.calculateUsersOnScreen();
+    }
   },
-  { deep: true },
 );
 
 watch(
@@ -154,11 +178,7 @@ watch(
     throttledSendPos(JSON.stringify({ ...pos, id }));
 
     if (worker && workerReady) {
-      const users = Object.values(conferenceStore.users).map((u) => ({
-        id: u.id,
-        pos: { x: u.pos.x, y: u.pos.y },
-      }));
-      worker.postMessage({ myPos: { x: pos.x, y: pos.y }, users });
+      postWorkerUpdate(pos);
     } else {
       applyVolumes(pos);
       localStore.calculateUsersOnScreen();

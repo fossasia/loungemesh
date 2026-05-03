@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { setActivePinia, createPinia } from 'pinia';
+import { spheresOverlap } from '@/constants/pan';
+import { useLocalStore } from './localStore';
 import { useConferenceStore } from './conferenceStore';
 describe('conferenceStore', () => {
   beforeEach(() => {
@@ -62,6 +64,57 @@ describe('conferenceStore', () => {
     const store = useConferenceStore();
     store.setDisplayName('Alice');
     expect(store.displayName).toBe('Alice');
+  });
+
+  it('setUserTrack replaces user entry for reactivity', () => {
+    const store = useConferenceStore();
+    store.addUser('u6');
+    const epochBefore = store.usersEpoch;
+    const before = store.users.u6;
+    store.setUserTrack('u6', 'video', {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera',
+    } as never);
+    expect(store.usersEpoch).toBeGreaterThan(epochBefore);
+    expect(store.users.u6).not.toBe(before);
+    expect(store.users.u6.video).toBeTruthy();
+  });
+
+  it('clearUserTrack removes media from a user', () => {
+    const store = useConferenceStore();
+    store.addUser('u7');
+    store.setUserTrack('u7', 'video', {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera',
+    } as never);
+    store.clearUserTrack('u7', 'video');
+    expect(store.users.u7.video).toBeUndefined();
+  });
+
+  it('updateUserDisplayName updates remote user label', () => {
+    const store = useConferenceStore();
+    store.addUser('u2', { _displayName: 'Alice' });
+    store.updateUserDisplayName('u2', 'Bob');
+    expect(store.users.u2.user?._displayName).toBe('Bob');
+  });
+
+  it('addUser avoids overlapping the local sphere', () => {
+    const store = useConferenceStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    local.pos = { x: 2900, y: 2900 };
+    store.addUser('remote');
+    expect(spheresOverlap(local.pos, store.users.remote.pos)).toBe(false);
+  });
+
+  it('addUser refreshes display name when user already exists', () => {
+    const store = useConferenceStore();
+    store.addUser('u2', { _displayName: 'Alice' });
+    store.addUser('u2', { _displayName: 'Carol' });
+    expect(store.users.u2.user?._displayName).toBe('Carol');
+    expect(Object.keys(store.users)).toHaveLength(1);
   });
 
   it('sendTextMessage delegates to media engine', () => {

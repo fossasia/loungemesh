@@ -105,13 +105,45 @@ export function randomInitialUserPosition(): PanVec {
   return roomCenter();
 }
 
-/** Place a new sphere with spacing so joins do not stack on top of each other. */
+/** Center of a 200×200 sphere (world coordinates). */
+export function sphereCenter(pos: PanVec): PanVec {
+  return { x: pos.x + userSize.x / 2, y: pos.y + userSize.y / 2 };
+}
+
+/** True when two sphere bounding boxes overlap (same size as local/remote video circles). */
+export function spheresOverlap(a: PanVec, b: PanVec, size = userSize): boolean {
+  return !(
+    a.x + size.x <= b.x ||
+    b.x + size.x <= a.x ||
+    a.y + size.y <= b.y ||
+    b.y + size.y <= a.y
+  );
+}
+
+function finitePositions(positions: PanVec[]): PanVec[] {
+  return positions.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+
+/** Place a new sphere so its video circle does not overlap any existing sphere. */
 export function spreadInitialUserPosition(existing: PanVec[]): PanVec {
+  const others = finitePositions(existing);
+  if (others.length === 0) return roomCenter();
+
   const base = roomCenter();
-  const n = existing.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).length;
-  if (n === 0) return base;
+  const step = userSize.x;
+  for (let attempt = 0; attempt < 96; attempt++) {
+    const angle = attempt * 2.399963;
+    const radius = step * (1.05 + attempt * 0.5);
+    const candidate = {
+      x: base.x + Math.cos(angle) * radius,
+      y: base.y + Math.sin(angle) * radius,
+    };
+    if (!others.some((p) => spheresOverlap(candidate, p))) return candidate;
+  }
+
+  const n = others.length;
   const angle = n * 2.399963;
-  const radius = 280 + Math.sqrt(n) * 140;
+  const radius = step * (2 + Math.sqrt(n));
   return {
     x: base.x + Math.cos(angle) * radius,
     y: base.y + Math.sin(angle) * radius,

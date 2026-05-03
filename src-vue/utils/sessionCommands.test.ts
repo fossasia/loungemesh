@@ -15,6 +15,9 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('pos', { value: JSON.stringify({ id: 'u1', x: 1, y: 2 }) });
     expect(conference.users.u1.pos).toEqual({ x: 1, y: 2 });
 
+    handleSessionCommand('name', { value: JSON.stringify({ id: 'u1', name: 'Renamed' }) });
+    expect(conference.users.u1.user?._displayName).toBe('Renamed');
+
     handleSessionCommand('host', { value: JSON.stringify({ hostId: 'host1' }) });
     expect(features.hostId).toBe('host1');
 

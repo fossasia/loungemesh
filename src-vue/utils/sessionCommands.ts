@@ -27,6 +27,13 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       }
       break;
     }
+    case 'name': {
+      const data = parse<{ id?: string; name?: string }>(payload);
+      if (data?.id && data.name?.trim()) {
+        conference.updateUserDisplayName(data.id, data.name.trim());
+      }
+      break;
+    }
     case 'host': {
       const data = parse<{ hostId?: string }>(payload);
       if (data?.hostId && !features.hostId && !features.pendingHostClaim) {
@@ -103,7 +110,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
         if (data.id === local.id && !local.mute) {
           void local.toggleMute();
         } else if (conference.users[data.id]) {
-          conference.users[data.id].mute = true;
+          conference.patchUser(data.id, { mute: true });
         }
       }
       break;
