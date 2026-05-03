@@ -14,16 +14,14 @@ describe('RemoteUsers', () => {
     const conference = useConferenceStore();
     conference.addUser('a');
     conference.addUser('b');
-    conference.users.a.pos = { x: 1, y: 2 };
-    conference.users.b.pos = { x: 3, y: 4 };
-    conference.users.a.mute = true;
-    conference.users.a.video = makeTrack('video', 'a');
-    conference.users.a.audio = makeTrack('audio', 'a');
+    conference.updateUserPosition('a', { x: 1, y: 2 });
+    conference.updateUserPosition('b', { x: 3, y: 4 });
+    conference.patchUser('a', { mute: true, video: makeTrack('video', 'a'), audio: makeTrack('audio', 'a') });
 
     const { wrapper } = await mountWithApp(RemoteUsers);
     expect(wrapper.findAll('.userContainer').length).toBe(2);
-    conference.users.a.pos = { x: 10, y: 20 };
-    conference.users.a.mute = false;
+    conference.updateUserPosition('a', { x: 10, y: 20 });
+    conference.patchUser('a', { mute: false });
     await nextTick();
     wrapper.unmount();
   });
@@ -36,8 +34,8 @@ describe('RemoteUsers', () => {
     features.lobbyApproved.host = true;
     conference.addUser('host');
     conference.addUser('guest');
-    conference.users.host.pos = { x: 0, y: 0 };
-    conference.users.guest.pos = { x: 1, y: 1 };
+    conference.updateUserPosition('host', { x: 0, y: 0 });
+    conference.updateUserPosition('guest', { x: 1, y: 1 });
 
     const { wrapper } = await mountWithApp(RemoteUsers);
     expect(wrapper.findAll('.userContainer').length).toBe(1);

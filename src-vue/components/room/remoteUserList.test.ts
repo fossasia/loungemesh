@@ -20,8 +20,8 @@ describe('buildRemoteUserList', () => {
       },
     });
     expect(list).toEqual([
-      { id: 'a', x: 1, y: 2, mute: true },
-      { id: 'b', x: 3, y: 4, mute: false },
+      { id: 'a', x: 1, y: 2, displayName: 'Friendly Sphere', mute: true, hasVideo: false },
+      { id: 'b', x: 3, y: 4, displayName: 'Friendly Sphere', mute: false, hasVideo: false },
     ]);
   });
 
