@@ -5,10 +5,13 @@ defineProps<{
   handUp?: boolean;
 }>();
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
+import AppIcon from '@/components/ui/AppIcon.vue';
 import NameTag from './overlays/NameTag.vue';
 
 const conference = useConferenceStore();
+const local = useLocalStore();
 const { engine } = useMediaEngine();
 const active = ref(false);
 const draft = ref(conference.displayName);
@@ -34,6 +37,13 @@ function commit() {
   const name = n.length ? n : conference.displayName;
   conference.setDisplayName(name);
   engine.setDisplayName(name);
+  const id = local.id;
+  if (id) {
+    conference.updateUserDisplayName(id, name);
+    if (conference.isJoined) {
+      engine.sendCommand('name', JSON.stringify({ id, name }));
+    }
+  }
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -50,6 +60,7 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
+  <div class="nameEditRoot" @pointerdown.stop @pointermove.stop @click.stop>
   <input
     v-if="active"
     ref="inputRef"
@@ -60,21 +71,26 @@ function onKeydown(e: KeyboardEvent) {
     @blur="commit"
     @keydown="onKeydown"
   />
-  <NameTag
-    v-else
-    class="nameTagClick"
-    role="button"
-    tabindex="0"
-    @click="openEdit"
-    @keydown.enter.prevent="openEdit"
-    @keydown.space.prevent="openEdit"
-  >
+  <NameTag v-else class="nameRow">
     <span v-if="handUp" class="handBadge">✋</span>
-    {{ conference.displayName }}
+    <span class="nameText">{{ conference.displayName }}</span>
+    <button
+      type="button"
+      class="editBtn"
+      aria-label="Edit sphere name"
+      @click.stop="openEdit"
+    >
+      <AppIcon name="pencil" :size="14" :stroke-width="2" />
+    </button>
   </NameTag>
+  </div>
 </template>
 
 <style scoped>
+.nameEditRoot {
+  width: 100%;
+  max-width: 200px;
+}
 .nameInput {
   margin-top: 5px;
   box-sizing: border-box;
@@ -95,10 +111,39 @@ function onKeydown(e: KeyboardEvent) {
   outline: none;
   border: 1px solid var(--color-blue100);
 }
-.nameTagClick {
+.nameRow {
+  gap: 4px;
+}
+.nameText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-mono0);
+  background: transparent;
   cursor: pointer;
 }
+.editBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.editBtn:focus-visible {
+  outline: 2px solid var(--color-blue100);
+  outline-offset: 1px;
+}
 .handBadge {
-  margin-right: 4px;
+  margin-right: 2px;
 }
 </style>

@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useConferenceStore } from '@/stores/conferenceStore';
+import { useLocalStore } from '@/stores/localStore';
 import LocalNameContainer from './LocalNameContainer.vue';
 
 describe('LocalNameContainer', () => {
@@ -11,7 +13,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('Bob');
     input.element.dispatchEvent(
@@ -25,7 +27,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('Bob');
     input.element.dispatchEvent(
@@ -39,7 +41,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('Carol');
     await input.trigger('keydown', { key: 'Escape' });
@@ -51,7 +53,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('Draft');
     conference.setDisplayName('Changed');
@@ -74,7 +76,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Enter Your Name');
     wrapper.unmount();
   });
@@ -83,7 +85,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('Eve');
     await input.trigger('blur');
@@ -95,7 +97,7 @@ describe('LocalNameContainer', () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('Draft');
     await input.trigger('keydown', { key: 'a' });
@@ -104,11 +106,36 @@ describe('LocalNameContainer', () => {
     wrapper.unmount();
   });
 
+  it('broadcasts renamed sphere to the room', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.setDisplayName('Alice');
+    conference.isJoined = true;
+    local.setMyID('me');
+    conference.addUser('me', { _displayName: 'Alice' });
+    const sendCommand = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const setDisplayName = vi.spyOn(getMediaEngineInstance(), 'setDisplayName');
+
+    const { wrapper } = await mountWithApp(LocalNameContainer);
+    await wrapper.find('.editBtn').trigger('click');
+    await wrapper.find('input').setValue('Bob');
+    await wrapper.find('input').trigger('keydown', { key: 'Enter' });
+
+    expect(conference.displayName).toBe('Bob');
+    expect(conference.users.me.user?._displayName).toBe('Bob');
+    expect(setDisplayName).toHaveBeenCalledWith('Bob');
+    expect(sendCommand).toHaveBeenCalledWith(
+      'name',
+      JSON.stringify({ id: 'me', name: 'Bob' }),
+    );
+    wrapper.unmount();
+  });
+
   it('keeps previous name when draft is empty', async () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');
     const { wrapper } = await mountWithApp(LocalNameContainer);
-    await wrapper.find('.nameTagClick').trigger('click');
+    await wrapper.find('.editBtn').trigger('click');
     const input = wrapper.find('input');
     await input.setValue('   ');
     await input.trigger('keydown', { key: 'Enter' });
