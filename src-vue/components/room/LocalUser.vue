@@ -19,6 +19,7 @@ const local = useLocalStore();
 const features = useSessionFeaturesStore();
 const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
+const dragSurface = ref<HTMLElement | null>(null);
 
 let dragging = false;
 let clickDelta = { x: 0, y: 0 };
@@ -58,7 +59,7 @@ function detach() {
 }
 
 watch(
-  () => [local.video, local.videoType],
+  () => [local.video, local.videoType, local.cameraOff, showCameraVideo.value],
   async () => {
     await nextTick();
     attach();
@@ -68,7 +69,8 @@ watch(
 function onPointerDown(e: PointerEvent) {
   if (!props.draggable || e.button !== 0) return;
   e.stopPropagation();
-  const el = e.currentTarget as HTMLElement;
+  const el = dragSurface.value;
+  if (!el) return;
   dragging = true;
   const rect = el.getBoundingClientRect();
   const scale = local.scale || 1;
@@ -91,7 +93,8 @@ function onPointerMove(e: PointerEvent) {
 function onPointerUp(e: PointerEvent) {
   if (!dragging) return;
   dragging = false;
-  const el = e.currentTarget as HTMLElement;
+  const el = dragSurface.value;
+  if (!el) return;
   try {
     el.releasePointerCapture(e.pointerId);
   } catch {
@@ -109,35 +112,56 @@ onBeforeUnmount(detach);
     class="local userContainer"
     :class="{ desktop: isDesktop }"
     :style="style"
-    @pointerdown="onPointerDown"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
   >
-    <LocalAudioRing />
-    <div class="videoContainer" :class="{ desktop: isDesktop }">
-      <UserBackdrop :onStage="local.onStage" />
-      <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
-      <video
-        v-show="showCameraVideo"
-        ref="videoEl"
-        autoplay
-        playsinline
-        muted
-        :class="[
-          isDesktop ? 'desktopVid' : 'vid',
-          { speaking: local.speaking && !local.mute && showCameraVideo },
-        ]"
-      />
-      <div v-if="isDesktop && !hasVideo" class="sharePlaceholder">Starting screen share…</div>
+    <div
+      ref="dragSurface"
+      class="dragSurface"
+      :class="{ desktop: isDesktop }"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
+    >
+      <LocalAudioRing />
+      <div class="videoContainer" :class="{ desktop: isDesktop }">
+        <UserBackdrop :onStage="local.onStage" />
+        <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
+        <video
+          v-show="showCameraVideo"
+          ref="videoEl"
+          autoplay
+          playsinline
+          muted
+          :class="[
+            isDesktop ? 'desktopVid' : 'vid',
+            { speaking: local.speaking && !local.mute && showCameraVideo },
+          ]"
+        />
+        <div v-if="isDesktop && !hasVideo" class="sharePlaceholder">Starting screen share…</div>
+      </div>
+      <audio ref="audioEl" autoplay muted />
+      <span v-if="reaction" class="floatReact">{{ reaction }}</span>
     </div>
-    <audio ref="audioEl" autoplay muted />
-    <span v-if="reaction" class="floatReact">{{ reaction }}</span>
-    <LocalNameContainer :hand-up="handUp" />
+    <LocalNameContainer class="nameEditArea" :hand-up="handUp" />
   </div>
 </template>
 
 <style scoped>
+.dragSurface {
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+}
+.dragSurface:active {
+  cursor: grabbing;
+}
+.nameEditArea {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  max-width: 200px;
+  pointer-events: auto;
+}
 .videoContainer {
   width: auto;
   height: 200px;
@@ -190,15 +214,10 @@ onBeforeUnmount(detach);
   border-radius: var(--radius-sm);
 }
 .local {
-  cursor: grab;
-  touch-action: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
-}
-.local:active {
-  cursor: grabbing;
 }
 .floatReact {
   position: absolute;

@@ -18,7 +18,7 @@ describe('LocalUser', () => {
     local.mute = true;
 
     const { wrapper } = await mountWithApp(LocalUser);
-    const tile = wrapper.find('.local').element;
+    const tile = wrapper.find('.dragSurface').element;
     tile.dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 100, button: 0, pointerId: 2 }),
     );
@@ -37,7 +37,7 @@ describe('LocalUser', () => {
     local.video = makeTrack('video');
 
     const { wrapper } = await mountWithApp(LocalUser);
-    const tile = wrapper.find('.local').element;
+    const tile = wrapper.find('.dragSurface').element;
     tile.dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, clientX: 50, clientY: 50, button: 0, pointerId: 8 }),
     );
@@ -54,7 +54,7 @@ describe('LocalUser', () => {
     local.video = makeTrack('video');
 
     const { wrapper } = await mountWithApp(LocalUser);
-    const tile = wrapper.find('.local').element;
+    const tile = wrapper.find('.dragSurface').element;
     tile.dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, clientX: 50, clientY: 50, button: 0, pointerId: 7 }),
     );
@@ -125,7 +125,7 @@ describe('LocalUser', () => {
     local.video = makeTrack('desktop');
 
     const { wrapper } = await mountWithApp(LocalUser, { props: { draggable: false } });
-    const tile = wrapper.find('.local').element;
+    const tile = wrapper.find('.dragSurface').element;
     tile.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 5 }));
     tile.dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10, button: 0, pointerId: 4 }),
