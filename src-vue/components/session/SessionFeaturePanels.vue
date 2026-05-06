@@ -11,6 +11,7 @@ import {
   createNotesPushScheduler,
   featureCardStyleForPanel,
   nextNotesDraft,
+  shouldPublishNotesDraft,
 } from '@/utils/sessionNotesPanel';
 
 const panelHeight = sessionPanelLayout.height;
@@ -30,20 +31,67 @@ const conference = useConferenceStore();
 const { engine } = useMediaEngine();
 
 const notesDraft = ref(features.sharedNotes);
+const notesDirty = ref(false);
+/** Shared notes snapshot when the user started their current edit session. */
+const notesEditBase = ref(features.sharedNotes);
 
 watch(
   () => features.sharedNotes,
   (t) => {
-    notesDraft.value = nextNotesDraft(features.panel, t, notesDraft.value);
+    notesDraft.value = nextNotesDraft(notesDirty.value, t, notesDraft.value);
+    if (!notesDirty.value) {
+      notesEditBase.value = t;
+    }
   },
 );
 
-const { push: pushNotes, dispose: disposeNotesPush } = createNotesPushScheduler(
+watch(
+  () => features.panel,
+  (panel, prev) => {
+    if (panel === 'notes' && prev !== 'notes') {
+      notesDraft.value = features.sharedNotes;
+      notesDirty.value = false;
+      notesEditBase.value = features.sharedNotes;
+    }
+  },
+);
+
+function onNotesInput() {
+  if (!notesDirty.value) {
+    notesEditBase.value = features.sharedNotes;
+  }
+  notesDirty.value = true;
+  pushNotes();
+}
+
+function onNotesBlur() {
+  const remoteChangedDuringEdit =
+    notesDirty.value && features.sharedNotes !== notesEditBase.value;
+  if (
+    notesDirty.value &&
+    !remoteChangedDuringEdit &&
+    shouldPublishNotesDraft(notesDraft.value, features.sharedNotes)
+  ) {
+    flushNotes();
+  } else {
+    cancelNotes();
+  }
+  notesDirty.value = false;
+  notesEditBase.value = features.sharedNotes;
+  notesDraft.value = features.sharedNotes;
+}
+
+const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: disposeNotesPush } =
+  createNotesPushScheduler(
   () => features.canUseNotes,
   () => notesDraft.value,
   (text) => {
+    if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
+    if (features.sharedNotes !== notesEditBase.value) return;
     features.sharedNotes = text;
     engine.sendCommand('notes', JSON.stringify({ text }));
+    notesDirty.value = false;
+    notesEditBase.value = text;
   },
 );
 
@@ -91,12 +139,16 @@ function muteUser(id: string) {
 }
 
 function displayName(uid: string): string {
+  conference.usersEpoch;
   return (
     (conference.users[uid]?.user as { _displayName?: string } | undefined)?._displayName ?? uid
   );
 }
 
-const participantIds = computed(() => Object.keys(conference.users));
+const participantIds = computed(() => {
+  conference.usersEpoch;
+  return Object.keys(conference.users);
+});
 
 onBeforeUnmount(disposeNotesPush);
 
@@ -226,7 +278,8 @@ const featureCardStyle = computed(() => {
         class="notesTa"
         placeholder="Collaborative notes — visible to everyone in the call"
         :readonly="!features.canUseNotes"
-        @input="pushNotes"
+        @input="onNotesInput"
+        @blur="onNotesBlur"
       />
       <p class="hint">Edits sync in real time for everyone in the call.</p>
     </div>

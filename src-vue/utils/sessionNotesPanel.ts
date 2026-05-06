@@ -23,13 +23,22 @@ export function featureCardStyleForPanel(
 }
 
 /** Whether a remote notes update should replace the local draft. */
-export function shouldApplyRemoteNotesDraft(panel: string): boolean {
-  return panel !== 'notes';
+export function shouldApplyRemoteNotesDraft(hasLocalEdits: boolean): boolean {
+  return !hasLocalEdits;
 }
 
 /** Merge a remote notes payload into the open-panel draft. */
-export function nextNotesDraft(panel: string, remoteText: string, currentDraft: string): string {
-  return shouldApplyRemoteNotesDraft(panel) ? remoteText : currentDraft;
+export function nextNotesDraft(
+  hasLocalEdits: boolean,
+  remoteText: string,
+  currentDraft: string,
+): string {
+  return shouldApplyRemoteNotesDraft(hasLocalEdits) ? remoteText : currentDraft;
+}
+
+/** Skip publishing when the draft matches what is already shared. */
+export function shouldPublishNotesDraft(draft: string, sharedNotes: string): boolean {
+  return draft !== sharedNotes;
 }
 
 /** Whether the current user may edit and publish shared notes. */
@@ -43,17 +52,28 @@ export function createNotesPushScheduler(
   getDraft: () => string,
   publish: (text: string) => void,
   delayMs = 400,
-): { push: () => void; dispose: () => void } {
+): { push: () => void; flush: () => void; dispose: () => void } {
   let timer: number | undefined;
+  const runPublish = () => {
+    if (!canPublishSharedNotes(canUseNotes())) return;
+    publish(getDraft());
+  };
   const push = () => {
     if (!canPublishSharedNotes(canUseNotes())) return;
     window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      publish(getDraft());
-    }, delayMs);
+    timer = window.setTimeout(runPublish, delayMs);
+  };
+  const flush = () => {
+    window.clearTimeout(timer);
+    timer = undefined;
+    runPublish();
+  };
+  const cancel = () => {
+    window.clearTimeout(timer);
+    timer = undefined;
   };
   const dispose = () => {
-    window.clearTimeout(timer);
+    cancel();
   };
-  return { push, dispose };
+  return { push, flush, cancel, dispose };
 }

@@ -5,6 +5,7 @@ import {
   featureCardStyleForPanel,
   nextNotesDraft,
   shouldApplyRemoteNotesDraft,
+  shouldPublishNotesDraft,
 } from './sessionNotesPanel';
 
 const layout = {
@@ -32,11 +33,16 @@ describe('sessionNotesPanel', () => {
     });
   });
 
-  it('applies remote notes only when the notes panel is closed', () => {
-    expect(shouldApplyRemoteNotesDraft('moderator')).toBe(true);
-    expect(shouldApplyRemoteNotesDraft('notes')).toBe(false);
-    expect(nextNotesDraft('notes', 'remote', 'local')).toBe('local');
-    expect(nextNotesDraft('moderator', 'remote', 'local')).toBe('remote');
+  it('applies remote notes only when there are no local edits', () => {
+    expect(shouldApplyRemoteNotesDraft(false)).toBe(true);
+    expect(shouldApplyRemoteNotesDraft(true)).toBe(false);
+    expect(nextNotesDraft(true, 'remote', 'local')).toBe('local');
+    expect(nextNotesDraft(false, 'remote', 'local')).toBe('remote');
+  });
+
+  it('skips publishing unchanged drafts', () => {
+    expect(shouldPublishNotesDraft('same', 'same')).toBe(false);
+    expect(shouldPublishNotesDraft('new', 'old')).toBe(true);
   });
 
   it('blocks publishing when the user cannot edit notes', () => {
@@ -47,7 +53,7 @@ describe('sessionNotesPanel', () => {
   it('schedules publish only for users who can edit', () => {
     const publish = vi.fn();
     let allowed = false;
-    const { push, dispose } = createNotesPushScheduler(
+    const { push, flush, cancel, dispose } = createNotesPushScheduler(
       () => allowed,
       () => 'draft',
       publish,
@@ -59,6 +65,10 @@ describe('sessionNotesPanel', () => {
     allowed = true;
     push();
     vi.advanceTimersByTime(400);
+    expect(publish).toHaveBeenCalledWith('draft');
+
+    publish.mockClear();
+    flush();
     expect(publish).toHaveBeenCalledWith('draft');
     dispose();
   });

@@ -68,7 +68,7 @@ describe('SessionFeaturePanels', () => {
     wrapper.unmount();
   });
 
-  it('ignores remote notes sync while the notes panel is open', async () => {
+  it('syncs remote notes while the notes panel is open when not editing', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'notes';
     features.sharedNotes = 'local';
@@ -76,7 +76,7 @@ describe('SessionFeaturePanels', () => {
     features.sharedNotes = 'remote';
     await nextTick();
     await flushPromises();
-    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('local');
+    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('remote');
     wrapper.unmount();
   });
 
@@ -97,7 +97,7 @@ describe('SessionFeaturePanels', () => {
     wrapper.unmount();
   });
 
-  it('does not overwrite notes draft while the notes panel is open', async () => {
+  it('does not overwrite notes draft while the user is typing', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'notes';
     features.sharedNotes = 'initial';
@@ -106,6 +106,51 @@ describe('SessionFeaturePanels', () => {
     features.sharedNotes = 'remote overwrite';
     await flushPromises();
     expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('typing');
+    wrapper.unmount();
+  });
+
+  it('does not publish stale notes when the user only focuses the textarea', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    features.panel = 'notes';
+    features.sharedNotes = 'latest shared';
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    await wrapper.find('.notesTa').trigger('focus');
+    vi.advanceTimersByTime(500);
+    expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.any(String));
+    wrapper.unmount();
+  });
+
+  it('applies remote notes while focused without local edits', async () => {
+    const features = useSessionFeaturesStore();
+    features.panel = 'notes';
+    features.sharedNotes = 'before';
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    await wrapper.find('.notesTa').trigger('focus');
+    features.sharedNotes = 'after';
+    await flushPromises();
+    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('after');
+    wrapper.unmount();
+  });
+
+  it('does not publish when remote notes changed during a local edit', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    features.panel = 'notes';
+    features.sharedNotes = 'original';
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    await wrapper.find('.notesTa').setValue('original tweak');
+    features.sharedNotes = 'remote update';
+    await wrapper.find('.notesTa').trigger('blur');
+    vi.advanceTimersByTime(500);
+    expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.stringContaining('tweak'));
+    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('remote update');
     wrapper.unmount();
   });
 
