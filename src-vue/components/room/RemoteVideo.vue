@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
 
 const props = defineProps<{ id: string; track?: JitsiTrackLike; speaking?: boolean }>();
 const el = ref<HTMLVideoElement | null>(null);
 
+function attachTrack(track: typeof props.track) {
+  if (track && el.value) track.attach?.(el.value);
+}
+
 onMounted(() => {
-  if (props.track && el.value) props.track.attach?.(el.value);
+  void nextTick(() => attachTrack(props.track));
 });
 
 watch(
   () => props.track,
-  (t, prev) => {
+  async (t, prev) => {
     if (prev && el.value) prev.detach?.(el.value);
-    if (t && el.value) t.attach?.(el.value);
-  }
+    await nextTick();
+    attachTrack(t);
+  },
 );
 
 onBeforeUnmount(() => {
@@ -35,6 +40,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .remoteVideo {
+  position: relative;
+  z-index: 1;
+  display: block;
   width: 200px;
   height: 200px;
   border-radius: 999px;

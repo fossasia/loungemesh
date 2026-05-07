@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { markRaw } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
@@ -23,6 +24,7 @@ function initialLocalViewport(): { pos: PanVec; pan: PanVec; scale: number; room
   };
 }
 import { isOnScreen } from '@/utils/vector';
+import { buildReceiverConstraints } from '@/utils/receiverConstraints';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
 import { useConferenceStore } from './conferenceStore';
@@ -117,9 +119,9 @@ export const useLocalStore = defineStore('local', {
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
       const videoTrack = tracks.find((t) => t.getType?.() === 'video');
-      if (audioTrack) this.audio = audioTrack;
+      if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
-        this.video = videoTrack;
+        this.video = markRaw(videoTrack);
         this.videoType = videoTrack.videoType === 'desktop' ? 'desktop' : 'camera';
       }
     },
@@ -166,15 +168,15 @@ export const useLocalStore = defineStore('local', {
       this.visibleUsers = [...new Set(visibleUserIds)];
       this.usersOnStage = [...new Set(stageIds)];
 
-      const selectedEndpoints = [...this.visibleUsers, ...this.usersOnStage];
-      engine.setReceiverConstraints({
-        colibriClass: 'SelectedEndpointsChangedEvent',
-        selectedEndpoints,
-        lastN: selectedEndpoints.length,
-        onStageEndpoints: [...this.usersOnStage],
-        defaultConstraints: { maxHeight: 200 },
-        constraints: {},
+      const constraints = buildReceiverConstraints({
+        localId: this.id,
+        remoteUserIds: Object.keys(users),
+        visibleUserIds: this.visibleUsers,
+        stageIds: this.usersOnStage,
       });
+      if (constraints) {
+        engine.setReceiverConstraints(constraints);
+      }
       void conference;
     },
     async toggleMute() {
@@ -185,7 +187,7 @@ export const useLocalStore = defineStore('local', {
           const tracks = await engine.createLocalTracks(['audio']);
           const created = tracks.find((t) => t.getType() === 'audio');
           if (!created) return;
-          this.audio = created;
+          this.audio = markRaw(created);
           audioTrack = created;
           if (engine.isJoined()) {
             try {
@@ -225,7 +227,7 @@ export const useLocalStore = defineStore('local', {
         const created = tracks.find((t) => t.getType() === 'video');
         if (!created) return;
         disposeJitsiTrack(this.video);
-        this.video = created;
+        this.video = markRaw(created);
         this.videoType = 'camera';
         this.cameraOff = false;
         if (engine.isJoined()) {

@@ -4,7 +4,7 @@ import { conferenceNameDefault, conferenceOptions } from './jitsiOptions';
 describe('jitsiOptions', () => {
   it('exports flowspace defaults', () => {
     expect(conferenceNameDefault).toBe('flowspace');
-    expect(conferenceOptions.channelLastN).toBe(3);
-    expect(conferenceOptions.openBridgeChannel).toBe(false);
+    expect(conferenceOptions.channelLastN).toBe(16);
+    expect(conferenceOptions.openBridgeChannel).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import type {
   MediaServiceEvent,
   MediaServiceEventMap,
 } from './MediaService';
+import { sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -101,11 +102,15 @@ export class JitsiAdapter implements MediaService {
     }
 
     const name = secureConferenceName(room, import.meta.env.VITE_SESSION_PREFIX, 'fls');
-    const conference = connection.initJitsiConference(name, conferenceOptions);
+    const conference = connection.initJitsiConference(
+      name,
+      conferenceOptions ? { ...conferenceOptions } : {},
+    );
     const ev = jsMeet.events.conference;
 
     conference.on(ev.USER_JOINED, (id: unknown, user: unknown) => {
       this.emit('userJoined', String(id), user);
+      this.emitParticipantTracks(user);
     });
     conference.on(ev.USER_LEFT, (id: unknown) => {
       this.removeParticipantAudio(String(id));
@@ -115,6 +120,7 @@ export class JitsiAdapter implements MediaService {
       this.joined = true;
       conference.setDisplayName(displayName);
       this.emit('conferenceJoined');
+      this.emitExistingConferenceTracks(conference);
     });
     conference.on(ev.MESSAGE_RECEIVED, (id: unknown, text: unknown, nr: unknown) => {
       this.emit('messageReceived', String(id), String(text), Number(nr));
@@ -152,15 +158,34 @@ export class JitsiAdapter implements MediaService {
       this.wireRemoteAudioTrack(t);
       this.emit('trackAdded', t);
     });
+    conference.on(ev.TRACK_MUTE_CHANGED, (track: unknown) => {
+      const t = track as JitsiTrack;
+      if (t.isLocal?.()) return;
+      if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      this.emit('trackMuteChanged', t);
+    });
+    conference.on(ev.TRACK_REMOVED, (track: unknown) => {
+      const t = track as JitsiTrack;
+      if (t.isLocal?.()) return;
+      if (t.getType?.() === 'audio') this.removeParticipantAudio(t.getParticipantId?.() ?? '');
+      this.emit('trackRemoved', t);
+    });
     conference.on(ev.PARTICIPANT_PROPERTY_CHANGED, (e: unknown) => {
       const participant = e as { _id?: string; _properties?: Record<string, unknown> };
       const id = participant?._id;
       const props = participant?._properties;
-      if (id && props) this.emit('participantPropertyChanged', id, props);
+      if (id && props) {
+        this.emit('participantPropertyChanged', id, sanitizeParticipantProperties(props));
+      }
+    });
+    conference.on(ev.DISPLAY_NAME_CHANGED, (id: unknown, displayName: unknown) => {
+      const name = String(displayName ?? '').trim();
+      if (name) this.emit('displayNameChanged', String(id), name);
     });
 
     const sessionCommands = [
       'pos',
+      'name',
       'host',
       'lobby',
       'react',
@@ -308,6 +333,27 @@ export class JitsiAdapter implements MediaService {
       void this.audioContext.resume();
     }
     return this.audioContext;
+  }
+
+  private emitParticipantTracks(participant: unknown): void {
+    const tracks =
+      (participant as { getTracks?: () => JitsiTrack[] }).getTracks?.() ?? [];
+    for (const track of tracks) {
+      const t = track as JitsiTrack;
+      if (t.isLocal?.()) continue;
+      if (t.getType?.() === 'audio') this.wireRemoteAudioTrack(t);
+      this.emit('trackAdded', t);
+    }
+  }
+
+  private emitExistingConferenceTracks(conference: JitsiConference): void {
+    const getParticipants = (
+      conference as { getParticipants?: () => unknown[] }
+    ).getParticipants;
+    if (!getParticipants) return;
+    for (const participant of getParticipants.call(conference)) {
+      this.emitParticipantTracks(participant);
+    }
   }
 
   private wireRemoteAudioTrack(track: JitsiTrack): void {

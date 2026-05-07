@@ -6,6 +6,9 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { handleSessionCommand } from '@/utils/sessionCommands';
 import { grantsPayloadForSync } from '@/utils/sessionAccess';
+import { sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
+import { spreadInitialUserPosition } from '@/constants/pan';
+import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -21,12 +24,13 @@ export function wireStoreSync(engine: MediaService): void {
     useConnectionStore().$patch({ connected: false, error: detail, connection: undefined });
   });
   engine.on('conferenceJoined', () => {
-    conferenceStore.$patch({
-      isJoined: true,
-      isJoining: false,
-      error: undefined,
-      conferenceObject: markRaw(engine.getConference() as object),
-    });
+    conferenceStore.isJoined = true;
+    conferenceStore.isJoining = false;
+    conferenceStore.error = undefined;
+    const conf = engine.getConference();
+    if (conf) {
+      conferenceStore.conferenceObject = markRaw(conf as object) as typeof conferenceStore.conferenceObject;
+    }
     const id = engine.getLocalUserId();
     const local = useLocalStore();
     const features = useSessionFeaturesStore();
@@ -54,6 +58,10 @@ export function wireStoreSync(engine: MediaService): void {
           }),
         );
       }
+      const others = Object.values(conferenceStore.users).map((u) => u.pos);
+      local.setLocalPosition(spreadInitialUserPosition(others));
+      local.publishLocalPosition();
+      scheduleReceiverRefresh();
     }
   });
   engine.on('conferenceError', (detail) => {
@@ -73,40 +81,66 @@ export function wireStoreSync(engine: MediaService): void {
         'access',
         JSON.stringify(grantsPayloadForSync(features.roomDefaults, id, features.userGrants)),
       );
+      if (features.sharedNotes) {
+        engine.sendCommand('notes', JSON.stringify({ text: features.sharedNotes }));
+      }
     }
+    scheduleReceiverRefresh();
   });
   engine.on('userLeft', (id) => {
     conferenceStore.removeUser(id);
+  });
+  engine.on('displayNameChanged', (id, displayName) => {
+    conferenceStore.updateUserDisplayName(id, displayName);
   });
   engine.on('trackAdded', (track) => {
     const id = track.getParticipantId?.();
     if (!id) return;
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
-    if (track.getType() === 'audio') {
-      conferenceStore.users[id].audio = track;
-      conferenceStore.users[id].mute = track.isMuted();
+    const kind = track.getType() === 'audio' ? 'audio' : 'video';
+    conferenceStore.setUserTrack(id, kind, track);
+    scheduleReceiverRefresh();
+  });
+  engine.on('trackMuteChanged', (track) => {
+    const id = track.getParticipantId?.();
+    if (!id) return;
+    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
+    const kind = track.getType() === 'audio' ? 'audio' : 'video';
+    if (track.isMuted()) {
+      if (kind === 'video') {
+        conferenceStore.clearUserTrack(id, 'video');
+      } else {
+        conferenceStore.patchUser(id, { mute: true });
+      }
     } else {
-      conferenceStore.users[id].video = track;
-      conferenceStore.users[id].videoType = track.videoType === 'desktop' ? 'desktop' : 'camera';
+      conferenceStore.setUserTrack(id, kind, track);
     }
+    scheduleReceiverRefresh();
+  });
+  engine.on('trackRemoved', (track) => {
+    const id = track.getParticipantId?.();
+    if (!id) return;
+    const kind = track.getType() === 'audio' ? 'audio' : 'video';
+    conferenceStore.clearUserTrack(id, kind);
+    scheduleReceiverRefresh();
   });
   engine.on('messageReceived', (id, text, nr) => {
     conferenceStore.ingestChatMessage(id, text, nr);
   });
   engine.on('participantPropertyChanged', (id, properties) => {
-    if (!conferenceStore.users[id]) return;
-    conferenceStore.users[id].properties = {
-      ...conferenceStore.users[id].properties,
-      ...properties,
+    const user = conferenceStore.users[id];
+    if (!user) return;
+    const safe = sanitizeParticipantProperties(properties);
+    const patch: Partial<typeof user> = {
+      properties: { ...user.properties, ...safe },
     };
-    if ('speaking' in properties) {
-      const speaking =
-        properties.speaking === true || properties.speaking === 'true';
-      conferenceStore.users[id].speaking = speaking;
+    if ('speaking' in safe) {
+      patch.speaking = safe.speaking === true || safe.speaking === 'true';
     }
-    if ('handRaised' in properties) {
-      conferenceStore.users[id].properties.handRaised = properties.handRaised;
+    if ('handRaised' in safe) {
+      patch.properties = { ...patch.properties!, handRaised: safe.handRaised };
     }
+    conferenceStore.patchUser(id, patch);
   });
   engine.on('command', (name, payload) => {
     handleSessionCommand(name, payload);

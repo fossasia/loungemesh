@@ -23,8 +23,11 @@ export type MediaServiceEvent =
   | 'userJoined'
   | 'userLeft'
   | 'trackAdded'
+  | 'trackMuteChanged'
+  | 'trackRemoved'
   | 'messageReceived'
   | 'participantPropertyChanged'
+  | 'displayNameChanged'
   | 'command'
   | 'tokenExpired';
 
@@ -37,8 +40,11 @@ export type MediaServiceEventMap = {
   userJoined: [id: string, user: unknown];
   userLeft: [id: string];
   trackAdded: [track: JitsiTrack];
+  trackMuteChanged: [track: JitsiTrack];
+  trackRemoved: [track: JitsiTrack];
   messageReceived: [id: string, text: string, nr: number];
   participantPropertyChanged: [id: string, properties: Record<string, unknown>];
+  displayNameChanged: [id: string, displayName: string];
   command: [name: string, payload: { value: string }];
   /** Fired when Jitsi reports AUTHENTICATION_REQUIRED (JWT expired) */
   tokenExpired: [];

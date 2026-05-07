@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { onBeforeUnmount } from 'vue';
-import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
 
-const conference = useConferenceStore();
 const local = useLocalStore();
 const features = useSessionFeaturesStore();
+const { engine } = useMediaEngine();
 
 function toggle() {
   if (!features.canUseStage && !local.onStage) return;
   const next = !local.onStage;
   local.setOnStage(next);
-  conference.conferenceObject?.setLocalParticipantProperty?.('onStage', next);
+  engine.setLocalParticipantProperty('onStage', next);
 }
 
 onBeforeUnmount(() => {

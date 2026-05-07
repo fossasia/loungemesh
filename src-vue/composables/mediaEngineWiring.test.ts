@@ -55,6 +55,24 @@ describe('wireStoreSync', () => {
     expect(local.id).toBe(before);
   });
 
+  it('syncs display name changes', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1', { _displayName: 'Alice' });
+    jitsi.conference._fire(ev.conference.DISPLAY_NAME_CHANGED, 'u1', 'Bob');
+    expect(conference.users.u1.user?._displayName).toBe('Bob');
+    jitsi.conference._handlers.get('cmd:name')?.({
+      value: JSON.stringify({ id: 'u1', name: 'Carol' }),
+    });
+    expect(conference.users.u1.user?._displayName).toBe('Carol');
+  });
+
   it('syncs speaking participant property', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
@@ -80,6 +98,37 @@ describe('wireStoreSync', () => {
       _properties: { handRaised: true },
     });
     expect(conference.users.u1.properties.handRaised).toBe(true);
+  });
+
+  it('syncs remote video mute and removal', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    const videoTrack = {
+      getParticipantId: () => 'u1',
+      getType: () => 'video',
+      isMuted: () => false,
+      isLocal: () => false,
+      videoType: 'camera',
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, videoTrack);
+    expect(conference.users.u1.video).toBeTruthy();
+
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...videoTrack,
+      isMuted: () => true,
+    });
+    expect(conference.users.u1.video).toBeUndefined();
+
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, videoTrack);
+    jitsi.conference._fire(ev.conference.TRACK_REMOVED, videoTrack);
+    expect(conference.users.u1.video).toBeUndefined();
   });
 
   it('dedupes identical chat messages', async () => {
@@ -254,6 +303,27 @@ describe('wireStoreSync', () => {
       expect.stringContaining('"defaults"'),
     );
     expect(cmdSpy).toHaveBeenCalledWith('access', expect.stringContaining('"notes":true'));
+  });
+
+  it('rebroadcasts shared notes when host sees a new participant', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    local.setMyID('host');
+    features.setHost('host');
+    features.sharedNotes = 'room notes';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'notes',
+      JSON.stringify({ text: 'room notes' }),
+    );
   });
 
   it('sends lobby wait when joining with lobby enabled', async () => {

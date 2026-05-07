@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
 
 const props = defineProps<{ id: string; track?: JitsiTrackLike }>();
@@ -12,13 +12,16 @@ function detach(t?: JitsiTrackLike) {
   if (t && el.value) t.detach?.(el.value);
 }
 
-onMounted(() => attach(props.track));
+onMounted(() => {
+  void nextTick(() => attach(props.track));
+});
 watch(
   () => props.track,
-  (t, prev) => {
+  async (t, prev) => {
     detach(prev);
+    await nextTick();
     attach(t);
-  }
+  },
 );
 onBeforeUnmount(() => detach(props.track));
 </script>
@@ -32,6 +35,8 @@ onBeforeUnmount(() => detach(props.track));
 <style scoped>
 /* Legacy `DesktopVideo` from src/components/User/RemoteUser/DesktopVideo.tsx */
 .desktopVideo {
+  position: relative;
+  z-index: 1;
   width: auto;
   height: 200px;
   object-position: 50% 50%;
