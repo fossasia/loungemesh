@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import type { JitsiTrack } from '@/types/jitsi';
 import { getJitsiTestContext } from '@/test/jitsiTestContext';
+import { makeRemoteAudioTrack } from '@/test/jitsiMock';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
@@ -124,11 +125,50 @@ describe('wireStoreSync', () => {
       ...videoTrack,
       isMuted: () => true,
     });
-    expect(conference.users.u1.video).toBeUndefined();
+    expect(conference.users.u1.video).toBeTruthy();
 
-    jitsi.conference._fire(ev.conference.TRACK_ADDED, videoTrack);
     jitsi.conference._fire(ev.conference.TRACK_REMOVED, videoTrack);
     expect(conference.users.u1.video).toBeUndefined();
+  });
+
+  it('applies stored spatial volume when remote audio track arrives', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    conference.patchUser('u1', { volume: 0.42 }, false);
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, makeRemoteAudioTrack('u1'));
+    expect(conference.users.u1.audio).toBeTruthy();
+    expect(volSpy).toHaveBeenCalledWith('u1', 0.42);
+    volSpy.mockRestore();
+  });
+
+  it('silences Web Audio when remote audio is muted', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    const audioTrack = makeRemoteAudioTrack('u1');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, audioTrack);
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...audioTrack,
+      isMuted: () => true,
+    });
+    expect(conference.users.u1.mute).toBe(true);
+    expect(volSpy).toHaveBeenCalledWith('u1', 0);
+    volSpy.mockRestore();
   });
 
   it('dedupes identical chat messages', async () => {

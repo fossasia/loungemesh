@@ -41,11 +41,12 @@ const nameLabel = computed(
   () => props.displayName ?? user.value?.user?._displayName ?? 'Friendly Sphere',
 );
 const isDesktop = computed(() => user.value?.video?.videoType === 'desktop');
-const hasLiveVideo = computed(() => {
-  conference.usersEpoch;
-  const video = user.value?.video;
-  return !!video && !video.isMuted();
+const videoTrack = computed(() => conference.users[props.id]?.video);
+const videoTrackKey = computed(() => {
+  const t = videoTrack.value as { getTrackLabel?: () => string } | undefined;
+  return t?.getTrackLabel?.() ?? props.id;
 });
+const showAvatar = computed(() => !videoTrack.value || !!videoTrack.value.isMuted?.());
 const speaking = computed(() => !!user.value?.speaking && !user.value?.mute);
 const reaction = computed(() => features.userReactions[props.id]?.emoji);
 const handUp = computed(
@@ -59,17 +60,17 @@ const handUp = computed(
   <div v-if="user" class="userContainer" :id="id" :style="style">
     <div class="videoContainer" :class="{ desktop: isDesktop }">
       <UserBackdrop
-        v-if="!hasLiveVideo"
+        v-if="showAvatar"
         :onStage="user.properties?.onStage === true || user.properties?.onStage === 'true'"
       />
-      <template v-if="isDesktop">
-        <DesktopVideo v-show="hasLiveVideo" :id="id" :track="user.video" />
+      <template v-if="isDesktop && videoTrack">
+        <DesktopVideo :id="id" :track="videoTrack" />
       </template>
-      <template v-else>
-        <RemoteVideo v-show="hasLiveVideo" :id="id" :track="user.video" :speaking="speaking" />
+      <template v-else-if="videoTrack">
+        <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>
     </div>
-    <RemoteAudio :id="id" :track="user.audio" :volume="user.volume" />
+    <RemoteAudio :id="id" :volume="user?.volume" />
     <MuteIndicator v-if="user.mute" />
     <span v-if="reaction" class="floatReact">{{ reaction }}</span>
     <NameTag>

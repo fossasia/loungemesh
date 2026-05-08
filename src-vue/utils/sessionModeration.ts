@@ -9,8 +9,10 @@ export function muteParticipant(
   id: string,
 ): void {
   engine.sendCommand('mod', JSON.stringify({ action: 'mute', id }));
-  const user = conference.users[id];
-  if (user) user.mute = true;
+  if (conference.users[id]) {
+    conference.patchUser(id, { mute: true });
+    engine.setParticipantVolume(id, 0);
+  }
 }
 
 export function kickParticipant(

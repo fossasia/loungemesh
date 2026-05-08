@@ -272,4 +272,54 @@ describe('LocalStoreLogic', () => {
     addSpy.mockRestore();
     wrapper.unmount();
   });
+
+  it('sets full gain when remote user overlaps local position', async () => {
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor() {
+          throw new Error('no worker');
+        }
+      },
+    );
+    const volSpy = vi.spyOn(getMediaEngineInstance(), 'setParticipantVolume');
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    local.setMyID('me');
+    local.pos = { x: 200, y: 300 };
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    conference.addUser('u1');
+    conference.patchUser('u1', { pos: { x: 200, y: 300 } });
+    await flushPromises();
+    expect(volSpy).toHaveBeenCalledWith('u1', 1);
+    volSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('keeps muted remote users silent even when overlapping', async () => {
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor() {
+          throw new Error('no worker');
+        }
+      },
+    );
+    const volSpy = vi.spyOn(getMediaEngineInstance(), 'setParticipantVolume');
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    local.setMyID('me');
+    local.pos = { x: 0, y: 0 };
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    conference.addUser('u1');
+    conference.patchUser('u1', { pos: { x: 0, y: 0 }, mute: true });
+    await flushPromises();
+    expect(volSpy).toHaveBeenCalledWith('u1', 0);
+    volSpy.mockRestore();
+    wrapper.unmount();
+  });
 });

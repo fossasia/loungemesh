@@ -95,6 +95,10 @@ patch_jitsi_websocket_nginx() {
     ! grep -A10 'location = /xmpp-websocket' "$meet_conf" | grep -q 'gzip off'; then
     sudo sed -i '/location = \/xmpp-websocket {/a\    gzip off;' "$meet_conf"
   fi
+  if grep -q 'location ~ \^/colibri-ws/' "$meet_conf" &&
+    ! grep -A6 'location ~ \^/colibri-ws/' "$meet_conf" | head -8 | grep -q 'gzip off'; then
+    sudo sed -i '/location ~ \^\/colibri-ws\//a\    gzip off;' "$meet_conf"
+  fi
   sudo sed -i \
     's/proxy_set_header Connection \$connection_upgrade;/proxy_set_header Connection "upgrade";/g' \
     "$meet_conf" 2>/dev/null || true

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   displayNameFromParticipant,
+  participantIdFromTrack,
   sanitizeParticipantProperties,
 } from './jitsiParticipant';
 
@@ -12,6 +13,16 @@ describe('displayNameFromParticipant', () => {
   it('returns undefined for missing or blank names', () => {
     expect(displayNameFromParticipant(null)).toBeUndefined();
     expect(displayNameFromParticipant({ _displayName: '  ' })).toBeUndefined();
+  });
+});
+
+describe('participantIdFromTrack', () => {
+  it('reads participant id from track', () => {
+    expect(
+      participantIdFromTrack({
+        getParticipantId: () => 'peer-1',
+      } as never),
+    ).toBe('peer-1');
   });
 });
 

@@ -128,8 +128,8 @@ describe('localStore', () => {
     store.onStage = true;
     store.calculateUsersOnScreen();
 
-    expect(constraintsSpy).toHaveBeenCalled();
     expect(store.usersOnStage).toContain('u1');
+    expect(constraintsSpy).not.toHaveBeenCalled();
     constraintsSpy.mockRestore();
   });
 

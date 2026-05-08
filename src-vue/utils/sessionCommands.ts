@@ -1,6 +1,7 @@
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 
 type CommandPayload = { value: string };
@@ -111,6 +112,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
           void local.toggleMute();
         } else if (conference.users[data.id]) {
           conference.patchUser(data.id, { mute: true });
+          getMediaEngineInstance().setParticipantVolume(data.id, 0);
         }
       }
       break;

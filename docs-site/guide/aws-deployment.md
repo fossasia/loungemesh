@@ -137,7 +137,8 @@ After the server works manually:
 |---------|-----|
 | Site not loading | DuckDNS IP = Elastic IP? Security group 80/443 open? |
 | WebSocket error / `localhost:8001` | Fix hosts once: `npm run setup:prod -- --jitsi-host=... --public-ip=...`, then `npm run deploy` |
-| No video | UDP port **10000** open in security group |
+| No video / no audio | UDP **10000** open; `ENABLE_COLIBRI_WEBSOCKET=1` in `.env`; redeploy; if console shows `colibri-ws` **1006**, run `bootstrap-server.sh --update-caddy` and `npm run deploy` |
+| `colibri-ws` WebSocket failed (1006) | Caddy must proxy `/colibri-ws` on both app and Jitsi hosts; rebuild after fixing `.env` |
 | “Connection refused” SSH | Security group port 22; correct `.pem` and IP |
 | Server very slow / OOM | Bootstrap adds swap; wait for build to finish |
 

@@ -1,3 +1,13 @@
+import type { JitsiTrack } from '@/types/jitsi';
+
+/** Resolve the conference participant id for a remote track. */
+export function participantIdFromTrack(track: JitsiTrack): string | undefined {
+  const id = track.getParticipantId?.();
+  if (id) return id;
+  const owner = (track as { ownerId?: string }).ownerId;
+  return owner || undefined;
+}
+
 /** Extract display name from a Jitsi participant — never store the participant object in Pinia. */
 export function displayNameFromParticipant(participant: unknown): string | undefined {
   if (!participant || typeof participant !== 'object') return undefined;

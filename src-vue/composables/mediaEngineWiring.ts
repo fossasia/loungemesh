@@ -6,9 +6,10 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { handleSessionCommand } from '@/utils/sessionCommands';
 import { grantsPayloadForSync } from '@/utils/sessionAccess';
-import { sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
+import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 import { spreadInitialUserPosition } from '@/constants/pan';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
+import { playbackGainForUser } from '@/utils/participantPlaybackGain';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -94,31 +95,37 @@ export function wireStoreSync(engine: MediaService): void {
     conferenceStore.updateUserDisplayName(id, displayName);
   });
   engine.on('trackAdded', (track) => {
-    const id = track.getParticipantId?.();
+    const id = participantIdFromTrack(track);
     if (!id) return;
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     conferenceStore.setUserTrack(id, kind, track);
+    if (kind === 'audio') {
+      const user = conferenceStore.users[id]!;
+      const proximity = track.isMuted() ? 0 : (user.volume ?? 1);
+      engine.setParticipantVolume(id, playbackGainForUser(user, proximity));
+    }
     scheduleReceiverRefresh();
   });
   engine.on('trackMuteChanged', (track) => {
-    const id = track.getParticipantId?.();
+    const id = participantIdFromTrack(track);
     if (!id) return;
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
-    if (track.isMuted()) {
-      if (kind === 'video') {
-        conferenceStore.clearUserTrack(id, 'video');
-      } else {
-        conferenceStore.patchUser(id, { mute: true });
-      }
+    if (kind === 'audio' && track.isMuted()) {
+      conferenceStore.patchUser(id, { mute: true });
+      engine.setParticipantVolume(id, 0);
     } else {
       conferenceStore.setUserTrack(id, kind, track);
+      if (kind === 'audio') {
+        const user = conferenceStore.users[id]!;
+        engine.setParticipantVolume(id, playbackGainForUser(user, user.volume ?? 1));
+      }
     }
     scheduleReceiverRefresh();
   });
   engine.on('trackRemoved', (track) => {
-    const id = track.getParticipantId?.();
+    const id = participantIdFromTrack(track);
     if (!id) return;
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     conferenceStore.clearUserTrack(id, kind);

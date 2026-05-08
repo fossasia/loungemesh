@@ -61,6 +61,8 @@ export interface MediaService {
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;
   /** 0.0–1.0 gain for spatial audio */
   setParticipantVolume(userId: string, gain: number): void;
+  /** Resume Web Audio after autoplay policy (call on first user gesture). */
+  resumePlayback?(): void;
   setReceiverConstraints(constraints: ReceiverConstraints): void;
   setDisplayName(name: string): void;
   setLocalParticipantProperty(key: string, value: unknown): void;

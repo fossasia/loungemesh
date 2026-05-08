@@ -5,6 +5,6 @@ describe('jitsiOptions', () => {
   it('exports flowspace defaults', () => {
     expect(conferenceNameDefault).toBe('flowspace');
     expect(conferenceOptions.channelLastN).toBe(16);
-    expect(conferenceOptions.openBridgeChannel).toBe(true);
+    expect(conferenceOptions.openBridgeChannel).toBe(false);
   });
 });

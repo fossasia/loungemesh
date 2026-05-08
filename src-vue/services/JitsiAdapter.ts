@@ -30,7 +30,6 @@ export class JitsiAdapter implements MediaService {
   private tokenRefreshFn?: () => Promise<string | null>;
   private jwt?: string;
   private appId: string | null = null;
-
   private audioContext?: AudioContext;
   private gainNodes = new Map<string, GainNode>();
   private mediaSources = new Map<string, MediaStreamAudioSourceNode>();
@@ -155,13 +154,19 @@ export class JitsiAdapter implements MediaService {
     conference.on(ev.TRACK_ADDED, (track: unknown) => {
       const t = track as JitsiTrack;
       if (t.isLocal?.()) return;
-      this.wireRemoteAudioTrack(t);
+      if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
       this.emit('trackAdded', t);
     });
     conference.on(ev.TRACK_MUTE_CHANGED, (track: unknown) => {
       const t = track as JitsiTrack;
       if (t.isLocal?.()) return;
-      if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      if (t.getType?.() === 'audio') {
+        if (t.isMuted?.()) {
+          this.removeParticipantAudio(t.getParticipantId?.() ?? '');
+        } else {
+          this.wireRemoteAudioTrack(t);
+        }
+      }
       this.emit('trackMuteChanged', t);
     });
     conference.on(ev.TRACK_REMOVED, (track: unknown) => {
@@ -242,6 +247,12 @@ export class JitsiAdapter implements MediaService {
     if (!node || !this.audioContext) return;
     const clamped = Math.max(0, Math.min(1, gain));
     node.gain.setTargetAtTime(clamped, this.audioContext.currentTime, 0.015);
+  }
+
+  resumePlayback(): void {
+    if (this.audioContext?.state === 'suspended') {
+      void this.audioContext.resume();
+    }
   }
 
   setReceiverConstraints(constraints: ReceiverConstraints): void {
@@ -325,23 +336,13 @@ export class JitsiAdapter implements MediaService {
     this.listeners.get(event)?.forEach((fn) => fn(...args));
   }
 
-  private ensureAudioContext(): AudioContext {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
-    }
-    if (this.audioContext.state === 'suspended') {
-      void this.audioContext.resume();
-    }
-    return this.audioContext;
-  }
-
   private emitParticipantTracks(participant: unknown): void {
     const tracks =
       (participant as { getTracks?: () => JitsiTrack[] }).getTracks?.() ?? [];
     for (const track of tracks) {
       const t = track as JitsiTrack;
       if (t.isLocal?.()) continue;
-      if (t.getType?.() === 'audio') this.wireRemoteAudioTrack(t);
+      if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
       this.emit('trackAdded', t);
     }
   }
@@ -356,8 +357,18 @@ export class JitsiAdapter implements MediaService {
     }
   }
 
+  private ensureAudioContext(): AudioContext {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+    }
+    if (this.audioContext.state === 'suspended') {
+      void this.audioContext.resume();
+    }
+    return this.audioContext;
+  }
+
   private wireRemoteAudioTrack(track: JitsiTrack): void {
-    if (track.getType() !== 'audio') return;
+    if (track.getType() !== 'audio' || track.isMuted?.()) return;
     const id = track.getParticipantId?.();
     if (!id) return;
 

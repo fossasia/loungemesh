@@ -8,6 +8,7 @@ import { setJwtRefreshCallback } from '@/composables/useEvenytayBridge';
 import { isMediaEngineWired, markMediaEngineWired } from '@/composables/mediaEngineWiringState';
 import { wireStoreSync } from '@/composables/mediaEngineWiring';
 import { runConferenceJoin } from '@/composables/joinConferenceRoom';
+import { installMediaPlaybackUnlock } from '@/utils/resumeMediaPlayback';
 
 function getEngine(): MediaService {
   return getMediaEngineInstance();
@@ -32,6 +33,7 @@ export function useMediaEngine() {
   if (!isMediaEngineWired()) {
     wireStoreSync(engine);
     wireTokenRefresh(engine);
+    installMediaPlaybackUnlock(engine);
     markMediaEngineWired();
   }
 

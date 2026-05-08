@@ -7,6 +7,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
 import { throttle } from '@/utils/throttle';
 import { getVolumeByDistance } from '@/utils/vector';
+import { playbackGainForUser } from '@/utils/participantPlaybackGain';
 import { applyWorkerVolume } from '@/components/runtime/applyWorkerVolume';
 import { watchTrackSpeaking } from '@/utils/speakingMeter';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
@@ -42,11 +43,12 @@ function bindSpeakingMonitor() {
 function applyVolumes(myPos: { x: number; y: number }) {
   for (const key of Object.keys(conferenceStore.users)) {
     const u = conferenceStore.users[key];
-    const vol = getVolumeByDistance(myPos, u.pos);
-    if (u.volume !== vol) {
-      conferenceStore.patchUser(key, { volume: vol }, false);
+    const proximity = getVolumeByDistance(myPos, u.pos);
+    const gain = playbackGainForUser(u, proximity);
+    if (u.volume !== proximity) {
+      conferenceStore.patchUser(key, { volume: proximity }, false);
     }
-    setParticipantVolume(key, vol);
+    setParticipantVolume(key, gain);
   }
 }
 

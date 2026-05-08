@@ -24,6 +24,7 @@ function initialLocalViewport(): { pos: PanVec; pan: PanVec; scale: number; room
   };
 }
 import { isOnScreen } from '@/utils/vector';
+import { conferenceOptions } from '@/config/jitsiOptions';
 import { buildReceiverConstraints } from '@/utils/receiverConstraints';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
@@ -168,14 +169,16 @@ export const useLocalStore = defineStore('local', {
       this.visibleUsers = [...new Set(visibleUserIds)];
       this.usersOnStage = [...new Set(stageIds)];
 
-      const constraints = buildReceiverConstraints({
-        localId: this.id,
-        remoteUserIds: Object.keys(users),
-        visibleUserIds: this.visibleUsers,
-        stageIds: this.usersOnStage,
-      });
-      if (constraints) {
-        engine.setReceiverConstraints(constraints);
+      if (conferenceOptions.openBridgeChannel) {
+        const constraints = buildReceiverConstraints({
+          localId: this.id,
+          remoteUserIds: Object.keys(users),
+          visibleUserIds: this.visibleUsers,
+          stageIds: this.usersOnStage,
+        });
+        if (constraints) {
+          engine.setReceiverConstraints(constraints);
+        }
       }
       void conference;
     },

@@ -52,7 +52,7 @@ export function createNotesPushScheduler(
   getDraft: () => string,
   publish: (text: string) => void,
   delayMs = 400,
-): { push: () => void; flush: () => void; dispose: () => void } {
+): { push: () => void; flush: () => void; cancel: () => void; dispose: () => void } {
   let timer: number | undefined;
   const runPublish = () => {
     if (!canPublishSharedNotes(canUseNotes())) return;

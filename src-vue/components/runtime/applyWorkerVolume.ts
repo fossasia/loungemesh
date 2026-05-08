@@ -1,12 +1,17 @@
+import { playbackGainForUser } from '@/utils/participantPlaybackGain';
+
+type ProximityUser = { mute: boolean };
+
 /** Apply a proximity volume update when the participant is known. */
 export function applyWorkerVolume(
   id: string,
   volume: number,
-  users: Record<string, unknown>,
+  users: Record<string, ProximityUser>,
   patchUser: (id: string, patch: { volume: number }) => void,
   setVolume: (userId: string, gain: number) => void,
 ): void {
-  if (!(id in users)) return;
+  const user = users[id];
+  if (!user) return;
   patchUser(id, { volume });
-  setVolume(id, volume);
+  setVolume(id, playbackGainForUser(user, volume));
 }

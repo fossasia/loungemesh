@@ -154,12 +154,35 @@ ${APP_HOST} {
 }
 
 ${JITSI_HOST} {
-	reverse_proxy 127.0.0.1:8001 {
-		transport http {
-			versions 1.1
-			keepalive 30s
+	route {
+		handle /xmpp-websocket* {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+				}
+				stream_timeout 24h
+			}
 		}
-		stream_timeout 24h
+		handle /http-bind* {
+			reverse_proxy 127.0.0.1:8001
+		}
+		handle /colibri-ws* {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+				}
+				stream_timeout 24h
+			}
+		}
+		handle {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+					keepalive 30s
+				}
+				stream_timeout 24h
+			}
+		}
 	}
 }
 EOF
