@@ -7,6 +7,11 @@ import UserBackdrop from './overlays/UserBackdrop.vue';
 import LocalAudioRing from './overlays/LocalAudioRing.vue';
 import LocalNameContainer from './LocalNameContainer.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
+import {
+  mediaDebug,
+  mediaDebugVideoAfterAttach,
+  mediaDebugVideoElement,
+} from '@/utils/mediaDebug';
 
 const props = withDefaults(
   defineProps<{
@@ -48,7 +53,25 @@ function attach() {
     } catch {
       /* ignore */
     }
-    local.video.attach?.(videoEl.value);
+    mediaDebugVideoElement('LocalUser', 'attach:before', local.id || 'local', videoEl.value, {
+      cameraOff: local.cameraOff,
+      trackMuted: local.video.isMuted?.(),
+    });
+    try {
+      local.video.attach?.(videoEl.value);
+      mediaDebugVideoElement('LocalUser', 'attach:after', local.id || 'local', videoEl.value);
+      mediaDebugVideoAfterAttach('LocalUser', local.id || 'local', videoEl.value);
+    } catch (err) {
+      mediaDebug('LocalUser', 'attach:failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else {
+    mediaDebug('LocalUser', 'attach:skipped', {
+      hasVideo: !!local.video,
+      hasElement: !!videoEl.value,
+      cameraOff: local.cameraOff,
+    });
   }
   if (local.audio && audioEl.value) local.audio.attach?.(audioEl.value);
 }
@@ -124,7 +147,7 @@ onBeforeUnmount(detach);
     >
       <LocalAudioRing />
       <div class="videoContainer" :class="{ desktop: isDesktop }">
-        <UserBackdrop :onStage="local.onStage" />
+        <UserBackdrop v-if="!showCameraVideo" :onStage="local.onStage" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
         <video
           v-show="showCameraVideo"

@@ -6,5 +6,6 @@ describe('jitsiOptions', () => {
     expect(conferenceNameDefault).toBe('flowspace');
     expect(conferenceOptions.channelLastN).toBe(16);
     expect(conferenceOptions.openBridgeChannel).toBe(false);
+    expect(conferenceOptions.p2p).toEqual({ enabled: false });
   });
 });

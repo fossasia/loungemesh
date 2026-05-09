@@ -137,8 +137,10 @@ After the server works manually:
 |---------|-----|
 | Site not loading | DuckDNS IP = Elastic IP? Security group 80/443 open? |
 | WebSocket error / `localhost:8001` | Fix hosts once: `npm run setup:prod -- --jitsi-host=... --public-ip=...`, then `npm run deploy` |
-| No video / no audio | UDP **10000** open; `ENABLE_COLIBRI_WEBSOCKET=1` in `.env`; redeploy; if console shows `colibri-ws` **1006**, run `bootstrap-server.sh --update-caddy` and `npm run deploy` |
-| `colibri-ws` WebSocket failed (1006) | Caddy must proxy `/colibri-ws` on both app and Jitsi hosts; rebuild after fixing `.env` |
+| No video / no audio | **UDP 10000** open; `DOCKER_HOST_ADDRESS` = Elastic IP (not `172.18.x.x`); run `npm run setup:prod -- --public-ip=…` then `npm run deploy` |
+| `colibri-ws/172.18.0.x` in console | JVB still uses Docker bridge IP. On the server run `./scripts/fix-jvb-advertise.sh 13.62.178.111` (your Elastic IP). `npm run deploy` alone does **not** update a running JVB. |
+| `colibri-ws` WebSocket failed (1006) | Caddy must proxy `/colibri-ws` on app + Jitsi hosts (`bootstrap-server.sh --update-caddy`); `DOCKER_HOST_ADDRESS` must match the IP segment in the colibri URL |
+| No remote `TRACK_ADDED` in `[flowspace:media]` logs | ICE/bridge broken — fix `DOCKER_HOST_ADDRESS` first; only local tracks means JVB never forwarded media |
 | “Connection refused” SSH | Security group port 22; correct `.pem` and IP |
 | Server very slow / OOM | Bootstrap adds swap; wait for build to finish |
 

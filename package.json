@@ -19,7 +19,8 @@
     "setup": "node scripts/setup-env.mjs development",
     "setup:prod": "node scripts/setup-env.mjs production",
     "docker:up": "docker compose up -d --build",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "fix:jvb": "bash scripts/fix-jvb-advertise.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

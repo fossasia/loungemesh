@@ -9,6 +9,7 @@ import type {
   MediaServiceEventMap,
 } from './MediaService';
 import { sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
+import { mediaDebug, mediaDebugTrack } from '@/utils/mediaDebug';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -153,12 +154,14 @@ export class JitsiAdapter implements MediaService {
     });
     conference.on(ev.TRACK_ADDED, (track: unknown) => {
       const t = track as JitsiTrack;
+      mediaDebugTrack('JitsiAdapter', 'TRACK_ADDED', t);
       if (t.isLocal?.()) return;
       if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
       this.emit('trackAdded', t);
     });
     conference.on(ev.TRACK_MUTE_CHANGED, (track: unknown) => {
       const t = track as JitsiTrack;
+      mediaDebugTrack('JitsiAdapter', 'TRACK_MUTE_CHANGED', t);
       if (t.isLocal?.()) return;
       if (t.getType?.() === 'audio') {
         if (t.isMuted?.()) {
@@ -171,6 +174,7 @@ export class JitsiAdapter implements MediaService {
     });
     conference.on(ev.TRACK_REMOVED, (track: unknown) => {
       const t = track as JitsiTrack;
+      mediaDebugTrack('JitsiAdapter', 'TRACK_REMOVED', t);
       if (t.isLocal?.()) return;
       if (t.getType?.() === 'audio') this.removeParticipantAudio(t.getParticipantId?.() ?? '');
       this.emit('trackRemoved', t);

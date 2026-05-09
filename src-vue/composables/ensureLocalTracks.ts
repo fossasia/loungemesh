@@ -1,6 +1,7 @@
 import type { MediaService } from '@/services/MediaService';
 import type { JitsiTrack } from '@/types/jitsi';
 import type { useLocalStore } from '@/stores/localStore';
+import { mediaDebug } from '@/utils/mediaDebug';
 
 type LocalStore = ReturnType<typeof useLocalStore>;
 
@@ -21,6 +22,13 @@ export async function ensureLocalTracks(
     if (track.getType?.() === 'video' && !local.video && !local.cameraOff) merged.push(track);
   }
   local.setLocalTracks(merged);
+  mediaDebug('ensureLocalTracks', 'created', {
+    devices,
+    audio: !!local.audio,
+    video: !!local.video,
+    cameraOff: local.cameraOff,
+    videoMuted: local.video?.isMuted?.(),
+  });
   if (local.mute && local.audio?.isMuted?.() === false) {
     try {
       await local.audio.mute();

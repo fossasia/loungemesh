@@ -6,17 +6,19 @@ type ConferenceWithRemove = JitsiConference & {
 };
 
 /** Detach local tracks from the conference (if any) and release device capture. */
-export function releaseLocalMediaTracks(
+export async function releaseLocalMediaTracks(
   tracks: Array<JitsiTrack | undefined>,
   conference?: JitsiConference,
-): void {
+): Promise<void> {
   const conf = conference as ConferenceWithRemove | undefined;
   for (const track of tracks) {
     if (!track) continue;
     if (conf?.removeTrack) {
-      void conf.removeTrack(track).catch(() => {
-        /* track may already be gone */
-      });
+      try {
+        await conf.removeTrack(track);
+      } catch {
+        /* bridge down or track already removed */
+      }
     }
     disposeJitsiTrack(track);
   }

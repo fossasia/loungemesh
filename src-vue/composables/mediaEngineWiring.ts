@@ -10,6 +10,8 @@ import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/j
 import { spreadInitialUserPosition } from '@/constants/pan';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 import { playbackGainForUser } from '@/utils/participantPlaybackGain';
+import { mediaDebug, mediaDebugTrack } from '@/utils/mediaDebug';
+import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -25,6 +27,7 @@ export function wireStoreSync(engine: MediaService): void {
     useConnectionStore().$patch({ connected: false, error: detail, connection: undefined });
   });
   engine.on('conferenceJoined', () => {
+    mediaDebug('wiring', 'conferenceJoined', { localUserId: engine.getLocalUserId() });
     conferenceStore.isJoined = true;
     conferenceStore.isJoining = false;
     conferenceStore.error = undefined;
@@ -63,9 +66,11 @@ export function wireStoreSync(engine: MediaService): void {
       local.setLocalPosition(spreadInitialUserPosition(others));
       local.publishLocalPosition();
       scheduleReceiverRefresh();
+      emitMediaStateSnapshot('conferenceJoined');
     }
   });
   engine.on('conferenceError', (detail) => {
+    mediaDebug('wiring', 'conferenceError', { detail, joined: engine.isJoined() });
     if (!detail?.trim() || engine.isJoined()) return;
     conferenceStore.$patch({
       error: detail,
@@ -96,7 +101,11 @@ export function wireStoreSync(engine: MediaService): void {
   });
   engine.on('trackAdded', (track) => {
     const id = participantIdFromTrack(track);
-    if (!id) return;
+    mediaDebugTrack('wiring', 'trackAdded', track, { resolvedParticipantId: id });
+    if (!id) {
+      mediaDebug('wiring', 'trackAdded:skipped', { reason: 'no-participant-id' });
+      return;
+    }
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     conferenceStore.setUserTrack(id, kind, track);
@@ -105,10 +114,12 @@ export function wireStoreSync(engine: MediaService): void {
       const proximity = track.isMuted() ? 0 : (user.volume ?? 1);
       engine.setParticipantVolume(id, playbackGainForUser(user, proximity));
     }
+    if (kind === 'video') emitMediaStateSnapshot('trackAdded');
     scheduleReceiverRefresh();
   });
   engine.on('trackMuteChanged', (track) => {
     const id = participantIdFromTrack(track);
+    mediaDebugTrack('wiring', 'trackMuteChanged', track, { resolvedParticipantId: id });
     if (!id) return;
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
@@ -122,13 +133,16 @@ export function wireStoreSync(engine: MediaService): void {
         engine.setParticipantVolume(id, playbackGainForUser(user, user.volume ?? 1));
       }
     }
+    if (kind === 'video') emitMediaStateSnapshot('trackMuteChanged');
     scheduleReceiverRefresh();
   });
   engine.on('trackRemoved', (track) => {
     const id = participantIdFromTrack(track);
-    if (!id) return;
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
+    mediaDebugTrack('wiring', 'trackRemoved', track, { resolvedParticipantId: id, kind });
+    if (!id) return;
     conferenceStore.clearUserTrack(id, kind);
+    if (kind === 'video') emitMediaStateSnapshot('trackRemoved');
     scheduleReceiverRefresh();
   });
   engine.on('messageReceived', (id, text, nr) => {

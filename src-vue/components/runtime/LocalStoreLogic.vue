@@ -11,6 +11,9 @@ import { playbackGainForUser } from '@/utils/participantPlaybackGain';
 import { applyWorkerVolume } from '@/components/runtime/applyWorkerVolume';
 import { watchTrackSpeaking } from '@/utils/speakingMeter';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
+import { mediaDebug } from '@/utils/mediaDebug';
+import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
+import { publishLocalTrackToConference } from '@/utils/conferenceLocalTracks';
 
 const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
@@ -93,18 +96,38 @@ async function requestMedia() {
   }
 }
 
+let publishingLocalTracks = false;
+
 async function addLocalTracksToConference() {
   const conf = engine.getConference();
-  if (!conferenceStore.isJoined || !conf) return;
-  for (const track of [localStore.audio, localStore.video]) {
-    if (!track) continue;
-    try {
-      await engine.addLocalTrack(track);
-    } catch {
-      /* already added */
+  if (!conferenceStore.isJoined || !conf || publishingLocalTracks) return;
+  publishingLocalTracks = true;
+  try {
+    for (const track of [localStore.audio, localStore.video]) {
+      if (!track) continue;
+      try {
+        const result = await publishLocalTrackToConference(
+          conf,
+          track,
+          (t) => engine.addLocalTrack(t),
+          (oldTrack, nextTrack) => engine.replaceLocalTrack(oldTrack, nextTrack),
+        );
+        mediaDebug('LocalStoreLogic', 'publishLocalTrack', {
+          type: track.getType?.(),
+          result,
+        });
+      } catch (err) {
+        mediaDebug('LocalStoreLogic', 'publishLocalTrack:failed', {
+          type: track.getType?.(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
+    scheduleReceiverRefresh();
+    emitMediaStateSnapshot('addLocalTracksToConference');
+  } finally {
+    publishingLocalTracks = false;
   }
-  scheduleReceiverRefresh();
 }
 
 function onResize() {

@@ -1,18 +1,42 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
+import {
+  mediaDebug,
+  mediaDebugVideoAfterAttach,
+  mediaDebugVideoElement,
+} from '@/utils/mediaDebug';
 
 const props = defineProps<{ id: string; track?: JitsiTrackLike; speaking?: boolean }>();
 const el = ref<HTMLVideoElement | null>(null);
 
 async function attachTrack(track: typeof props.track) {
-  if (!track || !el.value) return;
+  if (!track) {
+    mediaDebug('RemoteVideo', 'attach:skipped', { participantId: props.id, reason: 'no-track' });
+    return;
+  }
+  if (!el.value) {
+    mediaDebug('RemoteVideo', 'attach:skipped', { participantId: props.id, reason: 'no-element' });
+    return;
+  }
   try {
     track.detach?.(el.value);
   } catch {
     /* not attached yet */
   }
-  track.attach?.(el.value);
+  mediaDebugVideoElement('RemoteVideo', 'attach:before', props.id, el.value, {
+    trackMuted: track.isMuted?.(),
+  });
+  try {
+    track.attach?.(el.value);
+    mediaDebugVideoElement('RemoteVideo', 'attach:after', props.id, el.value);
+    mediaDebugVideoAfterAttach('RemoteVideo', props.id, el.value);
+  } catch (err) {
+    mediaDebug('RemoteVideo', 'attach:failed', {
+      participantId: props.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 onMounted(() => {

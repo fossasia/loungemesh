@@ -299,6 +299,9 @@ describe('localStore', () => {
     const engine = getMediaEngineInstance();
     vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
     vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [],
+    } as never);
     const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
     const store = useLocalStore();
     await store.enableCamera();
@@ -331,19 +334,22 @@ describe('localStore', () => {
     expect(video.dispose).toHaveBeenCalled();
   });
 
-  it('disableCamera mutes before dispose when joined', async () => {
+  it('disableCamera removes track from conference when joined', async () => {
     const video = {
       getType: () => 'video',
       videoType: 'camera',
-      mute: vi.fn().mockResolvedValue(undefined),
       dispose: vi.fn(),
     };
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
     const engine = getMediaEngineInstance();
     vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'getConference').mockReturnValue({ removeTrack } as never);
     const store = useLocalStore();
     store.video = video as never;
     await store.disableCamera();
-    expect(video.mute).toHaveBeenCalled();
+    expect(removeTrack).toHaveBeenCalledWith(video);
+    expect(video.dispose).toHaveBeenCalled();
+    expect(store.cameraOff).toBe(true);
   });
 
   it('disableCamera without a video track only flips cameraOff', async () => {
@@ -353,7 +359,7 @@ describe('localStore', () => {
     expect(store.cameraOff).toBe(true);
   });
 
-  it('stopAllLocalMedia disposes tracks and marks devices off', () => {
+  it('stopAllLocalMedia disposes tracks and marks devices off', async () => {
     const stop = vi.fn();
     const removeTrack = vi.fn().mockResolvedValue(undefined);
     const audio = {
@@ -368,7 +374,7 @@ describe('localStore', () => {
     const store = useLocalStore();
     store.audio = audio as never;
     store.video = video as never;
-    store.stopAllLocalMedia();
+    await store.stopAllLocalMedia();
     expect(store.audio).toBeUndefined();
     expect(store.video).toBeUndefined();
     expect(store.cameraOff).toBe(true);
@@ -379,13 +385,13 @@ describe('localStore', () => {
     expect(video.dispose).toHaveBeenCalled();
   });
 
-  it('stopAllLocalMedia works when not joined to a conference', () => {
+  it('stopAllLocalMedia works when not joined to a conference', async () => {
     const audio = { getType: () => 'audio', dispose: vi.fn() };
     const engine = getMediaEngineInstance();
     vi.spyOn(engine, 'isJoined').mockReturnValue(false);
     const store = useLocalStore();
     store.audio = audio as never;
-    store.stopAllLocalMedia();
+    await store.stopAllLocalMedia();
     expect(store.audio).toBeUndefined();
     expect(audio.dispose).toHaveBeenCalled();
   });

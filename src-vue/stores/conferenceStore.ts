@@ -5,6 +5,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import type { JitsiConference, JitsiTrack } from '@/types/jitsi';
 import { spreadInitialUserPosition } from '@/constants/pan';
+import { mediaDebug } from '@/utils/mediaDebug';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
 import { applyChatEdit, createChatMessage } from '@/utils/chatMessage';
 import { displayNameFromParticipant } from '@/utils/jitsiParticipant';
@@ -99,13 +100,22 @@ export const useConferenceStore = defineStore('conference', {
       });
     },
     setUserTrack(id: string, kind: 'audio' | 'video', track: JitsiTrack) {
-      if (!this.users[id]) return;
+      if (!this.users[id]) {
+        mediaDebug('conferenceStore', 'setUserTrack:skipped', { id, kind, reason: 'unknown-user' });
+        return;
+      }
       if (kind === 'audio') {
         this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
       } else {
         this.patchUser(id, {
           video: markRaw(track),
           videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
+        });
+        mediaDebug('conferenceStore', 'setUserTrack:video', {
+          id,
+          muted: track.isMuted?.(),
+          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
+          usersEpoch: this.usersEpoch,
         });
       }
     },
@@ -115,6 +125,7 @@ export const useConferenceStore = defineStore('conference', {
         this.patchUser(id, { audio: undefined, mute: false });
       } else {
         this.patchUser(id, { video: undefined, videoType: undefined });
+        mediaDebug('conferenceStore', 'clearUserTrack:video', { id, usersEpoch: this.usersEpoch });
       }
     },
     removeUser(id: string) {

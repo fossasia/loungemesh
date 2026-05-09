@@ -33,6 +33,8 @@ interface ImportMetaEnv {
    * Leave unset to deny all framing (default).
    */
   readonly VITE_ALLOW_IFRAME_FROM?: string;
+  /** Set to `true` to log video/audio pipeline events (filter console by flowspace:media). */
+  readonly VITE_MEDIA_DEBUG?: string;
 }
 
 interface ImportMeta {

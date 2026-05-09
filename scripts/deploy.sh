@@ -46,6 +46,54 @@ set -a
 source .env
 set +a
 
+validate_docker_host_address() {
+  local url="${VITE_JITSI_PUBLIC_URL:-${PUBLIC_URL:-}}"
+  [[ "$url" == *localhost* ]] && return 0
+
+  local ip="${DOCKER_HOST_ADDRESS:-}"
+  if [[ -z "$ip" ]]; then
+    echo ""
+    echo "ERROR: DOCKER_HOST_ADDRESS is not set in .env."
+    echo "  Remote participants cannot send audio/video (JVB advertises wrong ICE/colibri URLs)."
+    echo "  Fix: npm run setup:prod -- --app-host=YOUR_APP --jitsi-host=YOUR_JITSI --public-ip=ELASTIC_IP"
+    echo "  Then: npm run deploy"
+    echo ""
+    exit 1
+  fi
+
+  if [[ "$ip" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || [[ "$ip" =~ ^10\. ]] || [[ "$ip" =~ ^192\.168\. ]] || [[ "$ip" == "127.0.0.1" ]]; then
+    echo ""
+    echo "ERROR: DOCKER_HOST_ADDRESS=${ip} is a private/Docker address."
+    echo "  Browsers cannot reach it — colibri-ws will show 172.18.x.x and remote video/audio fails."
+    echo "  Set DOCKER_HOST_ADDRESS to this server's public Elastic IP (same as --public-ip in setup:prod)."
+    echo ""
+    exit 1
+  fi
+
+  if [[ "${ENABLE_COLIBRI_WEBSOCKET:-0}" == "1" ]]; then
+    echo "==> Colibri WebSocket enabled — DOCKER_HOST_ADDRESS=${ip} (must be public IP, not 172.18.x.x)"
+  else
+    echo "==> Colibri WebSocket disabled (ENABLE_COLIBRI_WEBSOCKET=0) — matches Flowspace openBridgeChannel:false"
+  fi
+}
+
+validate_docker_host_address
+
+regenerate_jvb_if_needed() {
+  local url="${VITE_JITSI_PUBLIC_URL:-${PUBLIC_URL:-}}"
+  [[ "$url" == *localhost* ]] && return 0
+  local marker="./docker/jitsi-config/.flowspace-docker-host"
+  if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "${DOCKER_HOST_ADDRESS}" ]]; then
+    echo "==> DOCKER_HOST_ADDRESS is ${DOCKER_HOST_ADDRESS} — recreating JVB (was: $(cat "$marker" 2>/dev/null || echo unset))"
+    docker compose stop jvb jicofo 2>/dev/null || true
+    sudo rm -rf docker/jitsi-config/jvb
+    mkdir -p docker/jitsi-config/jvb
+    echo "${DOCKER_HOST_ADDRESS}" > "$marker"
+  fi
+}
+
+regenerate_jvb_if_needed
+
 mkdir -p \
   docker/jitsi-config/web/crontabs \
   docker/jitsi-config/transcripts \
@@ -68,7 +116,7 @@ fi
 echo "==> Rebuilding and restarting containers"
 docker compose pull
 docker compose build --pull --no-cache flowspace
-docker compose up -d --remove-orphans
+docker compose up -d --remove-orphans --force-recreate jvb jicofo prosody
 
 wait_for_jitsi_nginx() {
   echo "==> Waiting for Jitsi nginx config..."
@@ -161,6 +209,16 @@ verify_websockets() {
     else
       echo "  WARN: Caddy WebSocket not 101 — run: ./scripts/bootstrap-server.sh --skip-system --update-caddy ..."
       return 1
+    fi
+
+    if [[ "${ENABLE_COLIBRI_WEBSOCKET:-0}" == "1" ]]; then
+      local colibri_ip="${DOCKER_HOST_ADDRESS:-}"
+      local colibri_line
+      colibri_line=$(check_xmpp_websocket "https://${ws_host}/colibri-ws/${colibri_ip}/" "$app_origin")
+      echo "  colibri-ws (Caddy):      ${colibri_line:-no response}"
+      if [[ "$colibri_line" != *"101"* && "$colibri_line" != *"400"* && "$colibri_line" != *"404"* ]]; then
+        echo "  WARN: colibri-ws upgrade failed — remote A/V may break; check Caddy /colibri-ws and DOCKER_HOST_ADDRESS"
+      fi
     fi
   fi
   [[ "$shell_line" == *"101"* ]]

@@ -9,6 +9,7 @@ import { isMediaEngineWired, markMediaEngineWired } from '@/composables/mediaEng
 import { wireStoreSync } from '@/composables/mediaEngineWiring';
 import { runConferenceJoin } from '@/composables/joinConferenceRoom';
 import { installMediaPlaybackUnlock } from '@/utils/resumeMediaPlayback';
+import { isMediaDebugEnabled, mediaDebugHelp } from '@/utils/mediaDebug';
 
 function getEngine(): MediaService {
   return getMediaEngineInstance();
@@ -35,6 +36,7 @@ export function useMediaEngine() {
     wireTokenRefresh(engine);
     installMediaPlaybackUnlock(engine);
     markMediaEngineWired();
+    if (isMediaDebugEnabled()) mediaDebugHelp();
   }
 
   const connected = ref(engine.isConnected());

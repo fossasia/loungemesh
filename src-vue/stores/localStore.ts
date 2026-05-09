@@ -28,6 +28,8 @@ import { conferenceOptions } from '@/config/jitsiOptions';
 import { buildReceiverConstraints } from '@/utils/receiverConstraints';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
+import { publishLocalTrackToConference } from '@/utils/conferenceLocalTracks';
+import { mediaDebug } from '@/utils/mediaDebug';
 import { useConferenceStore } from './conferenceStore';
 
 export type Vector2 = { x: number; y: number };
@@ -169,6 +171,13 @@ export const useLocalStore = defineStore('local', {
       this.visibleUsers = [...new Set(visibleUserIds)];
       this.usersOnStage = [...new Set(stageIds)];
 
+      mediaDebug('localStore', 'calculateUsersOnScreen', {
+        visibleUserIds: this.visibleUsers,
+        usersOnStage: this.usersOnStage,
+        domUserContainers: document.querySelectorAll('.userContainer').length,
+        openBridgeChannel: conferenceOptions.openBridgeChannel,
+      });
+
       if (conferenceOptions.openBridgeChannel) {
         const constraints = buildReceiverConstraints({
           localId: this.id,
@@ -177,6 +186,11 @@ export const useLocalStore = defineStore('local', {
           stageIds: this.usersOnStage,
         });
         if (constraints) {
+          mediaDebug('localStore', 'setReceiverConstraints', {
+            selectedEndpoints: constraints.selectedEndpoints,
+            lastN: constraints.lastN,
+            onStageEndpoints: constraints.onStageEndpoints,
+          });
           engine.setReceiverConstraints(constraints);
         }
       }
@@ -234,10 +248,18 @@ export const useLocalStore = defineStore('local', {
         this.videoType = 'camera';
         this.cameraOff = false;
         if (engine.isJoined()) {
-          try {
-            await engine.addLocalTrack(created);
-          } catch {
-            /* already added */
+          const conf = engine.getConference();
+          if (conf) {
+            try {
+              await publishLocalTrackToConference(
+                conf,
+                created,
+                (t) => engine.addLocalTrack(t),
+                (oldTrack, nextTrack) => engine.replaceLocalTrack(oldTrack, nextTrack),
+              );
+            } catch {
+              /* conference not ready */
+            }
           }
         }
       } catch {
@@ -247,25 +269,15 @@ export const useLocalStore = defineStore('local', {
     async disableCamera() {
       const engine = getMediaEngineInstance();
       const track = this.video;
-      if (!track) {
-        this.cameraOff = true;
-        return;
-      }
-      if (engine.isJoined()) {
-        try {
-          await track.mute();
-        } catch {
-          /* ignore */
-        }
-      }
-      disposeJitsiTrack(track);
+      this.cameraOff = true;
+      if (!track) return;
+      await releaseLocalMediaTracks([track], engine.getConference());
       this.video = undefined;
       this.videoType = 'camera';
-      this.cameraOff = true;
     },
-    stopAllLocalMedia() {
+    async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();
-      releaseLocalMediaTracks([this.audio, this.video], engine.getConference());
+      await releaseLocalMediaTracks([this.audio, this.video], engine.getConference());
       this.audio = undefined;
       this.video = undefined;
       this.videoType = 'camera';
