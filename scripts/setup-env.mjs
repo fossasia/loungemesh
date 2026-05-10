@@ -36,6 +36,8 @@ const PRODUCTION_URL_KEYS = new Set([
   'VITE_JITSI_PUBLIC_URL',
   'FLOWSPACE_PUBLIC_URL',
   'DOCKER_HOST_ADDRESS',
+  'JVB_WS_DOMAIN',
+  'JVB_WS_TLS',
 ]);
 
 const PLACEHOLDER = /replace-me|^__\w+__$|^unused$/i;
@@ -177,6 +179,8 @@ function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, j
       if (key === 'DOCKER_HOST_ADDRESS') next = publicIp;
       else if (key === 'PUBLIC_URL') next = jitsiUrl;
       else if (key === 'VITE_JITSI_PUBLIC_URL' || key === 'FLOWSPACE_PUBLIC_URL') next = appUrl;
+      else if (key === 'JVB_WS_DOMAIN') next = jitsiHost;
+      else if (key === 'JVB_WS_TLS') next = '1';
 
       if (!hadKey) {
         out.set(key, next);
@@ -278,7 +282,9 @@ if (args.rotateOnly) {
       rotated += 1;
     }
   }
-  const templatePath = fs.existsSync(path.join(root, 'env.production.example'))
+  const templatePath = fs.existsSync(path.join(root, 'env.example'))
+    ? path.join(root, 'env.example')
+    : fs.existsSync(path.join(root, 'env.production.example'))
     ? path.join(root, 'env.production.example')
     : path.join(root, 'env.development.example');
   const template = fs.readFileSync(templatePath, 'utf8');
@@ -293,13 +299,20 @@ if (args.rotateOnly) {
   process.exit(0);
 }
 
-const templatePath =
-  args.mode === 'production'
-    ? path.join(root, 'env.production.example')
-    : path.join(root, 'env.development.example');
+const templatePath = (() => {
+  const unified = path.join(root, 'env.example');
+  if (fs.existsSync(unified)) return unified;
+  // Legacy fallbacks (kept for backward compat during transition)
+  const legacy =
+    args.mode === 'production'
+      ? path.join(root, 'env.production.example')
+      : path.join(root, 'env.development.example');
+  return legacy;
+})();
 
 if (!fs.existsSync(templatePath)) {
   console.error(`Missing template: ${templatePath}`);
+  console.error('Expected env.example at repo root — run: git pull');
   process.exit(1);
 }
 
