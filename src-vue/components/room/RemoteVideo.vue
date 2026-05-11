@@ -31,6 +31,14 @@ async function attachTrack(track: typeof props.track) {
     track.attach?.(el.value);
     mediaDebugVideoElement('RemoteVideo', 'attach:after', props.id, el.value);
     mediaDebugVideoAfterAttach('RemoteVideo', props.id, el.value);
+    // Explicit play() for Firefox — autoplay attribute alone is not always honoured.
+    // The srcObject only contains video (audio goes through Web Audio), so browsers
+    // allow this even under strict autoplay policies.
+    if (el.value.paused) {
+      el.value.play().catch(() => {
+        /* Autoplay still blocked — will resume on next user gesture */
+      });
+    }
   } catch (err) {
     mediaDebug('RemoteVideo', 'attach:failed', {
       participantId: props.id,
@@ -78,6 +86,7 @@ onBeforeUnmount(() => {
     ref="el"
     autoplay
     playsinline
+    muted
     class="remoteVideo"
     :class="{ speaking: !!speaking, hidden: !!track?.isMuted?.() }"
     :id="`${id}video`"
@@ -96,12 +105,18 @@ onBeforeUnmount(() => {
   background: #0f172a;
   border: 4px solid var(--color-mono60);
   box-sizing: border-box;
+  transition: border-color 0.2s ease;
 }
 .remoteVideo.hidden {
   visibility: hidden;
 }
 .remoteVideo.speaking {
   border-color: var(--color-blue100);
-  box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.28);
+  animation: speakPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes speakPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.3); }
+  50%       { box-shadow: 0 0 0 8px rgba(79, 110, 247, 0.08); }
 }
 </style>

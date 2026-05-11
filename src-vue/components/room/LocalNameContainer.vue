@@ -72,7 +72,6 @@ function onKeydown(e: KeyboardEvent) {
     @keydown="onKeydown"
   />
   <NameTag v-else class="nameRow">
-    <span v-if="handUp" class="handBadge">✋</span>
     <span class="nameText">{{ conference.displayName }}</span>
     <button
       type="button"
@@ -142,8 +141,5 @@ function onKeydown(e: KeyboardEvent) {
 .editBtn:focus-visible {
   outline: 2px solid var(--color-blue100);
   outline-offset: 1px;
-}
-.handBadge {
-  margin-right: 2px;
 }
 </style>

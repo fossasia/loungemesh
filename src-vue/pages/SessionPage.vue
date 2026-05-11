@@ -62,10 +62,11 @@ watch(
   { immediate: true },
 );
 
-function leave() {
+async function leave() {
   local.setOnStage(false);
   engine.setLocalParticipantProperty('onStage', false);
-  local.stopAllLocalMedia();
+  // Await track release so the camera LED turns off before navigating away
+  await local.stopAllLocalMedia();
   leaveRoom();
   conf.leaveConference();
   disconnect();

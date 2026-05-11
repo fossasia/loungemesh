@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue';
+import { onBeforeUnmount, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConnectionStore } from '@/stores/connectionStore';
@@ -35,13 +35,30 @@ const onDisconnected = () => void syncSession();
 engine.on('connected', onConnected);
 engine.on('disconnected', onDisconnected);
 
-onBeforeUnmount(() => {
+function cleanupSession() {
   engine.off('connected', onConnected);
   engine.off('disconnected', onDisconnected);
-  localStore.stopAllLocalMedia();
+  // stopAllLocalMedia stops the underlying MediaStream tracks synchronously
+  // (camera LED turns off immediately) even though removeTrack is async.
+  void localStore.stopAllLocalMedia();
   leaveRoom();
   conferenceStore.leaveConference();
   disconnect();
+}
+
+// pagehide fires on tab close, refresh, back/forward navigation, and mobile app suspend.
+// It is more reliable than beforeunload and works when onBeforeUnmount does not fire.
+function onPageHide() {
+  void localStore.stopAllLocalMedia();
+}
+
+onMounted(() => {
+  window.addEventListener('pagehide', onPageHide);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('pagehide', onPageHide);
+  cleanupSession();
 });
 </script>
 

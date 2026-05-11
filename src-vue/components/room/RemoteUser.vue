@@ -73,8 +73,9 @@ const handUp = computed(
     <RemoteAudio :id="id" :volume="user?.volume" />
     <MuteIndicator v-if="user.mute" />
     <span v-if="reaction" class="floatReact">{{ reaction }}</span>
+    <!-- Prominent hand-raise badge floating above the video -->
+    <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
     <NameTag>
-      <span v-if="handUp" class="handBadge">✋</span>
       {{ nameLabel }}
     </NameTag>
   </div>
@@ -99,7 +100,39 @@ const handUp = computed(
   z-index: 5;
   pointer-events: none;
 }
+
+/* Floating hand-raise badge: prominent, above the video circle */
 .handBadge {
-  margin-right: 4px;
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.6rem;
+  line-height: 1;
+  z-index: 10;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  animation: handBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+             handFloat 2.5s ease-in-out 0.45s infinite;
+}
+
+@keyframes handBounce {
+  from { opacity: 0; transform: translateX(-50%) scale(0.3) rotate(-25deg); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1) rotate(0deg); }
+}
+
+@keyframes handFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%       { transform: translateX(-50%) translateY(-4px); }
+}
+
+/* Tile entrance: scale up from a small dot with a spring overshoot */
+.userContainer {
+  animation: tileEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes tileEnter {
+  from { opacity: 0; transform: scale(0.35); }
+  to   { opacity: 1; transform: scale(1); }
 }
 </style>

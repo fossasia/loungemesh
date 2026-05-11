@@ -61,6 +61,10 @@ function attach() {
       local.video.attach?.(videoEl.value);
       mediaDebugVideoElement('LocalUser', 'attach:after', local.id || 'local', videoEl.value);
       mediaDebugVideoAfterAttach('LocalUser', local.id || 'local', videoEl.value);
+      // Explicit play() for Firefox autoplay policy compliance
+      if (videoEl.value.paused) {
+        videoEl.value.play().catch(() => { /* blocked — will play on gesture */ });
+      }
     } catch (err) {
       mediaDebug('LocalUser', 'attach:failed', {
         error: err instanceof Error ? err.message : String(err),
@@ -149,6 +153,8 @@ onBeforeUnmount(detach);
       <div class="videoContainer" :class="{ desktop: isDesktop }">
         <UserBackdrop v-if="!showCameraVideo" :onStage="local.onStage" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
+        <!-- Prominent hand-raise badge floating above the video -->
+        <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
         <video
           v-show="showCameraVideo"
           ref="videoEl"
@@ -223,7 +229,12 @@ onBeforeUnmount(detach);
 .vid.speaking,
 .desktopVid.speaking {
   border-color: var(--color-blue100);
-  box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.28);
+  animation: speakPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes speakPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.3); }
+  50%       { box-shadow: 0 0 0 8px rgba(79, 110, 247, 0.08); }
 }
 .sharePlaceholder {
   width: 280px;
@@ -249,5 +260,30 @@ onBeforeUnmount(detach);
   font-size: 1.5rem;
   z-index: 5;
   pointer-events: none;
+}
+
+/* Floating hand-raise badge above the video circle */
+.handBadge {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.6rem;
+  line-height: 1;
+  z-index: 10;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  animation: handBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+             handFloat 2.5s ease-in-out 0.45s infinite;
+}
+
+@keyframes handBounce {
+  from { opacity: 0; transform: translateX(-50%) scale(0.3) rotate(-25deg); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1) rotate(0deg); }
+}
+
+@keyframes handFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%       { transform: translateX(-50%) translateY(-4px); }
 }
 </style>
