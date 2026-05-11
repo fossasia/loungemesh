@@ -1,6 +1,7 @@
 import type { JitsiTrack } from '@/types/jitsi';
 
-function stopUnderlyingStream(track: JitsiTrack): void {
+/** Stop the underlying OS media capture (turns off camera/mic LED immediately). */
+export function stopTrackStream(track: JitsiTrack): void {
   const stream = (track as unknown as { getOriginalStream?: () => MediaStream }).getOriginalStream?.();
   stream?.getTracks?.().forEach((mediaTrack) => {
     try {
@@ -14,7 +15,7 @@ function stopUnderlyingStream(track: JitsiTrack): void {
 /** Release a local Jitsi track and stop its underlying MediaStream. */
 export function disposeJitsiTrack(track: JitsiTrack | undefined): void {
   if (!track) return;
-  stopUnderlyingStream(track);
+  stopTrackStream(track);
   try {
     (track as { dispose?: () => void }).dispose?.();
   } catch {

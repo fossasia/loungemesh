@@ -254,8 +254,11 @@ export class JitsiAdapter implements MediaService {
   }
 
   resumePlayback(): void {
-    if (this.audioContext?.state === 'suspended') {
-      void this.audioContext.resume();
+    // Eagerly create the AudioContext from a user gesture so it starts in running
+    // state — before remote audio tracks arrive and need to be wired through it.
+    const ctx = this.ensureAudioContext();
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
     }
   }
 
@@ -390,6 +393,18 @@ export class JitsiAdapter implements MediaService {
 
     this.mediaSources.set(id, source);
     this.gainNodes.set(id, gain);
+
+    // If AudioContext is still suspended (user hasn't interacted yet),
+    // resume when it transitions to running so audio starts immediately.
+    if (ctx.state === 'suspended') {
+      ctx.onstatechange = () => {
+        if (ctx.state === 'running') {
+          ctx.onstatechange = null;
+          // Re-wire in case the stream was disconnected due to suspension
+          gain.connect(ctx.destination);
+        }
+      };
+    }
   }
 
   private removeParticipantAudio(userId: string): void {
