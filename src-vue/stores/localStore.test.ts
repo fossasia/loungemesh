@@ -190,7 +190,7 @@ describe('localStore', () => {
     vi.spyOn(engine, 'addLocalTrack').mockRejectedValue(new Error('duplicate'));
     const store = useLocalStore();
     await store.toggleMute();
-    expect(store.mute).toBe(true);
+    expect(store.mute).toBe(false);
   });
 
   it('toggleMute skips addLocalTrack when not joined', async () => {

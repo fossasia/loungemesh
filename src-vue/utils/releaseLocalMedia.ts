@@ -8,10 +8,16 @@ type ConferenceWithRemove = JitsiConference & {
 /**
  * Release local tracks from device capture and signal removal to the conference.
  *
- * Order matters for perceived latency:
- *   1. stopTrackStream  — synchronous; turns the camera/mic LED off immediately
- *   2. conf.removeTrack — async network call to the bridge; does not gate the LED
- *   3. track.dispose    — cleans up the Jitsi wrapper object
+ * Order matters for WebRTC correctness:
+ *   1. conf.removeTrack — lets lib-jitsi-meet null out the RTCRtpSender cleanly
+ *                         while the MediaStreamTrack is still in a valid state.
+ *                         Skipping this (or doing it after stop) leaves a stale
+ *                         sender that makes the next addTrack call fail with
+ *                         "replace track failed".
+ *   2. stopTrackStream  — synchronous; turns the camera/mic LED off.
+ *                         Happens ~50-100 ms after the button press (after the
+ *                         Jingle round-trip), which is imperceptible to users.
+ *   3. track.dispose    — cleans up the Jitsi wrapper object.
  */
 export async function releaseLocalMediaTracks(
   tracks: Array<JitsiTrack | undefined>,
@@ -20,9 +26,6 @@ export async function releaseLocalMediaTracks(
   const conf = conference as ConferenceWithRemove | undefined;
   for (const track of tracks) {
     if (!track) continue;
-    // Stop the OS capture immediately so the camera/mic indicator turns off
-    // before the async bridge removal round-trip.
-    stopTrackStream(track);
     if (conf?.removeTrack) {
       try {
         await conf.removeTrack(track);
@@ -30,6 +33,8 @@ export async function releaseLocalMediaTracks(
         /* bridge down or track already removed */
       }
     }
+    // Stop after removal so the sender is already nulled before the OS track ends.
+    stopTrackStream(track);
     disposeJitsiTrack(track);
   }
 }

@@ -20,6 +20,7 @@ export function buildReceiverConstraints(opts: {
   } else {
     selectedEndpoints = [...new Set([...selectedEndpoints, ...remoteUserIds])];
   }
+  const selectedSources = selectedEndpoints.map((id) => `${id}-v0`);
 
   const channelLastN =
     typeof conferenceOptions.channelLastN === 'number' && conferenceOptions.channelLastN > 0
@@ -29,9 +30,10 @@ export function buildReceiverConstraints(opts: {
 
   return {
     colibriClass: 'SelectedEndpointsChangedEvent',
-    selectedEndpoints,
+    selectedSources,
     lastN,
-    onStageEndpoints: stage,
+    // JVB stable-10888+ renamed this field and expects source IDs ({endpointId}-v0).
+    onStageSources: stage.map((id) => `${id}-v0`),
     defaultConstraints: { maxHeight: 360 },
     constraints: {},
   };

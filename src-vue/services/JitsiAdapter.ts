@@ -396,11 +396,13 @@ export class JitsiAdapter implements MediaService {
 
     // If AudioContext is still suspended (user hasn't interacted yet),
     // resume when it transitions to running so audio starts immediately.
+    // Guard with a map lookup so a mute/remove that happened while suspended
+    // doesn't cause a disconnected node to be reconnected on AudioContext resume.
     if (ctx.state === 'suspended') {
       ctx.onstatechange = () => {
-        if (ctx.state === 'running') {
-          ctx.onstatechange = null;
-          // Re-wire in case the stream was disconnected due to suspension
+        if (ctx.state !== 'running') return;
+        ctx.onstatechange = null;
+        if (this.gainNodes.get(id) === gain) {
           gain.connect(ctx.destination);
         }
       };

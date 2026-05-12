@@ -16,9 +16,9 @@ export interface JitsiTrack {
 
 export interface ReceiverConstraints {
   colibriClass: string;
-  selectedEndpoints: string[];
+  selectedSources: string[];
   lastN: number;
-  onStageEndpoints: string[];
+  onStageSources: string[];
   defaultConstraints: { maxHeight: number };
   constraints: Record<string, unknown>;
 }

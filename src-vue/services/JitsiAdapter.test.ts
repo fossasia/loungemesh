@@ -340,9 +340,9 @@ describe('JitsiAdapter', () => {
     adapter.sendCommand('pos', '{"x":1}');
     adapter.setReceiverConstraints({
       colibriClass: 'x',
-      selectedEndpoints: [],
+      selectedSources: [],
       lastN: 0,
-      onStageEndpoints: [],
+      onStageSources: [],
       defaultConstraints: { maxHeight: 200 },
       constraints: {},
     });

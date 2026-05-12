@@ -187,9 +187,9 @@ export const useLocalStore = defineStore('local', {
         });
         if (constraints) {
           mediaDebug('localStore', 'setReceiverConstraints', {
-            selectedEndpoints: constraints.selectedEndpoints,
+            selectedSources: constraints.selectedSources,
             lastN: constraints.lastN,
-            onStageEndpoints: constraints.onStageEndpoints,
+            onStageSources: constraints.onStageSources,
           });
           engine.setReceiverConstraints(constraints);
         }
@@ -199,6 +199,7 @@ export const useLocalStore = defineStore('local', {
     async toggleMute() {
       const engine = getMediaEngineInstance();
       let audioTrack = this.audio;
+      let createdNewTrack = false;
       if (!audioTrack) {
         try {
           const tracks = await engine.createLocalTracks(['audio']);
@@ -206,6 +207,7 @@ export const useLocalStore = defineStore('local', {
           if (!created) return;
           this.audio = markRaw(created);
           audioTrack = created;
+          createdNewTrack = true;
           if (engine.isJoined()) {
             try {
               await engine.addLocalTrack(created);
@@ -216,6 +218,13 @@ export const useLocalStore = defineStore('local', {
         } catch {
           return;
         }
+      }
+      if (createdNewTrack) {
+        if (audioTrack.isMuted()) {
+          await audioTrack.unmute();
+        }
+        this.mute = false;
+        return;
       }
       if (audioTrack.isMuted()) {
         await audioTrack.unmute();
