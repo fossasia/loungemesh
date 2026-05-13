@@ -29,9 +29,21 @@ server {
         try_files $uri =404;
     }
 
-    location /libs/ {
+    # lib-jitsi-meet (and its e2ee worker) are served by the jitsi-web container,
+    # which ships the exact build matching the running JVB. We proxy them here
+    # instead of bundling a static copy, so the client library can never drift
+    # out of sync when the jitsi image tag is bumped.
+    #
+    # Using a variable + Docker's embedded DNS resolver (127.0.0.11) forces nginx
+    # to re-resolve jitsi-web at request time, so a container restart / new IP
+    # never leaves this proxy pointing at a dead address.
+    location ~ ^/libs/(?<libs_path>.*)$ {
+        resolver 127.0.0.11 valid=30s ipv6=off;
+        set $jitsi_web_upstream jitsi-web;
+        proxy_pass http://$jitsi_web_upstream/libs/$libs_path$is_args$args;
+        proxy_set_header Host $host;
+        proxy_http_version 1.1;
         add_header Cache-Control "public, max-age=86400";
-        try_files $uri =404;
     }
 
     location = /favicon.svg {

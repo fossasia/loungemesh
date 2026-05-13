@@ -26,6 +26,10 @@ services:
       jitsi-web:
         condition: service_started
     restart: unless-stopped
+    # Join the jitsi network so nginx can proxy /libs/ to the jitsi-web container
+    # (lib-jitsi-meet is served from there, never bundled as a static file).
+    networks:
+      meet.jitsi:
 
   jitsi-web:
     image: jitsi/web:stable-10888
