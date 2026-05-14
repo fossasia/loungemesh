@@ -28,6 +28,7 @@ const dragSurface = ref<HTMLElement | null>(null);
 
 let dragging = false;
 let clickDelta = { x: 0, y: 0 };
+let attachedVideoTrack: typeof local.video;
 
 const style = computed(() => {
   const display = worldToRoom(local.pos, local.roomBounds);
@@ -47,18 +48,30 @@ const reaction = computed(() => (local.id ? features.userReactions[local.id]?.em
 const handUp = computed(() => features.handRaised);
 
 function attach() {
-  if (local.video && videoEl.value) {
+  if (attachedVideoTrack && attachedVideoTrack !== local.video && videoEl.value) {
     try {
-      local.video.detach?.(videoEl.value);
+      attachedVideoTrack.detach?.(videoEl.value);
     } catch {
       /* ignore */
     }
+    attachedVideoTrack = undefined;
+  }
+  if (!showCameraVideo.value && attachedVideoTrack && videoEl.value) {
+    try {
+      attachedVideoTrack.detach?.(videoEl.value);
+    } catch {
+      /* ignore */
+    }
+    attachedVideoTrack = undefined;
+  }
+  if (local.video && !local.cameraOff && videoEl.value) {
     mediaDebugVideoElement('LocalUser', 'attach:before', local.id || 'local', videoEl.value, {
       cameraOff: local.cameraOff,
       trackMuted: local.video.isMuted?.(),
     });
     try {
       local.video.attach?.(videoEl.value);
+      attachedVideoTrack = local.video;
       mediaDebugVideoElement('LocalUser', 'attach:after', local.id || 'local', videoEl.value);
       mediaDebugVideoAfterAttach('LocalUser', local.id || 'local', videoEl.value);
       // Explicit play() for Firefox autoplay policy compliance
@@ -81,7 +94,8 @@ function attach() {
 }
 
 function detach() {
-  if (local.video && videoEl.value) local.video.detach?.(videoEl.value);
+  if (attachedVideoTrack && videoEl.value) attachedVideoTrack.detach?.(videoEl.value);
+  attachedVideoTrack = undefined;
   if (local.audio && audioEl.value) local.audio.detach?.(audioEl.value);
 }
 

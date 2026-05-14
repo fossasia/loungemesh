@@ -13,7 +13,6 @@ import { watchTrackSpeaking } from '@/utils/speakingMeter';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
-import { publishLocalTrackToConference } from '@/utils/conferenceLocalTracks';
 
 const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
@@ -103,18 +102,17 @@ async function addLocalTracksToConference() {
   if (!conferenceStore.isJoined || !conf || publishingLocalTracks) return;
   publishingLocalTracks = true;
   try {
+    const alreadyPublished = conf.getLocalTracks?.() ?? [];
     for (const track of [localStore.audio, localStore.video]) {
       if (!track) continue;
+      if (alreadyPublished.some((existing) => existing === track || existing.getType() === track.getType())) {
+        continue;
+      }
       try {
-        const result = await publishLocalTrackToConference(
-          conf,
-          track,
-          (t) => engine.addLocalTrack(t),
-          (oldTrack, nextTrack) => engine.replaceLocalTrack(oldTrack, nextTrack),
-        );
+        await engine.addLocalTrack(track);
         mediaDebug('LocalStoreLogic', 'publishLocalTrack', {
           type: track.getType?.(),
-          result,
+          result: 'added',
         });
       } catch (err) {
         mediaDebug('LocalStoreLogic', 'publishLocalTrack:failed', {

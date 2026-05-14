@@ -15,7 +15,12 @@ export interface JitsiTrack {
 }
 
 export interface ReceiverConstraints {
-  colibriClass: string;
+  /**
+   * lib-jitsi-meet adds colibriClass:"ReceiverVideoConstraints" itself when it
+   * serializes the message to the bridge, so we must NOT set it here — doing so
+   * overrides the correct value and JVB rejects the message.
+   */
+  colibriClass?: string;
   selectedSources: string[];
   lastN: number;
   onStageSources: string[];
@@ -34,12 +39,14 @@ export interface JitsiConference {
   leave(): void;
   myUserId(): string;
   getParticipants(): JitsiParticipant[];
+  getLocalTracks?(): JitsiTrack[];
   getLocalVideoTrack?(): JitsiTrack | undefined;
   setDisplayName(name: string): void;
   sendTextMessage(text: string): void;
   sendCommand(name: string, payload: { value: string }): void;
   addCommandListener(name: string, handler: (payload: { value: string }) => void): void;
   addTrack(track: JitsiTrack): Promise<void>;
+  removeTrack?(track: JitsiTrack): Promise<void>;
   replaceTrack(oldTrack: JitsiTrack, newTrack: JitsiTrack): Promise<void>;
   setLocalParticipantProperty(key: string, value: unknown): void;
   setReceiverConstraints(constraints: ReceiverConstraints): void;
@@ -48,7 +55,7 @@ export interface JitsiConference {
 
 export interface JitsiConnection {
   connect(): void;
-  disconnect(): void;
+  disconnect(event?: unknown): void | Promise<void>;
   initJitsiConference(name: string, options: Record<string, unknown>): JitsiConference;
   addEventListener(event: string, handler: () => void): void;
   xmpp?: { lastErrorMsg?: string };

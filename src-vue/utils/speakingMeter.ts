@@ -1,7 +1,7 @@
 import type { JitsiTrack } from '@/types/jitsi';
 
-const SPEAKING_THRESHOLD = 18;
-const SPEAKING_HYSTERESIS = 10;
+const SPEAKING_THRESHOLD = 8;
+const SPEAKING_HYSTERESIS = 4;
 
 function streamFromTrack(track: JitsiTrack): MediaStream | undefined {
   return (track as unknown as { getOriginalStream?: () => MediaStream }).getOriginalStream?.();

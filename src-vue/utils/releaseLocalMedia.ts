@@ -1,23 +1,25 @@
 import type { JitsiConference, JitsiTrack } from '@/types/jitsi';
-import { stopTrackStream, disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
+import { collectMediaStreamTracks, stopMediaStreamTracks } from '@/utils/disposeJitsiTrack';
 
 type ConferenceWithRemove = JitsiConference & {
   removeTrack?: (track: JitsiTrack) => Promise<void>;
 };
 
 /**
- * Release local tracks from device capture and signal removal to the conference.
+ * Release local tracks: remove them from the conference, dispose the Jitsi
+ * wrapper, and stop the underlying OS capture so the camera/mic LED turns off.
  *
- * Order matters for WebRTC correctness:
- *   1. conf.removeTrack — lets lib-jitsi-meet null out the RTCRtpSender cleanly
- *                         while the MediaStreamTrack is still in a valid state.
- *                         Skipping this (or doing it after stop) leaves a stale
- *                         sender that makes the next addTrack call fail with
- *                         "replace track failed".
- *   2. stopTrackStream  — synchronous; turns the camera/mic LED off.
- *                         Happens ~50-100 ms after the button press (after the
- *                         Jingle round-trip), which is imperceptible to users.
- *   3. track.dispose    — cleans up the Jitsi wrapper object.
+ * Why this exact order matters:
+ *   1. Capture the raw MediaStreamTracks FIRST. lib-jitsi-meet nulls its internal
+ *      `stream`/`track` pointers during removeTrack()/dispose(), so we must grab
+ *      the real device handles before they vanish.
+ *   2. conf.removeTrack — lets lib-jitsi-meet null out the RTCRtpSender cleanly
+ *      while the JitsiLocalTrack is still valid. Stopping the device track before
+ *      this would leave a stale sender and break the next addTrack ("replace
+ *      track failed").
+ *   3. track.dispose — tears down the Jitsi wrapper (async in lib-jitsi-meet).
+ *   4. Stop the captured device tracks LAST — guarantees the LED goes off even if
+ *      removeTrack/dispose already cleared the lib's own stream reference.
  */
 export async function releaseLocalMediaTracks(
   tracks: Array<JitsiTrack | undefined>,
@@ -26,15 +28,20 @@ export async function releaseLocalMediaTracks(
   const conf = conference as ConferenceWithRemove | undefined;
   for (const track of tracks) {
     if (!track) continue;
-    if (conf?.removeTrack) {
-      try {
+    const rawTracks = collectMediaStreamTracks(track);
+    try {
+      if (conf?.removeTrack) {
         await conf.removeTrack(track);
-      } catch {
-        /* bridge down or track already removed */
       }
+    } catch {
+      /* bridge down or track already removed */
     }
-    // Stop after removal so the sender is already nulled before the OS track ends.
-    stopTrackStream(track);
-    disposeJitsiTrack(track);
+    try {
+      await (track as { dispose?: () => unknown }).dispose?.();
+    } catch {
+      /* already disposed */
+    }
+    // Stop the real device tracks we captured up front — bulletproof LED-off.
+    stopMediaStreamTracks(rawTracks);
   }
 }

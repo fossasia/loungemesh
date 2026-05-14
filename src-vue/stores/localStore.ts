@@ -28,9 +28,27 @@ import { conferenceOptions } from '@/config/jitsiOptions';
 import { buildReceiverConstraints } from '@/utils/receiverConstraints';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
-import { publishLocalTrackToConference } from '@/utils/conferenceLocalTracks';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { useConferenceStore } from './conferenceStore';
+
+function uniqueTracks(tracks: Array<JitsiTrack | undefined>): JitsiTrack[] {
+  return [...new Set(tracks.filter(Boolean) as JitsiTrack[])];
+}
+
+function getConferenceLocalTracksOfKind(
+  conference: { getLocalTracks?: () => JitsiTrack[] } | undefined,
+  kind: 'audio' | 'video',
+) {
+  return conference?.getLocalTracks?.().filter((track) => track.getType() === kind) ?? [];
+}
+
+function getConferenceLocalVideoTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
+  return getConferenceLocalTracksOfKind(conference, 'video');
+}
+
+function getConferenceLocalAudioTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
+  return getConferenceLocalTracksOfKind(conference, 'audio');
+}
 
 export type Vector2 = { x: number; y: number };
 
@@ -197,42 +215,52 @@ export const useLocalStore = defineStore('local', {
       void conference;
     },
     async toggleMute() {
-      const engine = getMediaEngineInstance();
-      let audioTrack = this.audio;
-      let createdNewTrack = false;
-      if (!audioTrack) {
-        try {
-          const tracks = await engine.createLocalTracks(['audio']);
-          const created = tracks.find((t) => t.getType() === 'audio');
-          if (!created) return;
-          this.audio = markRaw(created);
-          audioTrack = created;
-          createdNewTrack = true;
-          if (engine.isJoined()) {
-            try {
-              await engine.addLocalTrack(created);
-            } catch {
-              /* already added */
-            }
-          }
-        } catch {
-          return;
-        }
+      if (this.mute) {
+        await this.enableMic();
+        return;
       }
-      if (createdNewTrack) {
-        if (audioTrack.isMuted()) {
-          await audioTrack.unmute();
-        }
+      await this.disableMic();
+    },
+    async enableMic() {
+      const engine = getMediaEngineInstance();
+      // A live track already exists (e.g. created at join) — just unmute it.
+      if (this.audio) {
+        if (this.audio.isMuted()) await this.audio.unmute();
         this.mute = false;
         return;
       }
-      if (audioTrack.isMuted()) {
-        await audioTrack.unmute();
+      try {
+        const tracks = await engine.createLocalTracks(['audio']);
+        const created = tracks.find((t) => t.getType() === 'audio');
+        if (!created) return;
+        const conf = engine.getConference();
+        if (engine.isJoined()) {
+          try {
+            // Drop any stale local audio senders before publishing the fresh one.
+            await releaseLocalMediaTracks(getConferenceLocalAudioTracks(conf), conf);
+            await engine.addLocalTrack(created);
+          } catch {
+            disposeJitsiTrack(created);
+            return;
+          }
+        }
+        if (created.isMuted()) await created.unmute();
+        this.audio = markRaw(created);
         this.mute = false;
-      } else {
-        await audioTrack.mute();
-        this.mute = true;
+      } catch {
+        /* user denied or device unavailable */
       }
+    },
+    async disableMic() {
+      const engine = getMediaEngineInstance();
+      const conf = engine.getConference();
+      const track = this.audio;
+      // Flip UI state first, then fully release the device so the mic indicator
+      // turns off — we re-acquire a fresh track on the next unmute.
+      this.mute = true;
+      this.audio = undefined;
+      this.speaking = false;
+      await releaseLocalMediaTracks(uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]), conf);
     },
     async toggleCamera() {
       if (this.cameraOff) {
@@ -244,45 +272,43 @@ export const useLocalStore = defineStore('local', {
     async enableCamera() {
       const engine = getMediaEngineInstance();
       if (this.video && this.videoType === 'camera') {
-        this.cameraOff = false;
         if (this.video.isMuted()) await this.video.unmute();
+        this.cameraOff = false;
         return;
       }
       try {
         const tracks = await engine.createLocalTracks(['video']);
         const created = tracks.find((t) => t.getType() === 'video');
         if (!created) return;
+        const conf = engine.getConference();
+        if (engine.isJoined()) {
+          try {
+            await releaseLocalMediaTracks(getConferenceLocalVideoTracks(conf), conf);
+            await engine.addLocalTrack(created);
+          } catch {
+            disposeJitsiTrack(created);
+            return;
+          }
+        }
         disposeJitsiTrack(this.video);
         this.video = markRaw(created);
         this.videoType = 'camera';
         this.cameraOff = false;
-        if (engine.isJoined()) {
-          const conf = engine.getConference();
-          if (conf) {
-            try {
-              await publishLocalTrackToConference(
-                conf,
-                created,
-                (t) => engine.addLocalTrack(t),
-                (oldTrack, nextTrack) => engine.replaceLocalTrack(oldTrack, nextTrack),
-              );
-            } catch {
-              /* conference not ready */
-            }
-          }
-        }
       } catch {
         /* user denied or device unavailable */
       }
     },
     async disableCamera() {
       const engine = getMediaEngineInstance();
+      const conf = engine.getConference();
       const track = this.video;
       this.cameraOff = true;
-      if (!track) return;
-      await releaseLocalMediaTracks([track], engine.getConference());
       this.video = undefined;
       this.videoType = 'camera';
+      await releaseLocalMediaTracks(
+        uniqueTracks([track, ...getConferenceLocalVideoTracks(conf)]),
+        conf,
+      );
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();

@@ -21,6 +21,16 @@ function getJitsiMeetJS(): JitsiMeetJS {
   return js;
 }
 
+function ensureDisconnectReturnsPromise(connection: import('@/types/jitsi').JitsiConnection): void {
+  const mutable = connection as import('@/types/jitsi').JitsiConnection & {
+    __flowspaceDisconnectWrapped?: boolean;
+  };
+  if (mutable.__flowspaceDisconnectWrapped) return;
+  const disconnect = mutable.disconnect.bind(mutable);
+  mutable.disconnect = (event?: unknown) => Promise.resolve(disconnect(event));
+  mutable.__flowspaceDisconnectWrapped = true;
+}
+
 export class JitsiAdapter implements MediaService {
   private jsMeet?: JitsiMeetJS;
   private connection?: import('@/types/jitsi').JitsiConnection;
@@ -47,8 +57,16 @@ export class JitsiAdapter implements MediaService {
     this.init();
     const jsMeet = this.jsMeet!;
     if (this.connection) {
-      if (!this.connected) this.connection.connect();
-      return;
+      if (!this.connected) {
+        try {
+          this.connection.disconnect();
+        } catch {
+          /* stale lib-jitsi connection */
+        }
+        this.connection = undefined;
+      } else {
+        return;
+      }
     }
 
     const baseOpts = { ...getConnectionOptions(), ...opts } as Record<string, unknown>;
@@ -56,6 +74,7 @@ export class JitsiAdapter implements MediaService {
     this.appId = opts?.appId ?? null;
 
     const connection = new jsMeet.JitsiConnection(this.appId, this.jwt ?? null, baseOpts);
+    ensureDisconnectReturnsPromise(connection);
 
     connection.addEventListener(jsMeet.events.connection.CONNECTION_ESTABLISHED, () => {
       this.connected = true;

@@ -28,8 +28,10 @@ export function buildReceiverConstraints(opts: {
       : 20;
   const lastN = Math.max(1, Math.min(selectedEndpoints.length, channelLastN));
 
+  // NOTE: no colibriClass here — lib-jitsi-meet wraps this object as a
+  // ReceiverVideoConstraints message itself. Setting colibriClass would override
+  // its value and JVB stable-10888+ would reject the message.
   return {
-    colibriClass: 'SelectedEndpointsChangedEvent',
     selectedSources,
     lastN,
     // JVB stable-10888+ renamed this field and expects source IDs ({endpointId}-v0).
