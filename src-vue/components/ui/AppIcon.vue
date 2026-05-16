@@ -3,6 +3,7 @@ import { computed, type Component } from 'vue';
 import {
   ArrowRight,
   BarChart3,
+  Circle,
   EyeOff,
   FileText,
   Hand,
@@ -47,6 +48,7 @@ export type IconName =
   | 'more-vertical'
   | 'pencil'
   | 'plus'
+  | 'record'
   | 'smile'
   | 'stage'
   | 'user'
@@ -69,6 +71,7 @@ const registry: Record<IconName, Component> = {
   'more-vertical': MoreVertical,
   pencil: Pencil,
   plus: Plus,
+  record: Circle,
   smile: Smile,
   stage: Presentation,
   user: User,

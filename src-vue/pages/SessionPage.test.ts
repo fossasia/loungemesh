@@ -88,6 +88,7 @@ describe('SessionPage', () => {
   it('shows mic state and leaves session', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
+    local.setMyID('host');
     local.mute = false;
     local.onStage = true;
 
@@ -111,12 +112,62 @@ describe('SessionPage', () => {
     const push = vi.spyOn(router, 'push');
     const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
     await wrapper.find('[aria-label="Mute"]').trigger('click');
+    // Host leave opens the export dialog; confirm via its Leave button.
     await wrapper.find('.btn-leave-call').trigger('click');
+    await flushPromises();
+    await wrapper.find('.leaveCard .btn.leave').trigger('click');
     expect(stopSpy).toHaveBeenCalled();
     await flushPromises();
     expect(push).toHaveBeenCalledWith('/');
     wrapper.unmount();
     await flushPromises();
+  });
+
+  it('leaves immediately for non-host participants without the dialog', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    features.setHost('someone-else');
+    const { wrapper, router } = await mountWithApp(SessionPage, {
+      route: '/session/flowspace',
+      props: { id: 'flowspace' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    const push = vi.spyOn(router, 'push');
+    const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
+    await wrapper.find('.btn-leave-call').trigger('click');
+    expect(wrapper.find('.leaveCard').exists()).toBe(false);
+    expect(stopSpy).toHaveBeenCalled();
+    await flushPromises();
+    expect(push).toHaveBeenCalledWith('/');
+    wrapper.unmount();
+    await flushPromises();
+  });
+
+  it('shows the record button for hosts when recording is supported', async () => {
+    const local = useLocalStore();
+    local.setMyID('host');
+    useSessionFeaturesStore().setHost('host');
+    const savedRecorder = (globalThis as { MediaRecorder?: unknown }).MediaRecorder;
+    const savedCapture = HTMLCanvasElement.prototype.captureStream;
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = function MockRecorder() {} as never;
+    HTMLCanvasElement.prototype.captureStream = function () {
+      return {} as MediaStream;
+    } as never;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/flowspace',
+      props: { id: 'flowspace' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="Record session"]').exists()).toBe(true);
+    wrapper.unmount();
+
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = savedRecorder;
+    if (savedCapture) HTMLCanvasElement.prototype.captureStream = savedCapture;
+    else delete (HTMLCanvasElement.prototype as { captureStream?: unknown }).captureStream;
   });
 
   it('handles missing route id param', async () => {

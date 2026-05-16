@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import JitsiConnection from '@/components/runtime/JitsiConnection.vue';
 import LocalStoreLogic from '@/components/runtime/LocalStoreLogic.vue';
@@ -31,6 +31,12 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import { sessionIdentifier } from '@/utils/sessionIdentifier';
+import LeaveDialog from '@/components/session/LeaveDialog.vue';
+import SessionRecordButton from '@/components/session/SessionRecordButton.vue';
+import { useSessionRecorder } from '@/composables/useSessionRecorder';
+import { useSessionRecording } from '@/composables/useSessionRecording';
+import { useSessionExport } from '@/composables/useSessionExport';
+import { makeRecorderSources } from '@/utils/sessionRecorderSources';
 
 /** Absorbs `props: true` route param so it is not forwarded as a stray DOM attribute (multi-root page). */
 /* v8 ignore next */
@@ -62,7 +68,25 @@ watch(
   { immediate: true },
 );
 
-async function leave() {
+const sessionId = computed(() => String(route.params.id ?? props.id ?? ''));
+const { exportNotes, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
+
+const recorder = useSessionRecorder(makeRecorderSources(local, conf));
+const recording = useSessionRecording(recorder, exportRecording);
+
+const showLeaveDialog = ref(false);
+
+function requestLeave() {
+  if (features.isHost) {
+    showLeaveDialog.value = true;
+    return;
+  }
+  void doLeave();
+}
+
+async function doLeave() {
+  showLeaveDialog.value = false;
+  await recording.stopIfRecording();
   local.setOnStage(false);
   engine.setLocalParticipantProperty('onStage', false);
   // Await track release so the camera LED turns off before navigating away
@@ -111,7 +135,12 @@ async function leave() {
       </template>
     </IconButton>
     <ScreenshareButton />
-    <button type="button" class="btn-leave-call" title="Leave call" @click="leave">Leave Call</button>
+    <SessionRecordButton
+      v-if="features.isHost && recorder.isSupported"
+      :is-recording="recorder.isRecording.value"
+      @toggle="recording.toggleRecording"
+    />
+    <button type="button" class="btn-leave-call" title="Leave call" @click="requestLeave">Leave Call</button>
     <template #right>
       <IconButton
         v-if="features.isHost"
@@ -124,6 +153,19 @@ async function leave() {
       <ChatPanel />
     </template>
   </FooterBar>
+  <LeaveDialog
+    v-if="showLeaveDialog"
+    :is-host="features.isHost"
+    :is-recording="recorder.isRecording.value"
+    :recording-supported="recorder.isSupported"
+    :has-recording="recording.hasRecording.value"
+    @cancel="showLeaveDialog = false"
+    @leave="doLeave"
+    @export-notes="exportNotes"
+    @export-whiteboard="exportWhiteboard"
+    @export-recording="recording.downloadRecording"
+    @toggle-recording="recording.toggleRecording"
+  />
   </div>
 </template>
 

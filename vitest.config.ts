@@ -25,6 +25,8 @@ export default defineConfig({
         'src-vue/types/**',
         /** Interface-only module (no executable statements). */
         'src-vue/services/MediaService.ts',
+        /** Browser-only MediaRecorder/canvas/AudioContext plumbing — not runnable in jsdom. */
+        'src-vue/composables/useSessionRecorder.ts',
       ],
       reporter: ['text', 'lcov', 'html'],
       thresholds: {
