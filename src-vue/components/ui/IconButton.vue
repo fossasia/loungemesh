@@ -146,4 +146,13 @@ withDefaults(
   white-space: nowrap;
   border: 0;
 }
+
+@media (max-width: 768px) {
+  .ibtn {
+    min-height: 42px;
+    min-width: 42px;
+    padding: 9px;
+    gap: 8px;
+  }
+}
 </style>

@@ -56,4 +56,31 @@ defineProps<{
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* Phones / narrow viewports: the control row would otherwise overflow off-screen. */
+@media (max-width: 768px) {
+  .footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: 4px;
+  }
+  .left {
+    display: none;
+  }
+  .center {
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 6px;
+    gap: 6px;
+  }
+  .center :deep(button) {
+    margin: 0 2px;
+  }
+  .right {
+    margin: 0 6px 2px;
+    min-width: 0;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
 </style>

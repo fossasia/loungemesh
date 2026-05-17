@@ -69,6 +69,8 @@ const emit = defineEmits<{
 }
 .leaveCard {
   width: min(440px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   padding: 24px;
   background: var(--color-bg-card, #fff);
   border-radius: var(--radius-sm);

@@ -119,3 +119,11 @@ a {
 .btn-leave-call:active {
   background-color: var(--color-mono0);
 }
+
+@media (max-width: 768px) {
+  .btn-primary-round,
+  .btn-leave-call {
+    min-height: 42px;
+    padding: 9px 14px;
+  }
+}

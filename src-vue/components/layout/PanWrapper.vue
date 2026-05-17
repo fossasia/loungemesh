@@ -97,6 +97,7 @@ onMounted(() => {
   touch-action: none;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background-color: var(--color-mono95);
   text-align: left;
 }
