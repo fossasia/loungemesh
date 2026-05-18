@@ -30,7 +30,7 @@ const style = computed(() => {
   const y = props.y ?? user.value?.pos?.y ?? 0;
   const display = worldToRoom({ x, y }, local.roomBounds);
   return {
-    position: 'absolute',
+    position: 'absolute' as const,
     width: '200px',
     height: '200px',
     left: `${display.x}px`,

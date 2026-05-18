@@ -7,7 +7,7 @@ export type SessionConferenceState = {
   isJoining: boolean;
   isJoined: boolean;
   conferenceName: string;
-  conferenceObject: unknown;
+  conferenceObject?: unknown;
   displayName: string;
   setConferenceName: (name: string) => void;
   leaveConference: () => void;

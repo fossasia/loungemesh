@@ -11,7 +11,7 @@ export async function joinFromEnterPage(
   engine: MediaService,
   conference: ConferenceStore,
   router: Router,
-  ensureTracks: (local: LocalStore, engine: MediaService) => Promise<void>,
+  ensureTracks: (local: LocalStore, engine: MediaService) => Promise<unknown>,
 ): Promise<void> {
   try {
     await ensureTracks(local, engine);
