@@ -1,11 +1,9 @@
 version: 2
+# The Node.js runtime version lives in the pinned `node:` tag in the Dockerfile,
+# which the docker ecosystem below keeps updated. Dependabot cannot update
+# `.nvmrc` (dependabot/dependabot-core#4808), so keep it in sync with the
+# Dockerfile manually when the docker bump lands.
 updates:
-  # Keep the Node.js runtime version (read by all workflows and Dockerfile) up to date.
-  - package-ecosystem: "node-version"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-
   # Keep all npm deps (including minor/patch) up to date.
   - package-ecosystem: "npm"
     directory: "/"
