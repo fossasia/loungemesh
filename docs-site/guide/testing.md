@@ -5,14 +5,14 @@ Flowspace uses **three separate quality layers**. They are not interchangeable: 
 ## Unit and component tests (Vitest)
 
 - **Command:** `npm run test:coverage` (alias: `npm test`)
-- **Scope:** `src-vue/**/*.{ts,vue}` except tests, `types/**`, and the interface-only `MediaService.ts`
+- **Scope:** `src-vue/**/*.{ts,vue}` except tests, `types/**`, the interface-only `MediaService.ts`, and the browser-only `composables/useSessionRecorder.ts` (MediaRecorder/canvas/AudioContext, not runnable in jsdom)
 - **Thresholds:** 100% lines, statements, functions, and branches (`vitest.config.ts`)
 - **Style:** Colocated `*.test.ts` beside the module under test; pure logic extracted to `.ts` helpers when Vue SFC branch coverage is brittle
 
 CI (`.github/workflows/ci.yml`) on every push/PR to **`main`**, **`master`**, and **`dev`**:
 
 1. `test-and-build` — typecheck, Vitest coverage, Vite build, docs build  
-2. `docker` — `docker compose config` with `env.development.example`  
+2. `docker` — `docker compose config` with `env.example`  
 3. `e2e` — Playwright after production build  
 4. `deploy` — on push to **`main`**, **`master`**, or **`dev`** when `DEPLOY_HOST` is set (after all jobs pass)
 

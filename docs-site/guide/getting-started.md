@@ -33,7 +33,7 @@ Port **8780** is the default so Flowspace does not conflict with Eventyay’s vi
 
 ## Environment variables
 
-Copy `env.development.example` to `.env` via `npm run setup`, or see [env.development.example](https://github.com/eventyay/flowspace/blob/main/env.development.example). Key variables:
+Copy `env.example` to `.env` via `npm run setup` (auto-detects your LAN IP), or see [env.example](https://github.com/eventyay/flowspace/blob/main/env.example). The same template is used for local dev and production. Key variables:
 
 | Variable | Purpose |
 |----------|---------|

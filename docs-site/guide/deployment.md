@@ -1,28 +1,87 @@
 # Deployment
 
-For AWS free-tier + auto-deploy CI, see [AWS free-tier deploy](/guide/aws-deployment).
+Everything (local dev and production) runs through a single script,
+`scripts/flowspace.sh`, and a single template, `env.example`. There are no
+separate `env.development.example` / `env.production.example` files and no
+per-task scripts to remember.
+
+For a step-by-step AWS free-tier walkthrough with HTTPS, see
+[AWS free-tier deploy](/guide/aws-deployment).
 
 ## Local / Docker
 
 ```bash
-npm run setup          # env.development.example → .env (Jitsi passwords included)
+npm run setup          # = flowspace.sh dev: writes .env, auto-detects your LAN IP
 npm run docker:up      # Flowspace :8780, Jitsi :8001
 ```
 
-Or `docker compose up -d --build` after `npm run setup`.
+`npm run setup` needs **zero configuration** — it copies `env.example` to `.env`
+(generating Jitsi passwords) and fills `DOCKER_HOST_ADDRESS` with your detected
+LAN IP so other devices on the network can reach the bridge.
 
 ## Production server
 
-First time (or new host/IP):
+First time on a fresh Linux host (installs Docker + Caddy, writes `.env`, gets
+HTTPS certificates, and deploys):
 
 ```bash
-npm run setup:prod -- --jitsi-host=jitsi.example.com --public-ip=1.2.3.4
-npm run deploy
+./scripts/flowspace.sh bootstrap \
+  --app-host=flowspace.example.com \
+  --jitsi-host=jitsi.example.com \
+  --email=admin@example.com \
+  --deploy
+# --public-ip is auto-detected from the host; pass --public-ip=1.2.3.4 to override
 ```
 
-Redeploy after `git pull` — **no manual `.env` edits**; `npm run deploy` merges `env.production.example` into `.env` (passwords kept) and rebuilds.
+Redeploy after `git pull`:
 
-Or use `./scripts/bootstrap-server.sh` (see AWS guide).
+```bash
+npm run deploy         # = flowspace.sh deploy
+```
+
+`deploy` re-merges `.env` from `env.example` (**existing passwords and keys are
+kept**) and rebuilds. No manual `.env` edits are needed.
+
+### Dynamic / changing public IP
+
+If the server's public IP can change (e.g. an Elastic IP is reassigned), deploy
+with `--auto-ip` so `DOCKER_HOST_ADDRESS` is re-detected on every deploy:
+
+```bash
+./scripts/flowspace.sh deploy --auto-ip
+```
+
+This is exactly what CI runs, so auto-deploys keep working across IP changes.
+
+## CI / auto-deploy
+
+`.github/workflows/ci.yml` runs typecheck, unit tests with coverage, build, docs
+build, a Docker Compose config validation, and Playwright e2e. On a push to
+`main`/`master`/`dev` it deploys over SSH **only if** the `DEPLOY_HOST` Actions
+variable is set. The deploy step runs `flowspace.sh deploy --auto-ip` on the
+server, so it tolerates IP changes.
+
+Required GitHub **Actions variables / secrets**:
+
+| Kind | Name | Value |
+|------|------|-------|
+| Variable | `DEPLOY_HOST` | Server public IP / hostname |
+| Variable | `DEPLOY_PATH` | App dir on server (optional, default `/opt/flowspace`) |
+| Secret | `DEPLOY_USER` | SSH user (e.g. `ubuntu`) |
+| Secret | `DEPLOY_SSH_PRIVATE_KEY` | Private key for that user |
+
+`.env` is never committed; CI only ever copies `env.example`, so no real secrets
+live in GitHub.
+
+## Fixing a broken bridge (no audio/video)
+
+If browser logs show `colibri-ws/172.18.0.x` (the Docker bridge IP) instead of
+your public IP, the JVB is advertising the wrong address. Fix the running bridge
+without a full redeploy:
+
+```bash
+npm run fix:jvb        # = flowspace.sh fix-jvb, public IP auto-detected
+```
 
 ## Production build (static only)
 
@@ -35,7 +94,10 @@ npm run build
 
 ## nginx
 
-`nginx/default.conf.template` enables gzip_static, long-cache assets, CSP `frame-ancestors` via `NGINX_ALLOW_IFRAME_FROM`, SPA fallback.
+`nginx/default.conf.template` enables `gzip_static`, long-cache assets, an SPA
+fallback, a CSP `frame-ancestors` controlled by `NGINX_ALLOW_IFRAME_FROM`, and a
+same-origin `/libs/` proxy to the `jitsi-web` container so `lib-jitsi-meet` is
+always served from the exact image/tag the JVB runs (no vendored copies to drift).
 
 ## iframe embedding
 

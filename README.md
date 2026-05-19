@@ -41,9 +41,13 @@ npm run docker:up
 | `npm run docs:dev` | VitePress docs locally |
 | `npm run docs:build` | Build docs to `docs-site/.vitepress/dist` |
 | `npm run test:e2e` | Playwright smoke tests (after `npm run build`) |
-| `npm run setup` | Create `.env` for local dev + Docker |
-| `npm run setup:prod` | Create production `.env` (server) |
-| `npm run deploy` | Rebuild Docker stack on server |
+| `npm run typecheck` | Type-check `.ts` and `.vue` with `vue-tsc` |
+| `npm run setup` | Create `.env` for local dev + Docker (`flowspace.sh dev`) |
+| `npm run deploy` | Rebuild Docker stack on server (`flowspace.sh deploy`) |
+| `npm run fix:jvb` | Fix a JVB advertising the wrong public IP |
+
+Production server setup uses `./scripts/flowspace.sh bootstrap` — see
+[Deployment](docs-site/guide/deployment.md).
 
 ## License
 

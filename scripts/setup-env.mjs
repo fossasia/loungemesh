@@ -2,10 +2,12 @@
 /**
  * Safe env setup: merges templates into `.env` without overwriting existing secrets.
  *
- *   npm run setup
- *   npm run setup:prod -- --app-host=... --jitsi-host=... --public-ip=...
- *   npm run setup:prod -- --from-env      # infer jitsi-host + public-ip from existing .env (used by deploy)
- *   npm run setup -- --rotate-passwords   # only placeholder Jitsi passwords
+ * Usually invoked via scripts/flowspace.sh (npm run setup / npm run deploy), e.g.:
+ *
+ *   node scripts/setup-env.mjs development
+ *   node scripts/setup-env.mjs production --app-host=... --jitsi-host=... --public-ip=...
+ *   node scripts/setup-env.mjs production --from-env   # infer host + IP from existing .env (deploy)
+ *   node scripts/setup-env.mjs development --rotate-passwords  # only placeholder Jitsi passwords
  *
  * Passwords (JICOFO_*, JVB_*, etc.) are NEVER rotated on re-run unless they are still
  * placeholders or you pass --rotate-passwords / --force-passwords.
@@ -335,7 +337,7 @@ if (args.mode === 'production') {
   if (!jitsiHost || !publicIp || isPlaceholder(jitsiHost) || isPlaceholder(publicIp)) {
     console.error(
       'Production setup requires jitsi host and public IP.\n' +
-        '  First time: npm run setup:prod -- --jitsi-host=jitsi.example.com --public-ip=1.2.3.4\n' +
+        '  First time: ./scripts/flowspace.sh bootstrap --app-host=... --jitsi-host=... --email=...\n' +
         '  Or re-run deploy after bootstrap (npm run deploy merges .env from your existing values)',
     );
     process.exit(1);

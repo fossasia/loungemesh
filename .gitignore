@@ -32,8 +32,7 @@ yarn-error.log*
 .env.production
 .env.development
 .env.*
-!env.development.example
-!env.production.example
+!env.example
 docker/.env.jitsi
 .eslintcache
 app

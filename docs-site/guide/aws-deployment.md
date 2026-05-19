@@ -78,22 +78,21 @@ You should see a prompt like `ubuntu@ip-172-...`.
 git clone git@github.com:YOUR_GITHUB_USER/flowspace.git ~/flowspace
 cd ~/flowspace
 chmod +x scripts/*.sh
-./scripts/bootstrap-server.sh \
+./scripts/flowspace.sh bootstrap \
   --app-host=eventyayflowspace.duckdns.org \
   --jitsi-host=jitsi-eventyayflowspace.duckdns.org \
-  --public-ip=YOUR_ELASTIC_IP \
   --email=your-email@gmail.com \
   --deploy
+# --public-ip is auto-detected; add --public-ip=YOUR_ELASTIC_IP to force it
 ```
 
 **First run** may install Docker and ask you to **log out and SSH in again**. Then run the same command with `--skip-system` added:
 
 ```bash
 cd ~/flowspace
-./scripts/bootstrap-server.sh --skip-system \
+./scripts/flowspace.sh bootstrap --skip-system \
   --app-host=eventyayflowspace.duckdns.org \
   --jitsi-host=jitsi-eventyayflowspace.duckdns.org \
-  --public-ip=YOUR_ELASTIC_IP \
   --email=your-email@gmail.com \
   --deploy
 ```
@@ -110,9 +109,13 @@ Wait 5–15 minutes for Docker to build. When done:
 After the server works manually:
 
 1. GitHub repo → **Settings** → **Secrets and variables** → **Actions**
-2. **Variables:** `DEPLOY_HOST` = your Elastic IP
+2. **Variables:** `DEPLOY_HOST` = your Elastic IP (optionally `DEPLOY_PATH`)
 3. **Secrets:** `DEPLOY_USER` = `ubuntu`, `DEPLOY_SSH_PRIVATE_KEY` = paste entire `.pem` file
 4. Push to **`main`** or **`dev`** → CI runs tests + e2e + deploys without overwriting `.env` passwords
+
+CI deploys with `flowspace.sh deploy --auto-ip`, which re-detects the server's
+public IP each time — so deploys keep working even if the Elastic IP is
+reassigned.
 
 ---
 
@@ -121,9 +124,9 @@ After the server works manually:
 | Rule | Why |
 |------|-----|
 | `.env` is in `.gitignore` | Never committed |
-| CI only copies `env.development.example` | No real secrets in GitHub |
-| `npm run setup` **merges** into `.env` | Existing passwords and keys are **not** overwritten |
-| Re-run setup | Safe; use `--force` only if you intend to reset non-secrets |
+| CI only copies `env.example` | No real secrets in GitHub |
+| `npm run deploy` **merges** into `.env` | Existing passwords and keys are **not** overwritten |
+| Re-run setup/deploy | Safe; use `--force` only if you intend to reset non-secrets |
 | `--rotate-passwords` | Only changes **placeholder** Jitsi passwords |
 | `.env` file mode `600` on Linux | Only your user can read it |
 
@@ -136,10 +139,10 @@ After the server works manually:
 | Problem | Fix |
 |---------|-----|
 | Site not loading | DuckDNS IP = Elastic IP? Security group 80/443 open? |
-| WebSocket error / `localhost:8001` | Fix hosts once: `npm run setup:prod -- --jitsi-host=... --public-ip=...`, then `npm run deploy` |
-| No video / no audio | **UDP 10000** open; `DOCKER_HOST_ADDRESS` = Elastic IP (not `172.18.x.x`); run `npm run setup:prod -- --public-ip=…` then `npm run deploy` |
-| `colibri-ws/172.18.0.x` in console | JVB still uses Docker bridge IP. On the server run `./scripts/fix-jvb-advertise.sh 13.62.178.111` (your Elastic IP). `npm run deploy` alone does **not** update a running JVB. |
-| `colibri-ws` WebSocket failed (1006) | Caddy must proxy `/colibri-ws` on app + Jitsi hosts (`bootstrap-server.sh --update-caddy`); `DOCKER_HOST_ADDRESS` must match the IP segment in the colibri URL |
+| WebSocket error / `localhost:8001` | Fix hosts once: `./scripts/flowspace.sh bootstrap --app-host=... --jitsi-host=... --skip-system --deploy` |
+| No video / no audio | **UDP 10000** open; `DOCKER_HOST_ADDRESS` = Elastic IP (not `172.18.x.x`); run `./scripts/flowspace.sh deploy --auto-ip` |
+| `colibri-ws/172.18.0.x` in console | JVB still uses Docker bridge IP. On the server run `npm run fix:jvb` (auto-detects the public IP). `npm run deploy` alone does **not** update a running JVB. |
+| `colibri-ws` WebSocket failed (1006) | Caddy must proxy `/colibri-ws` on app + Jitsi hosts (`flowspace.sh bootstrap --update-caddy`); `DOCKER_HOST_ADDRESS` must match the IP segment in the colibri URL |
 | No remote `TRACK_ADDED` in `[flowspace:media]` logs | ICE/bridge broken — fix `DOCKER_HOST_ADDRESS` first; only local tracks means JVB never forwarded media |
 | “Connection refused” SSH | Security group port 22; correct `.pem` and IP |
 | Server very slow / OOM | Bootstrap adds swap; wait for build to finish |
@@ -150,10 +153,11 @@ After the server works manually:
 
 ```bash
 cd ~/flowspace
-npm run deploy                    # merge .env from template + rebuild (after git pull)
-npm run setup:prod -- --jitsi-host=... --public-ip=...  # first-time only, or to change hosts
-docker compose ps                 # check containers
-sudo systemctl status caddy       # check HTTPS proxy
+npm run deploy                                  # merge .env from template + rebuild (after git pull)
+./scripts/flowspace.sh deploy --auto-ip        # redeploy and re-detect public IP
+npm run fix:jvb                                 # fix a JVB advertising the wrong IP
+docker compose ps                              # check containers
+sudo systemctl status caddy                    # check HTTPS proxy
 ```
 
 ---
