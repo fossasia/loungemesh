@@ -100,6 +100,15 @@ describe('handleSessionConnectionWatch', () => {
     expect(conferenceStore.conferenceObject).toEqual({ id: 'conf' });
   });
 
+  it('does not set the conference object when the engine has none after join', async () => {
+    const { deps, conferenceStore } = makeDeps({
+      engine: { getConference: vi.fn(() => undefined) } as never,
+    });
+    await runWatch('room-b', true, deps);
+    expect(deps.joinRoom).toHaveBeenCalled();
+    expect(conferenceStore.conferenceObject).toBeUndefined();
+  });
+
   it('records non-Error join failures', async () => {
     const { deps, conferenceStore } = makeDeps({
       joinRoom: vi.fn().mockRejectedValue('offline'),

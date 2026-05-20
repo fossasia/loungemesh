@@ -149,6 +149,30 @@ describe('wireStoreSync', () => {
     volSpy.mockRestore();
   });
 
+  it('restores spatial volume when remote audio is unmuted', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    conference.patchUser('u1', { volume: 0.5 }, false);
+    const audioTrack = makeRemoteAudioTrack('u1');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, audioTrack);
+    volSpy.mockClear();
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...audioTrack,
+      isMuted: () => false,
+    });
+    expect(conference.users.u1.audio).toBeTruthy();
+    expect(volSpy).toHaveBeenCalledWith('u1', 0.5);
+    volSpy.mockRestore();
+  });
+
   it('silences Web Audio when remote audio is muted', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
@@ -169,6 +193,87 @@ describe('wireStoreSync', () => {
     expect(conference.users.u1.mute).toBe(true);
     expect(volSpy).toHaveBeenCalledWith('u1', 0);
     volSpy.mockRestore();
+  });
+
+  it('handles track mute/removed events with no participant id', async () => {
+    const engine = getMediaEngineInstance();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    expect(() => {
+      jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+        getType: () => 'audio',
+        isMuted: () => true,
+        isLocal: () => false,
+      } as JitsiTrack);
+      jitsi.conference._fire(ev.conference.TRACK_REMOVED, {
+        getType: () => 'audio',
+        isLocal: () => false,
+      } as JitsiTrack);
+    }).not.toThrow();
+  });
+
+  it('auto-adds an unknown user on mute change and uses default volume', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    const audioTrack = makeRemoteAudioTrack('newcomer');
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...audioTrack,
+      isMuted: () => false,
+    });
+    expect(conference.users.newcomer).toBeDefined();
+    conference.patchUser('newcomer', { volume: undefined as never }, false);
+    volSpy.mockClear();
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...audioTrack,
+      isMuted: () => false,
+    });
+    expect(volSpy).toHaveBeenLastCalledWith('newcomer', expect.any(Number));
+    volSpy.mockRestore();
+  });
+
+  it('applies default volume for newly added audio with no stored volume', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    conference.patchUser('u1', { volume: undefined as never }, false);
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, makeRemoteAudioTrack('u1'));
+    expect(volSpy).toHaveBeenCalledWith('u1', expect.any(Number));
+    volSpy.mockRestore();
+  });
+
+  it('removes a remote audio track', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    const audioTrack = makeRemoteAudioTrack('u1');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, audioTrack);
+    expect(conference.users.u1.audio).toBeTruthy();
+    jitsi.conference._fire(ev.conference.TRACK_REMOVED, audioTrack);
+    expect(conference.users.u1.audio).toBeUndefined();
   });
 
   it('dedupes identical chat messages', async () => {

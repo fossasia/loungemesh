@@ -8,6 +8,7 @@ import {
   minRoomSize,
   randomInitialUserPosition,
   roomSize,
+  sphereCenter,
   spreadInitialUserPosition,
   spheresOverlap,
   worldToRoom,
@@ -24,6 +25,11 @@ describe('pan constants', () => {
     const next = spreadInitialUserPosition([base]);
     expect(spheresOverlap(base, next)).toBe(false);
     expect(next.x !== base.x || next.y !== base.y).toBe(true);
+  });
+
+  it('sphereCenter returns the center of a 200x200 sphere', () => {
+    expect(sphereCenter({ x: 0, y: 0 })).toEqual({ x: 100, y: 100 });
+    expect(sphereCenter({ x: 50, y: 80 })).toEqual({ x: 150, y: 180 });
   });
 
   it('spheresOverlap detects box intersection', () => {

@@ -131,6 +131,35 @@ describe('LocalNameContainer', () => {
     wrapper.unmount();
   });
 
+  it('stops pointer and click events from bubbling out of the edit root', async () => {
+    const conference = useConferenceStore();
+    conference.setDisplayName('Alice');
+    const { wrapper } = await mountWithApp(LocalNameContainer);
+    const root = wrapper.find('.nameEditRoot');
+    await root.trigger('pointerdown');
+    await root.trigger('pointermove');
+    await root.trigger('click');
+    expect(wrapper.find('.nameEditRoot').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('updates the local label without broadcasting when not joined', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.setDisplayName('Alice');
+    conference.isJoined = false;
+    local.setMyID('me');
+    conference.addUser('me', { _displayName: 'Alice' });
+    const sendCommand = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(LocalNameContainer);
+    await wrapper.find('.editBtn').trigger('click');
+    await wrapper.find('input').setValue('Bob');
+    await wrapper.find('input').trigger('keydown', { key: 'Enter' });
+    expect(conference.users.me.user?._displayName).toBe('Bob');
+    expect(sendCommand).not.toHaveBeenCalledWith('name', expect.any(String));
+    wrapper.unmount();
+  });
+
   it('keeps previous name when draft is empty', async () => {
     const conference = useConferenceStore();
     conference.setDisplayName('Alice');

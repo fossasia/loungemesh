@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { publishLocalTrackToConference } from './conferenceLocalTracks';
+import { getConferenceLocalTracks, publishLocalTrackToConference } from './conferenceLocalTracks';
 import type { JitsiTrack } from '@/types/jitsi';
 
 function track(type: 'audio' | 'video', id: string): JitsiTrack {
@@ -15,6 +15,17 @@ function track(type: 'audio' | 'video', id: string): JitsiTrack {
     _id: id,
   } as JitsiTrack & { _id: string };
 }
+
+describe('getConferenceLocalTracks', () => {
+  it('returns the conference local tracks', () => {
+    const audio = track('audio', 'a1');
+    expect(getConferenceLocalTracks({ getLocalTracks: () => [audio] } as never)).toEqual([audio]);
+  });
+
+  it('returns an empty array when getLocalTracks is unavailable', () => {
+    expect(getConferenceLocalTracks({} as never)).toEqual([]);
+  });
+});
 
 describe('publishLocalTrackToConference', () => {
   it('skips when the track is already on the conference', async () => {

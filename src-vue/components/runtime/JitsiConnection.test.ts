@@ -8,6 +8,7 @@ import { getJitsiTestContext } from '@/test/jitsiTestContext';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
+import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import JitsiConnection from './JitsiConnection.vue';
 
@@ -265,6 +266,32 @@ describe('JitsiConnection', () => {
     await flushPromises();
     expect(conference.error).toBe('offline');
     connectSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('removes the pagehide listener and cleans up on unmount', async () => {
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+    const { wrapper } = await mountWithApp(JitsiConnection, {
+      route: '/session/room-unmount',
+      global: { stubs: { LocalStoreLogic: true } },
+    });
+    await flushPromises();
+    wrapper.unmount();
+    expect(removeSpy).toHaveBeenCalledWith('pagehide', expect.any(Function));
+    removeSpy.mockRestore();
+  });
+
+  it('stops local media when the page is hidden', async () => {
+    const local = useLocalStore();
+    const stopSpy = vi.spyOn(local, 'stopAllLocalMedia').mockResolvedValue(undefined);
+    const { wrapper } = await mountWithApp(JitsiConnection, {
+      route: '/session/room-pagehide',
+      global: { stubs: { LocalStoreLogic: true } },
+    });
+    await flushPromises();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(stopSpy).toHaveBeenCalled();
+    stopSpy.mockRestore();
     wrapper.unmount();
   });
 

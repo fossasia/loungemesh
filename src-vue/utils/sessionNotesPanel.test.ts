@@ -72,4 +72,31 @@ describe('sessionNotesPanel', () => {
     expect(publish).toHaveBeenCalledWith('draft');
     dispose();
   });
+
+  it('skips a scheduled publish if editing access is revoked before it fires', () => {
+    const publish = vi.fn();
+    let allowed = true;
+    const { push } = createNotesPushScheduler(
+      () => allowed,
+      () => 'draft',
+      publish,
+    );
+    push();
+    allowed = false;
+    vi.advanceTimersByTime(400);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('cancel clears a pending publish', () => {
+    const publish = vi.fn();
+    const { push, cancel } = createNotesPushScheduler(
+      () => true,
+      () => 'draft',
+      publish,
+    );
+    push();
+    cancel();
+    vi.advanceTimersByTime(400);
+    expect(publish).not.toHaveBeenCalled();
+  });
 });

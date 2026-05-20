@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { conferenceOptions } from '@/config/jitsiOptions';
 import { buildReceiverConstraints } from './receiverConstraints';
 
 describe('buildReceiverConstraints', () => {
@@ -43,5 +44,24 @@ describe('buildReceiverConstraints', () => {
       stageIds: [],
     });
     expect(constraints?.lastN).toBe(1);
+  });
+
+  describe('channelLastN fallback', () => {
+    const original = conferenceOptions.channelLastN;
+    afterEach(() => {
+      conferenceOptions.channelLastN = original;
+    });
+
+    it('falls back to 20 when channelLastN is not a positive number', () => {
+      conferenceOptions.channelLastN = 0 as never;
+      const ids = Array.from({ length: 30 }, (_, i) => `u${i}`);
+      const constraints = buildReceiverConstraints({
+        localId: 'me',
+        remoteUserIds: ids,
+        visibleUserIds: ids,
+        stageIds: [],
+      });
+      expect(constraints?.lastN).toBe(20);
+    });
   });
 });

@@ -22,6 +22,18 @@ describe('runConferenceJoin', () => {
     expect(engine.joinRoom).toHaveBeenCalledWith('room', 'Alice', {});
   });
 
+  it('leaves conferenceObject untouched when no conference is available', async () => {
+    const store = { isJoining: false, conferenceObject: undefined as unknown };
+    const engine = {
+      joinRoom: vi.fn().mockResolvedValue(undefined),
+      getConference: vi.fn().mockReturnValue(undefined),
+      isJoined: vi.fn().mockReturnValue(false),
+    };
+    await runConferenceJoin(engine, store, 'room', 'Alice', {});
+    expect(store.isJoining).toBe(true);
+    expect(store.conferenceObject).toBeUndefined();
+  });
+
   it('clears isJoining and rethrows on failure', async () => {
     const store = { isJoining: false, conferenceObject: undefined as unknown };
     const engine = {

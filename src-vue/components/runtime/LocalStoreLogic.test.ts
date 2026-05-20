@@ -298,6 +298,82 @@ describe('LocalStoreLogic', () => {
     wrapper.unmount();
   });
 
+  it('skips publishing a track already on the conference and adds the missing one', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    const published = makeTrack('audio');
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [published],
+    } as never);
+    const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+    local.audio = makeTrack('audio');
+    local.video = makeTrack('video');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    expect(addSpy).toHaveBeenCalledWith(local.video);
+    expect(addSpy).not.toHaveBeenCalledWith(local.audio);
+    addSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('logs Error failures when publishing a local track', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    vi.spyOn(engine, 'getConference').mockReturnValue({ getLocalTracks: () => [] } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockRejectedValue(new Error('publish failed'));
+    local.audio = makeTrack('audio');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    expect(local.audio).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it('logs non-Error failures when publishing a local track', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    vi.spyOn(engine, 'getConference').mockReturnValue({ getLocalTracks: () => [] } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockRejectedValue('string failure');
+    local.audio = makeTrack('audio');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    expect(local.audio).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it('posts worker updates when the user roster changes', async () => {
+    let workerInstance: { postMessage: ReturnType<typeof vi.fn> } | undefined;
+    class MockWorker {
+      onmessage: ((e: MessageEvent) => void) | null = null;
+      postMessage = vi.fn();
+      terminate() {}
+      constructor() {
+        workerInstance = this;
+      }
+    }
+    vi.stubGlobal('Worker', MockWorker);
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    local.setMyID('me');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    conference.addUser('peer');
+    await nextTick();
+    await flushPromises();
+    expect(workerInstance?.postMessage).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('keeps muted remote users silent even when overlapping', async () => {
     vi.stubGlobal(
       'Worker',

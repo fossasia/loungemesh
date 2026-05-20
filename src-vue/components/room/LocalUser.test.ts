@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { nextTick } from 'vue';
+import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useLocalStore } from '@/stores/localStore';
@@ -113,6 +115,106 @@ describe('LocalUser', () => {
     const { wrapper } = await mountWithApp(LocalUser);
     expect(wrapper.find('.floatReact').text()).toBe('👍');
     expect(wrapper.find('.handBadge').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('detaches the previous camera track when the track changes', async () => {
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    local.video = makeTrack('video');
+    const stale = local.video;
+    const detach = vi.spyOn(stale, 'detach');
+    const { wrapper } = await mountWithApp(LocalUser);
+    await nextTick();
+    local.video = makeTrack('video');
+    await nextTick();
+    await flushPromises();
+    expect(detach).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('detaches the camera track when the camera turns off', async () => {
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    local.video = makeTrack('video');
+    const detach = vi.spyOn(local.video, 'detach');
+    const { wrapper } = await mountWithApp(LocalUser);
+    await nextTick();
+    local.cameraOff = true;
+    await nextTick();
+    await flushPromises();
+    expect(detach).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('skips play() when the video element is already playing', async () => {
+    const pausedSpy = vi
+      .spyOn(HTMLMediaElement.prototype, 'paused', 'get')
+      .mockReturnValue(false);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play');
+    const local = useLocalStore();
+    local.videoType = 'camera';
+    local.video = makeTrack('video');
+    const { wrapper } = await mountWithApp(LocalUser);
+    await nextTick();
+    await flushPromises();
+    expect(playSpy).not.toHaveBeenCalled();
+    pausedSpy.mockRestore();
+    playSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('handles play() rejection on attach', async () => {
+    const playSpy = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockRejectedValue(new Error('autoplay blocked'));
+    const local = useLocalStore();
+    local.videoType = 'camera';
+    local.video = makeTrack('video');
+    const { wrapper } = await mountWithApp(LocalUser);
+    await nextTick();
+    await flushPromises();
+    expect(playSpy).toHaveBeenCalled();
+    playSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('logs non-Error attach failures', async () => {
+    const local = useLocalStore();
+    const video = makeTrack('video');
+    video.attach = vi.fn(() => {
+      throw 'attach exploded';
+    }) as never;
+    local.videoType = 'camera';
+    local.video = video;
+    const { wrapper } = await mountWithApp(LocalUser);
+    await nextTick();
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('guards pointer handlers when the drag surface ref is null', async () => {
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    const { wrapper } = await mountWithApp(LocalUser);
+    const tile = wrapper.find('.dragSurface').element;
+    const ref = wrapper.vm as unknown as { dragSurface: HTMLElement | null };
+
+    ref.dragSurface = null;
+    tile.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, clientX: 1, clientY: 1, button: 0, pointerId: 11 }),
+    );
+
+    ref.dragSurface = tile as HTMLElement;
+    tile.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, clientX: 2, clientY: 2, button: 0, pointerId: 12 }),
+    );
+    ref.dragSurface = null;
+    tile.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 12 }));
     wrapper.unmount();
   });
 

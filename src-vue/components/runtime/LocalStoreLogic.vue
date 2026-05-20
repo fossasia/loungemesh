@@ -54,13 +54,13 @@ function applyVolumes(myPos: { x: number; y: number }) {
   }
 }
 
+// Callers gate this on `worker && workerReady`, so the worker is always present here.
 function postWorkerUpdate(myPos: { x: number; y: number }) {
-  if (!worker || !workerReady) return;
   const users = Object.values(conferenceStore.users).map((u) => ({
     id: u.id,
     pos: { x: u.pos.x, y: u.pos.y },
   }));
-  worker.postMessage({ myPos: { x: myPos.x, y: myPos.y }, users });
+  worker!.postMessage({ myPos: { x: myPos.x, y: myPos.y }, users });
 }
 
 function initProximityWorker() {

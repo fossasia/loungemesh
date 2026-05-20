@@ -379,6 +379,27 @@ describe('localStore', () => {
     expect(store.video).toBeUndefined();
   });
 
+  it('enableCamera disposes the new track when conference add fails while joined', async () => {
+    const created = {
+      getType: () => 'video',
+      videoType: 'camera',
+      isMuted: vi.fn().mockReturnValue(false),
+      dispose: vi.fn(),
+    };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [],
+      removeTrack: vi.fn().mockResolvedValue(undefined),
+    } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockRejectedValue(new Error('add failed'));
+    const store = useLocalStore();
+    await store.enableCamera();
+    expect(created.dispose).toHaveBeenCalled();
+    expect(store.video).toBeUndefined();
+  });
+
   it('disableCamera removes and disposes the current camera track', async () => {
     const video = {
       getType: () => 'video',
@@ -476,6 +497,22 @@ describe('localStore', () => {
     store.calculateUsersOnScreen();
     expect(store.visibleUsers).toContain('on-screen');
     el.remove();
+  });
+
+  it('calculateUsersOnScreen skips receiver constraints when the bridge channel is off', async () => {
+    const { conferenceOptions } = await import('@/config/jitsiOptions');
+    const original = conferenceOptions.openBridgeChannel;
+    conferenceOptions.openBridgeChannel = '' as never;
+    const conference = useConferenceStore();
+    conference.addUser('u1');
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'me';
+    store.calculateUsersOnScreen();
+    expect(constraintsSpy).not.toHaveBeenCalled();
+    constraintsSpy.mockRestore();
+    conferenceOptions.openBridgeChannel = original;
   });
 
   it('calculateUsersOnScreen skips elements without id', () => {

@@ -54,6 +54,32 @@ describe('conferenceStore', () => {
     expect(() => store.updateUserPosition('ghost', { x: 1, y: 2 })).not.toThrow();
   });
 
+  it('patchUser is a no-op for an unknown user', () => {
+    const store = useConferenceStore();
+    const epochBefore = store.usersEpoch;
+    store.patchUser('ghost', { mute: true });
+    expect(store.users.ghost).toBeUndefined();
+    expect(store.usersEpoch).toBe(epochBefore);
+  });
+
+  it('addUser keeps an existing entry when re-added without a display name', () => {
+    const store = useConferenceStore();
+    store.addUser('u9', { _displayName: 'Dana' });
+    store.addUser('u9');
+    expect(store.users.u9.user?._displayName).toBe('Dana');
+    expect(Object.keys(store.users)).toHaveLength(1);
+  });
+
+  it('clearUserTrack, removeUser and updateUserDisplayName ignore unknown or blank input', () => {
+    const store = useConferenceStore();
+    expect(() => store.clearUserTrack('ghost', 'video')).not.toThrow();
+    expect(() => store.removeUser('ghost')).not.toThrow();
+    store.addUser('u10', { _displayName: 'Eve' });
+    store.updateUserDisplayName('u10', '   ');
+    store.updateUserDisplayName('ghost', 'Frank');
+    expect(store.users.u10.user?._displayName).toBe('Eve');
+  });
+
   it('setConferenceName updates the name', () => {
     const store = useConferenceStore();
     store.setConferenceName('my-room');
@@ -81,6 +107,17 @@ describe('conferenceStore', () => {
     expect(store.users.u6.video).toBeTruthy();
   });
 
+  it('setUserTrack is a no-op for an unknown user', () => {
+    const store = useConferenceStore();
+    const epochBefore = store.usersEpoch;
+    store.setUserTrack('ghost', 'audio', {
+      getType: () => 'audio',
+      isMuted: () => false,
+    } as never);
+    expect(store.users.ghost).toBeUndefined();
+    expect(store.usersEpoch).toBe(epochBefore);
+  });
+
   it('clearUserTrack removes media from a user', () => {
     const store = useConferenceStore();
     store.addUser('u7');
@@ -91,6 +128,20 @@ describe('conferenceStore', () => {
     } as never);
     store.clearUserTrack('u7', 'video');
     expect(store.users.u7.video).toBeUndefined();
+  });
+
+  it('clearUserTrack removes audio and unmutes the user', () => {
+    const store = useConferenceStore();
+    store.addUser('u8');
+    store.setUserTrack('u8', 'audio', {
+      getType: () => 'audio',
+      isMuted: () => true,
+    } as never);
+    expect(store.users.u8.audio).toBeTruthy();
+    expect(store.users.u8.mute).toBe(true);
+    store.clearUserTrack('u8', 'audio');
+    expect(store.users.u8.audio).toBeUndefined();
+    expect(store.users.u8.mute).toBe(false);
   });
 
   it('updateUserDisplayName updates remote user label', () => {

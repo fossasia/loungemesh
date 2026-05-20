@@ -206,4 +206,12 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('pos', { value: 'not-json' });
     expect(conference.users.u1.pos).toEqual(before);
   });
+
+  it('ignores name commands with blank or missing names', () => {
+    const conference = useConferenceStore();
+    conference.addUser('u1', { _displayName: 'Original' });
+    handleSessionCommand('name', { value: JSON.stringify({ id: 'u1', name: '   ' }) });
+    handleSessionCommand('name', { value: JSON.stringify({ id: 'u1' }) });
+    expect(conference.users.u1.user?._displayName).toBe('Original');
+  });
 });

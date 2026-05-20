@@ -18,6 +18,28 @@ describe('RemoteVideo', () => {
     wrapper.unmount();
   });
 
+  it('handles play rejection after attaching', async () => {
+    const playSpy = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockRejectedValue(new Error('autoplay blocked'));
+    const track = makeTrack('video');
+    const { wrapper } = await mountWithApp(RemoteVideo, { props: { id: 'u1', track } });
+    await flushPromises();
+    expect(playSpy).toHaveBeenCalled();
+    playSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('logs non-Error attach failures', async () => {
+    const track = makeTrack('video');
+    track.attach = vi.fn(() => {
+      throw 'attach exploded';
+    }) as never;
+    const { wrapper } = await mountWithApp(RemoteVideo, { props: { id: 'u1', track } });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
   it('attaches and detaches when track changes', async () => {
     const track = makeTrack('video');
     const track2 = makeTrack('video');

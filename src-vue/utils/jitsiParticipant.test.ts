@@ -24,6 +24,20 @@ describe('participantIdFromTrack', () => {
       } as never),
     ).toBe('peer-1');
   });
+
+  it('falls back to ownerId and returns undefined when neither is set', () => {
+    expect(
+      participantIdFromTrack({
+        getParticipantId: () => undefined,
+        ownerId: 'owner-9',
+      } as never),
+    ).toBe('owner-9');
+    expect(
+      participantIdFromTrack({
+        getParticipantId: () => undefined,
+      } as never),
+    ).toBeUndefined();
+  });
 });
 
 describe('sanitizeParticipantProperties', () => {
@@ -40,5 +54,10 @@ describe('sanitizeParticipantProperties', () => {
       handRaised: 'true',
       onStage: false,
     });
+  });
+
+  it('returns an empty object for null or non-object input', () => {
+    expect(sanitizeParticipantProperties(null)).toEqual({});
+    expect(sanitizeParticipantProperties(undefined)).toEqual({});
   });
 });

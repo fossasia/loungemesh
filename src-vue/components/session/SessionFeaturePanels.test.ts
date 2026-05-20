@@ -30,6 +30,72 @@ describe('SessionFeaturePanels', () => {
     wrapper.unmount();
   });
 
+  it('flushes notes on blur when the draft changed', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    features.panel = 'notes';
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    await flushPromises();
+    const ta = wrapper.find('.notesTa');
+    await ta.setValue('blur published');
+    await ta.trigger('blur');
+    vi.advanceTimersByTime(500);
+    expect(features.sharedNotes).toBe('blur published');
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ text: 'blur published' }));
+    wrapper.unmount();
+  });
+
+  it('keeps scheduling while the user keeps typing', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    features.panel = 'notes';
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const ta = wrapper.find('.notesTa');
+    await ta.setValue('first');
+    await ta.setValue('second');
+    vi.advanceTimersByTime(500);
+    expect(features.sharedNotes).toBe('second');
+    wrapper.unmount();
+  });
+
+  it('does not republish when the scheduled draft equals the shared notes', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    features.sharedNotes = 'same';
+    features.panel = 'notes';
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    await flushPromises();
+    await wrapper.find('.notesTa').setValue('same');
+    vi.advanceTimersByTime(500);
+    expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.any(String));
+    wrapper.unmount();
+  });
+
+  it('does not publish when shared notes changed before the debounce fired', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    features.sharedNotes = 'base';
+    features.panel = 'notes';
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    await flushPromises();
+    await wrapper.find('.notesTa').setValue('edited');
+    features.sharedNotes = 'external';
+    vi.advanceTimersByTime(500);
+    expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.stringContaining('edited'));
+    wrapper.unmount();
+  });
+
   it('runs moderator flows for host', async () => {
     const features = useSessionFeaturesStore();
     const conference = useConferenceStore();

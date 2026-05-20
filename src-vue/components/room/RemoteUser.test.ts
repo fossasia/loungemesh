@@ -65,6 +65,15 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
+  it('falls back to a default name when no display name is known', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u-noname');
+    conference.users['u-noname'].pos = { x: 0, y: 0 };
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-noname' } });
+    expect(wrapper.text()).toContain('Friendly Sphere');
+    wrapper.unmount();
+  });
+
   it('renders on-stage backdrop', async () => {
     const conference = useConferenceStore();
     conference.addUser('u2', { _displayName: 'Pat' } as never);

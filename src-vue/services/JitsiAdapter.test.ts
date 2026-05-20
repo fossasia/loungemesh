@@ -405,6 +405,191 @@ describe('JitsiAdapter', () => {
     expect(adapter.isJoined()).toBe(true);
   });
 
+  it('uses empty conference options when none are provided', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', null as never);
+    expect(mock.connection.initJitsiConference).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles mute, removal and display-name edge cases', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    const ev = mock.jsMeet.events.conference;
+    mock.conference._fire(ev.CONFERENCE_JOINED);
+
+    mock.conference._fire(ev.TRACK_MUTE_CHANGED, { isLocal: () => true, getType: () => 'audio' });
+    mock.conference._fire(ev.TRACK_MUTE_CHANGED, {
+      isLocal: () => false,
+      getType: () => 'audio',
+      isMuted: () => true,
+      getParticipantId: () => 'm1',
+    });
+    mock.conference._fire(ev.TRACK_MUTE_CHANGED, {
+      isLocal: () => false,
+      getType: () => 'audio',
+      isMuted: () => true,
+      getParticipantId: () => undefined,
+    });
+    mock.conference._fire(ev.TRACK_MUTE_CHANGED, makeRemoteAudioTrack('m2'));
+    mock.conference._fire(ev.TRACK_MUTE_CHANGED, { isLocal: () => false, getType: () => 'video' });
+
+    mock.conference._fire(ev.TRACK_REMOVED, { isLocal: () => true, getType: () => 'audio' });
+    mock.conference._fire(ev.TRACK_REMOVED, {
+      isLocal: () => false,
+      getType: () => 'audio',
+      getParticipantId: () => 'r1',
+    });
+    mock.conference._fire(ev.TRACK_REMOVED, {
+      isLocal: () => false,
+      getType: () => 'audio',
+      getParticipantId: () => undefined,
+    });
+    mock.conference._fire(ev.TRACK_REMOVED, { isLocal: () => false, getType: () => 'video' });
+
+    const onName = vi.fn();
+    adapter.on('displayNameChanged', onName);
+    mock.conference._fire(ev.DISPLAY_NAME_CHANGED, 'u9', undefined);
+    mock.conference._fire(ev.DISPLAY_NAME_CHANGED, 'u9', '   ');
+    expect(onName).not.toHaveBeenCalled();
+    mock.conference._fire(ev.DISPLAY_NAME_CHANGED, 'u9', 'Zed');
+    expect(onName).toHaveBeenCalledWith('u9', 'Zed');
+  });
+
+  it('emits tracks supplied by a joining participant', async () => {
+    const onTrack = vi.fn();
+    adapter.on('trackAdded', onTrack);
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    const ev = mock.jsMeet.events.conference;
+    mock.conference._fire(ev.USER_JOINED, 'u5', {
+      getTracks: () => [
+        { isLocal: () => true, getType: () => 'audio' },
+        makeRemoteAudioTrack('p-audio'),
+        { isLocal: () => false, getType: () => 'video' },
+        { isLocal: () => false, getType: () => 'audio', isMuted: () => true },
+      ],
+    });
+    expect(onTrack).toHaveBeenCalledTimes(3);
+  });
+
+  it('skips existing-track emission when the conference has no participant API', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    (mock.conference as unknown as { getParticipants?: unknown }).getParticipants = undefined;
+    expect(() =>
+      mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED),
+    ).not.toThrow();
+    expect(adapter.isJoined()).toBe(true);
+  });
+
+  it('resumePlayback resumes only a suspended AudioContext', () => {
+    const resume = vi.fn().mockResolvedValue(undefined);
+    class SuspendedCtx {
+      state = 'suspended';
+      currentTime = 0;
+      destination = {};
+      resume = resume;
+      close = vi.fn();
+      createGain = vi.fn();
+      createMediaStreamSource = vi.fn();
+    }
+    vi.stubGlobal('AudioContext', SuspendedCtx);
+    try {
+      adapter.resumePlayback();
+      expect(resume).toHaveBeenCalled();
+      adapter.disconnect();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const runningResume = vi.fn();
+    class RunningCtx {
+      state = 'running';
+      currentTime = 0;
+      destination = {};
+      resume = runningResume;
+      close = vi.fn();
+      createGain = vi.fn();
+      createMediaStreamSource = vi.fn();
+    }
+    vi.stubGlobal('AudioContext', RunningCtx);
+    try {
+      const a2 = new JitsiAdapter();
+      a2.resumePlayback();
+      expect(runningResume).not.toHaveBeenCalled();
+      a2.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ignores non-audio or muted tracks when wiring remote audio', () => {
+    const wire = (adapter as unknown as { wireRemoteAudioTrack: (t: unknown) => void })
+      .wireRemoteAudioTrack;
+    expect(() =>
+      wire.call(adapter, { getType: () => 'video', isMuted: () => false }),
+    ).not.toThrow();
+  });
+
+  it('reconnects gain nodes on AudioContext resume and guards stale nodes', async () => {
+    const created: Array<{ connect: ReturnType<typeof vi.fn> }> = [];
+    let instance: { state: string; onstatechange: (() => void) | null } | undefined;
+    class CapturingCtx {
+      state = 'suspended';
+      currentTime = 0;
+      destination = {};
+      onstatechange: (() => void) | null = null;
+      resume = vi.fn().mockResolvedValue(undefined);
+      close = vi.fn();
+      createMediaStreamSource = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }));
+      createGain = vi.fn(() => {
+        const g = { connect: vi.fn(), disconnect: vi.fn(), gain: { value: 1, setTargetAtTime: vi.fn() } };
+        created.push(g);
+        return g;
+      });
+      constructor() {
+        instance = this as unknown as { state: string; onstatechange: (() => void) | null };
+      }
+    }
+    vi.stubGlobal('AudioContext', CapturingCtx);
+    try {
+      await adapter.connect();
+      mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+      await adapter.joinRoom('room', 'A', {});
+      const ev = mock.jsMeet.events.conference;
+      mock.conference._fire(ev.CONFERENCE_JOINED);
+
+      mock.conference._fire(ev.TRACK_ADDED, makeRemoteAudioTrack('a1'));
+      const handlerA = instance!.onstatechange!;
+      const gainA = created[created.length - 1];
+      handlerA();
+      expect(gainA.connect).toHaveBeenCalledTimes(1);
+      instance!.state = 'running';
+      handlerA();
+      expect(gainA.connect).toHaveBeenCalledTimes(2);
+
+      instance!.state = 'suspended';
+      mock.conference._fire(ev.TRACK_ADDED, makeRemoteAudioTrack('a2'));
+      const handlerB = instance!.onstatechange!;
+      const gainB = created[created.length - 1];
+      mock.conference._fire(ev.TRACK_REMOVED, {
+        isLocal: () => false,
+        getType: () => 'audio',
+        getParticipantId: () => 'a2',
+      });
+      instance!.state = 'running';
+      handlerB();
+      expect(gainB.connect).toHaveBeenCalledTimes(1);
+      adapter.disconnect();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('resumes suspended AudioContext when wiring remote audio', async () => {
     const resume = vi.fn().mockResolvedValue(undefined);
     class MockAudioContext {

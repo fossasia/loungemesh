@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { disposeJitsiTrack } from './disposeJitsiTrack';
+import { disposeJitsiTrack, stopTrackStream } from './disposeJitsiTrack';
 
 describe('disposeJitsiTrack', () => {
   it('calls dispose when present', () => {
@@ -22,5 +22,29 @@ describe('disposeJitsiTrack', () => {
         },
       } as never),
     ).not.toThrow();
+  });
+});
+
+describe('stopTrackStream', () => {
+  it('stops the underlying media tracks without disposing the Jitsi track', () => {
+    const stop = vi.fn();
+    const dispose = vi.fn();
+    stopTrackStream({
+      dispose,
+      getTrack: () => ({ stop }),
+    } as never);
+    expect(stop).toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it('collects raw tracks from the legacy track and stream properties', () => {
+    const stopTrack = vi.fn();
+    const stopStream = vi.fn();
+    stopTrackStream({
+      track: { stop: stopTrack },
+      stream: { getTracks: () => [{ stop: stopStream }] },
+    } as never);
+    expect(stopTrack).toHaveBeenCalled();
+    expect(stopStream).toHaveBeenCalled();
   });
 });

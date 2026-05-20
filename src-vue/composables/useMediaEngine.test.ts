@@ -206,6 +206,21 @@ describe('useMediaEngine', () => {
     expect(api1.engine).toBe(api2.engine);
   });
 
+  it('prints debug guidance on first wire when media debug is enabled', () => {
+    resetMediaEngineWiringForTests();
+    vi.stubEnv('VITE_MEDIA_DEBUG', 'true');
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    useMediaEngine();
+    expect(info).toHaveBeenCalledWith(
+      '[flowspace:media]',
+      expect.stringContaining('Debug logging on'),
+      expect.any(String),
+      expect.any(String),
+    );
+    info.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
   it('connects without a stored jwt when none is passed', async () => {
     clearStoredAccess();
     const jitsi = getJitsiTestContext();
