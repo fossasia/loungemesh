@@ -36,6 +36,19 @@ describe('buildReceiverConstraints', () => {
     expect(constraints?.onStageSources).toEqual(['b-v0']);
   });
 
+  it('requests every selected source in the per-source constraints map', () => {
+    const constraints = buildReceiverConstraints({
+      localId: 'me',
+      remoteUserIds: ['a', 'b'],
+      visibleUserIds: ['a'],
+      stageIds: ['b'],
+    });
+    // Empty per-source constraints leave modern JVB forwarding nothing, so every
+    // selected source must appear, with on-stage requested at a higher resolution.
+    expect(constraints?.constraints['a-v0']).toEqual({ maxHeight: 360 });
+    expect(constraints?.constraints['b-v0']).toEqual({ maxHeight: 720 });
+  });
+
   it('never sets lastN to zero when remotes exist', () => {
     const constraints = buildReceiverConstraints({
       localId: 'me',

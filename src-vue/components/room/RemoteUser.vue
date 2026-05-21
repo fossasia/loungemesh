@@ -46,7 +46,7 @@ const videoTrackKey = computed(() => {
   const t = videoTrack.value as { getTrackLabel?: () => string } | undefined;
   return t?.getTrackLabel?.() ?? props.id;
 });
-const showAvatar = computed(() => !videoTrack.value || !!videoTrack.value.isMuted?.());
+const showAvatar = computed(() => !videoTrack.value);
 const speaking = computed(() => !!user.value?.speaking && !user.value?.mute);
 const reaction = computed(() => features.userReactions[props.id]?.emoji);
 const handUp = computed(
@@ -57,7 +57,14 @@ const handUp = computed(
 </script>
 
 <template>
-  <div v-if="user" class="userContainer" :id="id" :style="style">
+  <div
+    v-if="user"
+    class="userContainer"
+    :id="id"
+    :data-recording-participant="id"
+    :data-recording-name="nameLabel"
+    :style="style"
+  >
     <div class="videoContainer" :class="{ desktop: isDesktop }">
       <UserBackdrop
         v-if="showAvatar"

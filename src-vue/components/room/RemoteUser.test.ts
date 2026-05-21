@@ -32,6 +32,20 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
+  it('shows a remote video track even if lib-jitsi reports it muted', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u-muted-flag', { _displayName: 'Muted Flag' } as never);
+    const track = makeTrack('video');
+    track.isMuted = () => true;
+    conference.users['u-muted-flag'].pos = { x: 0, y: 0 };
+    conference.users['u-muted-flag'].video = track;
+
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-muted-flag' } });
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'UserBackdrop' }).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('renders desktop share layout', async () => {
     const conference = useConferenceStore();
     conference.addUser('u1', { _displayName: 'Bob' } as never);

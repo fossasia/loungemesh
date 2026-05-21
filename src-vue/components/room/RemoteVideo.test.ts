@@ -53,4 +53,13 @@ describe('RemoteVideo', () => {
     wrapper.unmount();
     expect(attach).toHaveBeenCalled();
   });
+
+  it('does not hide a track only because Jitsi still reports it muted', async () => {
+    const track = makeTrack('video');
+    track.isMuted = () => true;
+    const { wrapper } = await mountWithApp(RemoteVideo, { props: { id: 'u1', track } });
+    await flushPromises();
+    expect(wrapper.find('video.remoteVideo').classes()).not.toContain('hidden');
+    wrapper.unmount();
+  });
 });

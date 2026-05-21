@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
     playsinline
     muted
     class="remoteVideo"
-    :class="{ speaking: !!speaking, hidden: !!track?.isMuted?.() }"
+    :class="{ speaking: !!speaking }"
     :id="`${id}video`"
   />
 </template>
@@ -106,9 +106,6 @@ onBeforeUnmount(() => {
   border: 4px solid var(--color-mono60);
   box-sizing: border-box;
   transition: border-color 0.2s ease;
-}
-.remoteVideo.hidden {
-  visibility: hidden;
 }
 .remoteVideo.speaking {
   border-color: var(--color-blue100);
