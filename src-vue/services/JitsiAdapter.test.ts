@@ -14,6 +14,7 @@ describe('JitsiAdapter', () => {
   afterEach(() => {
     adapter.dispose();
     mock.cleanup();
+    vi.unstubAllEnvs();
   });
 
   it('throws when JitsiMeetJS is missing', () => {
@@ -29,6 +30,46 @@ describe('JitsiAdapter', () => {
     mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
     expect(onConnected).toHaveBeenCalled();
     expect(adapter.isConnected()).toBe(true);
+  });
+
+  it('blocks lib-jitsi unload listeners during connection construction', async () => {
+    const unloadHandler = vi.fn();
+    const pagehideHandler = vi.fn();
+    mock.jsMeet.JitsiConnection = vi.fn(function JitsiConnection() {
+      window.addEventListener('unload', unloadHandler);
+      window.addEventListener('pagehide', pagehideHandler);
+      return mock.connection;
+    }) as never;
+    await adapter.connect();
+    window.dispatchEvent(new Event('unload'));
+    window.dispatchEvent(new Event('pagehide'));
+    expect(unloadHandler).not.toHaveBeenCalled();
+    expect(pagehideHandler).toHaveBeenCalled();
+    window.removeEventListener('pagehide', pagehideHandler);
+  });
+
+  it('suppresses TURN credential discovery when no TURN service is configured', async () => {
+    const original = mock.connection.jingle?.getStunAndTurnCredentials;
+    const nestedOriginal = mock.connection.xmpp?.connection?.jingle?.getStunAndTurnCredentials;
+    await adapter.connect();
+    expect(mock.connection.jingle?.getStunAndTurnCredentials).not.toBe(original);
+    expect(mock.connection.xmpp?.connection?.jingle?.getStunAndTurnCredentials).not.toBe(nestedOriginal);
+    expect(() => mock.connection.jingle?.getStunAndTurnCredentials?.()).not.toThrow();
+  });
+
+  it('keeps TURN credential discovery enabled when configured', async () => {
+    vi.stubEnv('VITE_DISABLE_STUN_TURN_DISCOVERY', 'false');
+    const original = mock.connection.jingle?.getStunAndTurnCredentials;
+    const nestedOriginal = mock.connection.xmpp?.connection?.jingle?.getStunAndTurnCredentials;
+    await adapter.connect();
+    expect(mock.connection.jingle?.getStunAndTurnCredentials).toBe(original);
+    expect(mock.connection.xmpp?.connection?.jingle?.getStunAndTurnCredentials).toBe(nestedOriginal);
+  });
+
+  it('connects when lib-jitsi exposes no jingle helper yet', async () => {
+    mock.connection.jingle = undefined;
+    await adapter.connect();
+    expect(mock.connection.connect).toHaveBeenCalled();
   });
 
   it('emits connectionFailed with xmpp message', async () => {
@@ -536,7 +577,10 @@ describe('JitsiAdapter', () => {
   });
 
   it('reconnects gain nodes on AudioContext resume and guards stale nodes', async () => {
-    const created: Array<{ connect: ReturnType<typeof vi.fn> }> = [];
+    const created: Array<{
+      connect: ReturnType<typeof vi.fn>;
+      gain: { setTargetAtTime: ReturnType<typeof vi.fn> };
+    }> = [];
     let instance: { state: string; onstatechange: (() => void) | null } | undefined;
     class CapturingCtx {
       state = 'suspended';
@@ -562,10 +606,15 @@ describe('JitsiAdapter', () => {
       await adapter.joinRoom('room', 'A', {});
       const ev = mock.jsMeet.events.conference;
       mock.conference._fire(ev.CONFERENCE_JOINED);
+      adapter.resumePlayback();
 
       mock.conference._fire(ev.TRACK_ADDED, makeRemoteAudioTrack('a1'));
       const handlerA = instance!.onstatechange!;
       const gainA = created[created.length - 1];
+      adapter.setParticipantVolume('a1', 1.5);
+      expect(gainA.gain.setTargetAtTime).toHaveBeenCalledWith(1, 0, 0.015);
+      adapter.setParticipantVolume('a1', -0.5);
+      expect(gainA.gain.setTargetAtTime).toHaveBeenCalledWith(0, 0, 0.015);
       handlerA();
       expect(gainA.connect).toHaveBeenCalledTimes(1);
       instance!.state = 'running';
@@ -612,7 +661,38 @@ describe('JitsiAdapter', () => {
         getParticipantId: () => 'remote-a',
         getOriginalStream: () => ({}),
       });
+      expect(resume).not.toHaveBeenCalled();
+      adapter.resumePlayback();
       expect(resume).toHaveBeenCalled();
+      adapter.disconnect();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('wires remote audio without resume handler when AudioContext is already running', async () => {
+    class RunningAudioContext {
+      state = 'running';
+      destination = {};
+      currentTime = 0;
+      onstatechange: (() => void) | null = null;
+      resume = vi.fn();
+      close = vi.fn();
+      createMediaStreamSource = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }));
+      createGain = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        gain: { value: 1, setTargetAtTime: vi.fn() },
+      }));
+    }
+    vi.stubGlobal('AudioContext', RunningAudioContext);
+    try {
+      await adapter.connect();
+      mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+      await adapter.joinRoom('room', 'A', {});
+      mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+      adapter.resumePlayback();
+      mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, makeRemoteAudioTrack('running-a'));
       adapter.disconnect();
     } finally {
       vi.unstubAllGlobals();

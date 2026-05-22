@@ -2,6 +2,7 @@ import type { JitsiTrack } from '@/types/jitsi';
 
 type RawTrackHolder = {
   getTrack?: () => MediaStreamTrack | null;
+  getStream?: () => MediaStream | null;
   getOriginalStream?: () => MediaStream | null;
   track?: MediaStreamTrack | null;
   stream?: MediaStream | null;
@@ -27,6 +28,11 @@ export function collectMediaStreamTracks(track: JitsiTrack | undefined): MediaSt
   }
   try {
     holder.getOriginalStream?.()?.getTracks?.().forEach((t) => result.add(t));
+  } catch {
+    /* ignore */
+  }
+  try {
+    holder.getStream?.()?.getTracks?.().forEach((t) => result.add(t));
   } catch {
     /* ignore */
   }

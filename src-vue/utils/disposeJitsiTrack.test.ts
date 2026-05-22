@@ -40,11 +40,14 @@ describe('stopTrackStream', () => {
   it('collects raw tracks from the legacy track and stream properties', () => {
     const stopTrack = vi.fn();
     const stopStream = vi.fn();
+    const stopGetStream = vi.fn();
     stopTrackStream({
+      getStream: () => ({ getTracks: () => [{ stop: stopGetStream }] }),
       track: { stop: stopTrack },
       stream: { getTracks: () => [{ stop: stopStream }] },
     } as never);
     expect(stopTrack).toHaveBeenCalled();
     expect(stopStream).toHaveBeenCalled();
+    expect(stopGetStream).toHaveBeenCalled();
   });
 });

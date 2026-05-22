@@ -52,33 +52,24 @@ describe('ensureLocalTracks', () => {
     expect(tracks).toHaveLength(1);
   });
 
-  it('mutes new audio when the user prefers mute', async () => {
+  it('does not reacquire audio while the user is muted', async () => {
     const local = useLocalStore();
     local.mute = true;
-    const audio = {
-      getType: () => 'audio',
-      isMuted: vi.fn().mockReturnValue(false),
-      mute: vi.fn().mockResolvedValue(undefined),
-    };
     const engine = {
-      createLocalTracks: vi.fn().mockResolvedValue([audio]),
+      createLocalTracks: vi.fn().mockResolvedValue([{ getType: () => 'video', videoType: 'camera' }]),
     };
     await ensureLocalTracks(local, engine as never);
-    expect(audio.mute).toHaveBeenCalled();
+    expect(engine.createLocalTracks).toHaveBeenCalledWith(['video']);
+    expect(local.audio).toBeUndefined();
   });
 
-  it('ignores mute failures on freshly created audio', async () => {
+  it('requests nothing when muted and camera is off', async () => {
     const local = useLocalStore();
     local.mute = true;
-    const audio = {
-      getType: () => 'audio',
-      isMuted: vi.fn().mockReturnValue(false),
-      mute: vi.fn().mockRejectedValue(new Error('fail')),
-    };
-    const engine = {
-      createLocalTracks: vi.fn().mockResolvedValue([audio]),
-    };
-    await expect(ensureLocalTracks(local, engine as never)).resolves.toBeDefined();
+    local.cameraOff = true;
+    const engine = { createLocalTracks: vi.fn() };
+    await expect(ensureLocalTracks(local, engine as never)).resolves.toEqual([]);
+    expect(engine.createLocalTracks).not.toHaveBeenCalled();
   });
 
   it('skips create when tracks already exist', async () => {

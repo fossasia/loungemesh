@@ -18,6 +18,8 @@ interface ImportMetaEnv {
   readonly VITE_SERVICE_URL?: string;
   readonly VITE_USE_WEBSOCKET?: string;
   readonly VITE_SESSION_PREFIX?: string;
+  /** Set to `false` only when Prosody is configured with a real TURN service. */
+  readonly VITE_DISABLE_STUN_TURN_DISCOVERY?: string;
   /** Set to e.g. https://api.eventyay.com to load optional room wallpapers. */
   readonly VITE_EVENTYAY_API_BASE?: string;
   /**

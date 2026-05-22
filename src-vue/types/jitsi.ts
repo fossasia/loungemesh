@@ -58,7 +58,11 @@ export interface JitsiConnection {
   disconnect(event?: unknown): void | Promise<void>;
   initJitsiConference(name: string, options: Record<string, unknown>): JitsiConference;
   addEventListener(event: string, handler: () => void): void;
-  xmpp?: { lastErrorMsg?: string };
+  xmpp?: {
+    lastErrorMsg?: string;
+    connection?: { jingle?: { getStunAndTurnCredentials?: () => void } };
+  };
+  jingle?: { getStunAndTurnCredentials?: () => void };
 }
 
 export interface JitsiMeetJSEvents {

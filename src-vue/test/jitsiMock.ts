@@ -65,7 +65,11 @@ export function installJitsiMock(): JitsiMockHandles {
     addEventListener: vi.fn((event: string, handler: Handler) => {
       connectionHandlers.set(event, handler);
     }),
-    xmpp: { lastErrorMsg: 'xmpp-error' },
+    jingle: { getStunAndTurnCredentials: vi.fn() },
+    xmpp: {
+      lastErrorMsg: 'xmpp-error',
+      connection: { jingle: { getStunAndTurnCredentials: vi.fn() } },
+    },
   } as unknown as JitsiMockHandles['connection'];
 
   const events = {

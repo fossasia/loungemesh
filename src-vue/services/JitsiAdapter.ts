@@ -31,6 +31,40 @@ function ensureDisconnectReturnsPromise(connection: import('@/types/jitsi').Jits
   mutable.__flowspaceDisconnectWrapped = true;
 }
 
+function shouldDisableTurnCredentialDiscovery(): boolean {
+  return import.meta.env.VITE_DISABLE_STUN_TURN_DISCOVERY !== 'false';
+}
+
+function disableTurnCredentialDiscovery(connection: import('@/types/jitsi').JitsiConnection): void {
+  if (!shouldDisableTurnCredentialDiscovery()) return;
+  const candidates = [
+    connection.jingle,
+    connection.xmpp?.connection?.jingle,
+  ];
+  for (const jingle of candidates) {
+    if (jingle?.getStunAndTurnCredentials) {
+      jingle.getStunAndTurnCredentials = () => {};
+    }
+  }
+}
+
+function withoutThirdPartyUnloadListener<T>(fn: () => T): T {
+  const original = window.addEventListener;
+  window.addEventListener = function addEventListenerWithoutUnload(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ) {
+    if (type === 'unload') return;
+    return original.call(window, type, listener, options);
+  } as typeof window.addEventListener;
+  try {
+    return fn();
+  } finally {
+    window.addEventListener = original;
+  }
+}
+
 export class JitsiAdapter implements MediaService {
   private jsMeet?: JitsiMeetJS;
   private connection?: import('@/types/jitsi').JitsiConnection;
@@ -44,6 +78,8 @@ export class JitsiAdapter implements MediaService {
   private audioContext?: AudioContext;
   private gainNodes = new Map<string, GainNode>();
   private mediaSources = new Map<string, MediaStreamAudioSourceNode>();
+  private pendingRemoteAudio = new Map<string, JitsiTrack>();
+  private playbackUnlocked = false;
 
   init(): void {
     if (this.jsMeet) return;
@@ -73,8 +109,11 @@ export class JitsiAdapter implements MediaService {
     this.jwt = opts?.jwt;
     this.appId = opts?.appId ?? null;
 
-    const connection = new jsMeet.JitsiConnection(this.appId, this.jwt ?? null, baseOpts);
+    const connection = withoutThirdPartyUnloadListener(
+      () => new jsMeet.JitsiConnection(this.appId, this.jwt ?? null, baseOpts),
+    );
     ensureDisconnectReturnsPromise(connection);
+    disableTurnCredentialDiscovery(connection);
 
     connection.addEventListener(jsMeet.events.connection.CONNECTION_ESTABLISHED, () => {
       this.connected = true;
@@ -273,12 +312,14 @@ export class JitsiAdapter implements MediaService {
   }
 
   resumePlayback(): void {
-    // Eagerly create the AudioContext from a user gesture so it starts in running
-    // state — before remote audio tracks arrive and need to be wired through it.
+    this.playbackUnlocked = true;
     const ctx = this.ensureAudioContext();
     if (ctx.state === 'suspended') {
       void ctx.resume();
     }
+    const pending = [...this.pendingRemoteAudio.values()];
+    this.pendingRemoteAudio.clear();
+    pending.forEach((track) => this.wireRemoteAudioTrack(track));
   }
 
   setReceiverConstraints(constraints: ReceiverConstraints): void {
@@ -401,6 +442,11 @@ export class JitsiAdapter implements MediaService {
     const stream = (track as unknown as { getOriginalStream?: () => MediaStream }).getOriginalStream?.();
     if (!stream) return;
 
+    if (!this.playbackUnlocked) {
+      this.pendingRemoteAudio.set(id, track);
+      return;
+    }
+
     const ctx = this.ensureAudioContext();
     this.removeParticipantAudio(id);
 
@@ -439,13 +485,16 @@ export class JitsiAdapter implements MediaService {
     }
     this.mediaSources.delete(userId);
     this.gainNodes.delete(userId);
+    this.pendingRemoteAudio.delete(userId);
   }
 
   private disposeAudioGraph(): void {
     for (const id of [...this.gainNodes.keys()]) {
       this.removeParticipantAudio(id);
     }
+    this.pendingRemoteAudio.clear();
     void this.audioContext?.close();
     this.audioContext = undefined;
+    this.playbackUnlocked = false;
   }
 }
