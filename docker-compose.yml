@@ -2,8 +2,8 @@
 #
 #   docker compose up -d --build
 #
-# Flowspace UI: http://localhost:8780
-# Jitsi web:    http://localhost:8001  (PUBLIC_URL in .env)
+# Flowspace UI: http://127.0.0.1:8780
+# Jitsi web:    http://127.0.0.1:8001  (PUBLIC_URL in .env)
 #
 # Image versions are pinned here so Dependabot can open update PRs automatically.
 # Do NOT use ${JITSI_IMAGE_VERSION} or floating tags like :stable — pin explicitly.
@@ -14,14 +14,16 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_JITSI_PUBLIC_URL: ${VITE_JITSI_PUBLIC_URL:-http://localhost:8001}
+        VITE_JITSI_PUBLIC_URL: ${VITE_JITSI_PUBLIC_URL:-http://127.0.0.1:8001}
         VITE_XMPP_DOMAIN: ${XMPP_DOMAIN:-meet.jitsi}
         VITE_XMPP_MUC_DOMAIN: ${XMPP_MUC_DOMAIN:-muc.meet.jitsi}
         VITE_USE_WEBSOCKET: "true"
+        VITE_DISABLE_STUN_TURN_DISCOVERY: ${VITE_DISABLE_STUN_TURN_DISCOVERY:-true}
         VITE_EVENTYAY_API_BASE: ${VITE_EVENTYAY_API_BASE-}
         VITE_SESSION_PREFIX: ${VITE_SESSION_PREFIX-}
     ports:
-      - "${FLOWSPACE_PORT:-8780}:80"
+      - "127.0.0.1:${FLOWSPACE_PORT:-8780}:80"
+      - "[::1]:${FLOWSPACE_PORT:-8780}:80"
     depends_on:
       jitsi-web:
         condition: service_started

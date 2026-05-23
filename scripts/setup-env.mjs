@@ -377,6 +377,21 @@ if (args.mode === 'production' && args.appHost) {
   merged.set('VITE_JITSI_PUBLIC_URL', `https://${app}`);
 }
 
+if (args.mode === 'development') {
+  const localUrlKeys = ['PUBLIC_URL', 'VITE_JITSI_PUBLIC_URL'];
+  for (const key of localUrlKeys) {
+    if (merged.get(key) === 'http://localhost:8001') {
+      merged.set(key, 'http://127.0.0.1:8001');
+    }
+  }
+  if (merged.get('JVB_WS_DOMAIN') === 'localhost:8001') {
+    merged.set('JVB_WS_DOMAIN', '127.0.0.1:8001');
+  }
+  if (!merged.has('VITE_DISABLE_STUN_TURN_DISCOVERY')) {
+    merged.set('VITE_DISABLE_STUN_TURN_DISCOVERY', 'true');
+  }
+}
+
 writeEnv(serializeEnv(merged, templateText));
 ensureJitsiDirs();
 
@@ -384,7 +399,7 @@ printSummary(hadExisting ? 'Updated' : 'Created', args.mode, summary);
 
 if (args.mode === 'development') {
   console.log('  npm run dev          → http://localhost:5173');
-  console.log('  npm run docker:up    → http://localhost:8780');
+  console.log('  npm run docker:up    → http://127.0.0.1:8780');
 } else {
   console.log('  npm run deploy       → rebuild Docker stack');
 }

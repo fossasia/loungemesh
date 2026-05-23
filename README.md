@@ -21,8 +21,10 @@ npm run setup
 npm run docker:up
 ```
 
-- Flowspace: http://localhost:8780  
-- Jitsi: http://localhost:8001  
+- Flowspace: http://127.0.0.1:8780  
+- Jitsi: http://127.0.0.1:8001  
+
+Use `127.0.0.1` for Docker smoke tests; some systems resolve `localhost` to IPv6 first, which can reset the mapped container port.
 
 ## Stack
 

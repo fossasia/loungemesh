@@ -429,7 +429,7 @@ cmd_dev() {
   echo ""
   echo "Setup complete."
   echo "  npm run dev       → Vite dev server   http://localhost:5173"
-  echo "  npm run docker:up → Full stack         http://localhost:8780"
+  echo "  npm run docker:up → Full stack         http://127.0.0.1:8780"
 }
 
 cmd_deploy() {
