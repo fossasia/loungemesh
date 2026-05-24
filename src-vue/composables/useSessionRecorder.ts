@@ -28,10 +28,15 @@ export function isRecordingSupported(): boolean {
 }
 
 export type SessionRecorderSources = {
-  /** Live video elements (local + remote tiles) to composite into the frame. */
-  getVideoElements: () => HTMLVideoElement[];
+  getVideoSources: () => RecordingVideoSource[];
   /** Raw audio MediaStreamTracks (local mic + remote participants) to mix. */
   getAudioTracks: () => MediaStreamTrack[];
+};
+
+export type RecordingVideoSource = {
+  element: HTMLVideoElement;
+  participantId: string;
+  displayName: string;
 };
 
 export type SessionRecorder = {
@@ -59,7 +64,105 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
   let chunks: Blob[] = [];
   let rafId: number | undefined;
   let audioContext: AudioContext | undefined;
+  let audioDestination: MediaStreamAudioDestinationNode | undefined;
+  const audioSources = new Map<MediaStreamTrack, MediaStreamAudioSourceNode>();
   let canvas: HTMLCanvasElement | undefined;
+
+  function drawRoundedRect(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+  ) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  }
+
+  function drawVideoTile(
+    ctx: CanvasRenderingContext2D,
+    source: RecordingVideoSource,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) {
+    const labelHeight = 44;
+    const videoHeight = Math.max(1, height - labelHeight);
+
+    ctx.save();
+    drawRoundedRect(ctx, x, y, width, height, 22);
+    ctx.clip();
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(x, y, width, height);
+
+    try {
+      const scale = Math.max(width / source.element.videoWidth, videoHeight / source.element.videoHeight);
+      const drawW = source.element.videoWidth * scale;
+      const drawH = source.element.videoHeight * scale;
+      ctx.drawImage(
+        source.element,
+        x + (width - drawW) / 2,
+        y + (videoHeight - drawH) / 2,
+        drawW,
+        drawH,
+      );
+    } catch {
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(x, y, width, videoHeight);
+    }
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.fillRect(x, y + videoHeight, width, labelHeight);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '600 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    const label = source.displayName || source.participantId;
+    const maxLabelWidth = width - 32;
+    let text = label;
+    while (ctx.measureText(text).width > maxLabelWidth && text.length > 1) {
+      text = `${text.slice(0, -2)}…`;
+    }
+    ctx.fillText(text, x + 16, y + videoHeight + labelHeight / 2);
+    ctx.restore();
+  }
+
+  function refreshAudioMix() {
+    if (!audioContext || !audioDestination) return;
+    const liveTracks = new Set(
+      sources
+        .getAudioTracks()
+        .filter((track) => track.kind === 'audio' && track.readyState !== 'ended' && track.enabled),
+    );
+
+    for (const [track, source] of audioSources) {
+      if (liveTracks.has(track)) continue;
+      try {
+        source.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      audioSources.delete(track);
+    }
+
+    for (const track of liveTracks) {
+      if (audioSources.has(track)) continue;
+      try {
+        const source = audioContext.createMediaStreamSource(new MediaStream([track]));
+        source.connect(audioDestination);
+        audioSources.set(track, source);
+      } catch {
+        /* track ended / not connectable — skip */
+      }
+    }
+  }
 
   function paintFrame() {
     const ctx = canvas?.getContext('2d');
@@ -67,22 +170,28 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const videos = sources.getVideoElements().filter((v) => v.videoWidth > 0 && v.videoHeight > 0);
+    const videos = sources
+      .getVideoSources()
+      .filter((source) => source.element.videoWidth > 0 && source.element.videoHeight > 0);
     if (videos.length) {
       const cols = Math.ceil(Math.sqrt(videos.length));
       const rows = Math.ceil(videos.length / cols);
-      const cellW = canvas.width / cols;
-      const cellH = canvas.height / rows;
-      videos.forEach((video, index) => {
+      const gap = 18;
+      const cellW = (canvas.width - gap * (cols + 1)) / cols;
+      const cellH = (canvas.height - gap * (rows + 1)) / rows;
+      videos.forEach((source, index) => {
         const col = index % cols;
         const row = Math.floor(index / cols);
-        try {
-          ctx.drawImage(video, col * cellW, row * cellH, cellW, cellH);
-        } catch {
-          /* video not ready / cross-origin — skip this frame */
-        }
+        drawVideoTile(ctx, source, gap + col * (cellW + gap), gap + row * (cellH + gap), cellW, cellH);
       });
+    } else {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '600 30px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Recording Flowspace session', canvas.width / 2, canvas.height / 2);
+      ctx.textAlign = 'start';
     }
+    refreshAudioMix();
     rafId = window.requestAnimationFrame(paintFrame);
   }
 
@@ -92,22 +201,12 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
     canvas.height = CANVAS_HEIGHT;
     const captured = canvas.captureStream(FRAME_RATE);
 
-    const audioTracks = sources.getAudioTracks().filter(Boolean);
-    if (audioTracks.length) {
-      const Ctx = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Ctx) {
-        audioContext = new Ctx();
-        const destination = audioContext.createMediaStreamDestination();
-        for (const track of audioTracks) {
-          try {
-            const source = audioContext.createMediaStreamSource(new MediaStream([track]));
-            source.connect(destination);
-          } catch {
-            /* track ended / not connectable — skip */
-          }
-        }
-        destination.stream.getAudioTracks().forEach((t) => captured.addTrack(t));
-      }
+    const Ctx = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (Ctx) {
+      audioContext = new Ctx();
+      audioDestination = audioContext.createMediaStreamDestination();
+      audioDestination.stream.getAudioTracks().forEach((t) => captured.addTrack(t));
+      refreshAudioMix();
     }
     return captured;
   }
@@ -138,6 +237,15 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
   function cleanup() {
     if (rafId !== undefined) window.cancelAnimationFrame(rafId);
     rafId = undefined;
+    for (const source of audioSources.values()) {
+      try {
+        source.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }
+    audioSources.clear();
+    audioDestination = undefined;
     void audioContext?.close().catch(() => {});
     audioContext = undefined;
     canvas = undefined;

@@ -22,7 +22,7 @@ const emit = defineEmits<{
       <h2 id="leaveTitle" class="title">Leave the session?</h2>
 
       <template v-if="isHost">
-        <p class="sub">Export the session before you go — these are saved to your device.</p>
+        <p class="sub">Export the session before you go — recordings save labeled participant tiles with mixed room audio.</p>
         <div class="exportGrid">
           <button type="button" class="export" @click="emit('export-notes')">
             Download notes <span class="ext">.md</span>

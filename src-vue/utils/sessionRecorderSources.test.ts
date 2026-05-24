@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   collectSessionAudioTracks,
-  collectSessionVideoElements,
+  collectSessionVideoSources,
   makeRecorderSources,
 } from './sessionRecorderSources';
 
@@ -19,11 +19,28 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('collectSessionVideoElements', () => {
-  it('returns only videos inside the session root', () => {
+describe('collectSessionVideoSources', () => {
+  it('returns labeled videos inside user tiles', () => {
     document.body.innerHTML =
-      '<div class="sessionRoot"><video></video><video></video></div><video></video>';
-    expect(collectSessionVideoElements()).toHaveLength(2);
+      '<div class="sessionRoot"><div id="u1" class="userContainer" data-recording-name="Ada"><video></video></div></div><video></video>';
+    expect(collectSessionVideoSources()).toEqual([
+      expect.objectContaining({ participantId: 'u1', displayName: 'Ada' }),
+    ]);
+  });
+
+  it('falls back through visible name text and generated participant ids', () => {
+    document.body.innerHTML = `
+      <div class="sessionRoot">
+        <div id="u2" class="userContainer"><span class="nameText">Grace</span><video></video></div>
+        <div class="userContainer"><span class="nameTag">Linus</span><video></video></div>
+        <div class="userContainer"><video></video></div>
+      </div>
+    `;
+    expect(collectSessionVideoSources().map((source) => [source.participantId, source.displayName])).toEqual([
+      ['u2', 'Grace'],
+      ['participant-2', 'Linus'],
+      ['participant-3', 'participant-3'],
+    ]);
   });
 });
 
@@ -46,7 +63,7 @@ describe('collectSessionAudioTracks', () => {
 describe('makeRecorderSources', () => {
   it('wires both collectors against the live stores', () => {
     const sources = makeRecorderSources({ audio: undefined }, { users: {} });
-    expect(sources.getVideoElements()).toEqual([]);
+    expect(sources.getVideoSources()).toEqual([]);
     expect(sources.getAudioTracks()).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { worldToRoom } from '@/constants/pan';
+import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import UserBackdrop from './overlays/UserBackdrop.vue';
@@ -21,6 +22,7 @@ const props = withDefaults(
 );
 
 const local = useLocalStore();
+const conference = useConferenceStore();
 const features = useSessionFeaturesStore();
 const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
@@ -152,6 +154,8 @@ onBeforeUnmount(detach);
     :id="userId"
     class="local userContainer"
     :class="{ desktop: isDesktop }"
+    :data-recording-participant="userId"
+    :data-recording-name="conference.displayName"
     :style="style"
   >
     <div

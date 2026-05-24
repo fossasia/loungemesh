@@ -1,16 +1,24 @@
 import type { JitsiTrack } from '@/types/jitsi';
 import { collectMediaStreamTracks } from '@/utils/disposeJitsiTrack';
-import type { SessionRecorderSources } from '@/composables/useSessionRecorder';
+import type { RecordingVideoSource, SessionRecorderSources } from '@/composables/useSessionRecorder';
 
 type LocalAudioSource = { audio?: JitsiTrack };
 type UsersSource = { users: Record<string, { audio?: JitsiTrack } | undefined> };
 
-/** Live video tiles currently rendered in the session. */
-export function collectSessionVideoElements(): HTMLVideoElement[] {
-  return Array.from(document.querySelectorAll<HTMLVideoElement>('.sessionRoot video'));
+export function collectSessionVideoSources(): RecordingVideoSource[] {
+  return Array.from(document.querySelectorAll<HTMLVideoElement>('.sessionRoot .userContainer video'))
+    .map((element, index) => {
+      const container = element.closest<HTMLElement>('.userContainer')!;
+      const participantId = container.dataset.recordingParticipant || container.id || `participant-${index + 1}`;
+      const displayName =
+        container.dataset.recordingName ||
+        container.querySelector<HTMLElement>('.nameText')?.textContent?.trim() ||
+        container.querySelector<HTMLElement>('.nameTag')?.textContent?.trim() ||
+        participantId;
+      return { element, participantId, displayName };
+    });
 }
 
-/** Every audio MediaStreamTrack in the room (local mic + remote participants). */
 export function collectSessionAudioTracks(
   local: LocalAudioSource,
   conference: UsersSource,
@@ -29,7 +37,7 @@ export function makeRecorderSources(
   conference: UsersSource,
 ): SessionRecorderSources {
   return {
-    getVideoElements: collectSessionVideoElements,
+    getVideoSources: collectSessionVideoSources,
     getAudioTracks: () => collectSessionAudioTracks(local, conference),
   };
 }

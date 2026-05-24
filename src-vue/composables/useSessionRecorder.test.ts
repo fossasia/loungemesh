@@ -32,7 +32,7 @@ describe('pickRecorderMimeType', () => {
 describe('useSessionRecorder', () => {
   it('reports unsupported and no-ops when MediaRecorder is missing', async () => {
     (globalThis as { MediaRecorder?: unknown }).MediaRecorder = undefined;
-    const recorder = useSessionRecorder({ getVideoElements: () => [], getAudioTracks: () => [] });
+    const recorder = useSessionRecorder({ getVideoSources: () => [], getAudioTracks: () => [] });
     expect(recorder.isSupported).toBe(false);
     expect(recorder.start()).toBe(false);
     expect(recorder.isRecording.value).toBe(false);
