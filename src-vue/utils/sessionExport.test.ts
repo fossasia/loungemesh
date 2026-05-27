@@ -66,6 +66,7 @@ describe('canvasToPngBlob', () => {
 
 describe('downloadBlob', () => {
   it('creates an object URL and clicks a download anchor', () => {
+    vi.useFakeTimers();
     const createURL = vi.fn(() => 'blob:fake');
     const revokeURL = vi.fn();
     (globalThis.URL as unknown as { createObjectURL: unknown }).createObjectURL = createURL;
@@ -76,6 +77,9 @@ describe('downloadBlob', () => {
 
     expect(createURL).toHaveBeenCalled();
     expect(click).toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(revokeURL).toHaveBeenCalledWith('blob:fake');
     click.mockRestore();
+    vi.useRealTimers();
   });
 });
