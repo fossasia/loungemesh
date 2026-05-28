@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
-import { shouldShowConferenceError } from '@/services/conferenceErrorDetail';
+import { formatUserFacingError, shouldShowConferenceError } from '@/services/sessionErrorCodes';
 import Info from '@/components/common/Info.vue';
 
 const conf = useConferenceStore();
@@ -10,9 +10,9 @@ const conn = useConnectionStore();
 
 const errors = computed(() => {
   const items: string[] = [];
-  if (conn.error?.trim()) items.push(conn.error);
+  if (conn.error?.trim()) items.push(formatUserFacingError(conn.error));
   if (shouldShowConferenceError(conf.error, conf.isJoined)) {
-    items.push(conf.error!);
+    items.push(formatUserFacingError(conf.error!));
   }
   return items;
 });

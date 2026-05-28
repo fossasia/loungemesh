@@ -10,6 +10,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
+import { SESSION_ERROR_CODES } from '@/services/sessionErrorCodes';
 import JitsiConnection from './JitsiConnection.vue';
 
 describe('JitsiConnection', () => {
@@ -65,7 +66,7 @@ describe('JitsiConnection', () => {
     connectSpy.mockRejectedValueOnce(new Error('connect fail'));
     await router.push('/session/room-d');
     await flushPromises();
-    expect(conference.error).toBe('connect fail');
+    expect(conference.error).toBe(SESSION_ERROR_CODES.CONNECTION_FAILED);
 
     conference.isJoining = true;
     jitsi.connection._fire(jitsi.jsMeet.events.connection.CONNECTION_ESTABLISHED);
@@ -264,7 +265,7 @@ describe('JitsiConnection', () => {
     const connectSpy = vi.spyOn(getMediaEngineInstance(), 'connect').mockRejectedValueOnce('offline');
     const { wrapper } = await mountConnection('/session/room-z');
     await flushPromises();
-    expect(conference.error).toBe('offline');
+    expect(conference.error).toBe(SESSION_ERROR_CODES.NETWORK);
     connectSpy.mockRestore();
     wrapper.unmount();
   });
@@ -306,7 +307,7 @@ describe('JitsiConnection', () => {
     await flushPromises();
     await vi.advanceTimersByTimeAsync(800);
     await flushPromises();
-    expect(conference.error).toBe('plain failure');
+    expect(conference.error).toBe(SESSION_ERROR_CODES.JOIN_FAILED);
     joinSpy.mockRestore();
     wrapper.unmount();
   });

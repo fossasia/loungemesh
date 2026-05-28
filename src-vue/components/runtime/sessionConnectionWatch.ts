@@ -1,5 +1,6 @@
 import { markRaw } from 'vue';
 import type { MediaService } from '@/services/MediaService';
+import { normalizeSessionError } from '@/services/sessionErrorCodes';
 import { shouldSkipConferenceJoin } from '@/composables/joinConferenceRoom';
 
 export type SessionConferenceState = {
@@ -36,7 +37,10 @@ export async function handleSessionConnectionWatch(
     try {
       await deps.connect();
     } catch (e: unknown) {
-      deps.conferenceStore.error = e instanceof Error ? e.message : String(e);
+      deps.conferenceStore.error = normalizeSessionError(
+        e instanceof Error ? e.message : String(e),
+        'connection',
+      );
     }
     return;
   }
@@ -59,7 +63,10 @@ export async function handleSessionConnectionWatch(
       deps.conferenceStore.conferenceObject = markRaw(conf as object);
     }
   } catch (e: unknown) {
-    deps.conferenceStore.error = e instanceof Error ? e.message : String(e);
+    deps.conferenceStore.error = normalizeSessionError(
+      e instanceof Error ? e.message : String(e),
+      'join',
+    );
     deps.conferenceStore.isJoining = false;
   }
 }

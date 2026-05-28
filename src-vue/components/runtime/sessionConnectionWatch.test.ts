@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { SESSION_ERROR_CODES } from '@/services/sessionErrorCodes';
 import { handleSessionConnectionWatch } from './sessionConnectionWatch';
 
 beforeEach(() => {
@@ -66,7 +67,7 @@ describe('handleSessionConnectionWatch', () => {
       connect: vi.fn().mockRejectedValue('offline'),
     });
     await handleSessionConnectionWatch('room-a', false, deps);
-    expect(conferenceStore.error).toBe('offline');
+    expect(conferenceStore.error).toBe(SESSION_ERROR_CODES.NETWORK);
   });
 
   it('skips join when already joining, joined, or conference exists', async () => {
@@ -114,7 +115,7 @@ describe('handleSessionConnectionWatch', () => {
       joinRoom: vi.fn().mockRejectedValue('offline'),
     });
     await runWatch('room-z', true, deps);
-    expect(conferenceStore.error).toBe('offline');
+    expect(conferenceStore.error).toBe(SESSION_ERROR_CODES.NETWORK);
     expect(conferenceStore.isJoining).toBe(false);
   });
 
@@ -123,7 +124,7 @@ describe('handleSessionConnectionWatch', () => {
       joinRoom: vi.fn().mockRejectedValue(new Error('join failed')),
     });
     await runWatch('room-z', true, deps);
-    expect(conferenceStore.error).toBe('join failed');
+    expect(conferenceStore.error).toBe(SESSION_ERROR_CODES.JOIN_FAILED);
     expect(conferenceStore.isJoining).toBe(false);
   });
 
@@ -132,6 +133,6 @@ describe('handleSessionConnectionWatch', () => {
       connect: vi.fn().mockRejectedValue(new Error('connect failed')),
     });
     await handleSessionConnectionWatch('room-a', false, deps);
-    expect(conferenceStore.error).toBe('connect failed');
+    expect(conferenceStore.error).toBe(SESSION_ERROR_CODES.CONNECTION_FAILED);
   });
 });
