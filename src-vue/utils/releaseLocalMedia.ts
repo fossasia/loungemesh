@@ -1,6 +1,15 @@
 import type { JitsiConference, JitsiTrack } from '@/types/jitsi';
 import { collectMediaStreamTracks, stopMediaStreamTracks } from '@/utils/disposeJitsiTrack';
 
+/** Capture device handles before UI detach can clear Jitsi stream pointers. */
+export function collectTracksForRelease(tracks: Array<JitsiTrack | undefined>): MediaStreamTrack[] {
+  const raw = new Set<MediaStreamTrack>();
+  for (const track of tracks) {
+    collectMediaStreamTracks(track).forEach((mediaTrack) => raw.add(mediaTrack));
+  }
+  return [...raw];
+}
+
 type ConferenceWithRemove = JitsiConference & {
   removeTrack?: (track: JitsiTrack) => Promise<void>;
 };

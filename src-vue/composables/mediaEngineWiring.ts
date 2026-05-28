@@ -123,15 +123,19 @@ export function wireStoreSync(engine: MediaService): void {
     if (!id) return;
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
-    if (kind === 'audio' && track.isMuted()) {
+    if (kind === 'video') {
+      if (track.isMuted()) {
+        conferenceStore.clearUserTrack(id, 'video');
+      } else {
+        conferenceStore.setUserTrack(id, kind, track);
+      }
+    } else if (track.isMuted()) {
       conferenceStore.patchUser(id, { mute: true });
       engine.setParticipantVolume(id, 0);
     } else {
       conferenceStore.setUserTrack(id, kind, track);
-      if (kind === 'audio') {
-        const user = conferenceStore.users[id]!;
-        engine.setParticipantVolume(id, playbackGainForUser(user, user.volume ?? 1));
-      }
+      const user = conferenceStore.users[id]!;
+      engine.setParticipantVolume(id, playbackGainForUser(user, user.volume ?? 1));
     }
     if (kind === 'video') emitMediaStateSnapshot('trackMuteChanged');
     scheduleReceiverRefresh();

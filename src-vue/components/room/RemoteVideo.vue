@@ -6,9 +6,21 @@ import {
   mediaDebugVideoAfterAttach,
   mediaDebugVideoElement,
 } from '@/utils/mediaDebug';
+import { clearMediaElement } from '@/utils/clearMediaElement';
 
 const props = defineProps<{ id: string; track?: JitsiTrackLike; speaking?: boolean }>();
 const el = ref<HTMLVideoElement | null>(null);
+
+async function releaseTrack(track: typeof props.track) {
+  if (track && el.value) {
+    try {
+      track.detach?.(el.value);
+    } catch {
+      /* not attached yet */
+    }
+  }
+  clearMediaElement(el.value);
+}
 
 async function attachTrack(track: typeof props.track) {
   if (!track) {
@@ -19,11 +31,7 @@ async function attachTrack(track: typeof props.track) {
     mediaDebug('RemoteVideo', 'attach:skipped', { participantId: props.id, reason: 'no-element' });
     return;
   }
-  try {
-    track.detach?.(el.value);
-  } catch {
-    /* not attached yet */
-  }
+  clearMediaElement(el.value);
   mediaDebugVideoElement('RemoteVideo', 'attach:before', props.id, el.value, {
     trackMuted: track.isMuted?.(),
   });
@@ -54,12 +62,10 @@ onMounted(() => {
 watch(
   () => props.track,
   async (t, prev) => {
-    if (prev && el.value) {
-      try {
-        prev.detach?.(el.value);
-      } catch {
-        /* ignore */
-      }
+    if (prev && prev !== t) await releaseTrack(prev);
+    if (!t) {
+      clearMediaElement(el.value);
+      return;
     }
     await nextTick();
     await attachTrack(t);
@@ -71,13 +77,7 @@ watch(el, (node) => {
 });
 
 onBeforeUnmount(() => {
-  if (props.track && el.value) {
-    try {
-      props.track.detach?.(el.value);
-    } catch {
-      /* ignore */
-    }
-  }
+  void releaseTrack(props.track);
 });
 </script>
 

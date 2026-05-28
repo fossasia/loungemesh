@@ -81,4 +81,19 @@ describe('ensureLocalTracks', () => {
     await ensureLocalTracks(local, engine as never);
     expect(engine.createLocalTracks).not.toHaveBeenCalled();
   });
+
+  it('disposes unused tracks when camera turns off before create resolves', async () => {
+    const local = useLocalStore();
+    local.cameraOff = true;
+    const dispose = vi.fn();
+    const engine = {
+      createLocalTracks: vi.fn().mockResolvedValue([
+        { getType: () => 'audio', dispose },
+        { getType: () => 'video', videoType: 'camera', dispose },
+      ]),
+    };
+    await ensureLocalTracks(local, engine as never);
+    expect(local.video).toBeUndefined();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
 });

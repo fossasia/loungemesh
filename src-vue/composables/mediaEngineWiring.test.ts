@@ -125,6 +125,12 @@ describe('wireStoreSync', () => {
       ...videoTrack,
       isMuted: () => true,
     });
+    expect(conference.users.u1.video).toBeUndefined();
+
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...videoTrack,
+      isMuted: () => false,
+    });
     expect(conference.users.u1.video).toBeTruthy();
 
     jitsi.conference._fire(ev.conference.TRACK_REMOVED, videoTrack);

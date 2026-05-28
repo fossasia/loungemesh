@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { markRaw } from 'vue';
+import { markRaw, nextTick } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
@@ -26,8 +26,12 @@ function initialLocalViewport(): { pos: PanVec; pan: PanVec; scale: number; room
 import { isOnScreen } from '@/utils/vector';
 import { conferenceOptions } from '@/config/jitsiOptions';
 import { buildReceiverConstraints } from '@/utils/receiverConstraints';
-import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
-import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
+import { disposeJitsiTrack, stopMediaStreamTracks } from '@/utils/disposeJitsiTrack';
+import {
+  collectTracksForRelease,
+  releaseLocalMediaTracks,
+} from '@/utils/releaseLocalMedia';
+import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { useConferenceStore } from './conferenceStore';
 
@@ -142,8 +146,13 @@ export const useLocalStore = defineStore('local', {
       const videoTrack = tracks.find((t) => t.getType?.() === 'video');
       if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
-        this.video = markRaw(videoTrack);
-        this.videoType = videoTrack.videoType === 'desktop' ? 'desktop' : 'camera';
+        const isDesktop = videoTrack.videoType === 'desktop';
+        if (this.cameraOff && !isDesktop) {
+          disposeJitsiTrack(videoTrack);
+        } else {
+          this.video = markRaw(videoTrack);
+          this.videoType = isDesktop ? 'desktop' : 'camera';
+        }
       }
     },
     setOnStage(v: boolean) {
@@ -260,6 +269,7 @@ export const useLocalStore = defineStore('local', {
       this.mute = true;
       this.audio = undefined;
       this.speaking = false;
+      await nextTick();
       await releaseLocalMediaTracks(uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]), conf);
     },
     async toggleCamera() {
@@ -302,13 +312,16 @@ export const useLocalStore = defineStore('local', {
       const engine = getMediaEngineInstance();
       const conf = engine.getConference();
       const track = this.video;
+      const tracksToRelease = uniqueTracks([track, ...getConferenceLocalVideoTracks(conf)]);
+      // Capture OS tracks before LocalUser detach clears Jitsi's stream pointers.
+      const rawTracks = collectTracksForRelease(tracksToRelease);
       this.cameraOff = true;
       this.video = undefined;
       this.videoType = 'camera';
-      await releaseLocalMediaTracks(
-        uniqueTracks([track, ...getConferenceLocalVideoTracks(conf)]),
-        conf,
-      );
+      await nextTick();
+      await waitForMediaElementDetach();
+      await releaseLocalMediaTracks(tracksToRelease, conf);
+      stopMediaStreamTracks(rawTracks);
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();

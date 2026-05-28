@@ -13,6 +13,7 @@ import {
   mediaDebugVideoAfterAttach,
   mediaDebugVideoElement,
 } from '@/utils/mediaDebug';
+import { clearMediaElement } from '@/utils/clearMediaElement';
 
 const props = withDefaults(
   defineProps<{
@@ -49,6 +50,18 @@ const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
 const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
 const handUp = computed(() => features.handRaised);
 
+function releaseVideoPreview() {
+  if (attachedVideoTrack && videoEl.value) {
+    try {
+      attachedVideoTrack.detach?.(videoEl.value);
+    } catch {
+      /* ignore */
+    }
+  }
+  attachedVideoTrack = undefined;
+  clearMediaElement(videoEl.value, { stopTracks: true });
+}
+
 function attach() {
   if (attachedVideoTrack && attachedVideoTrack !== local.video && videoEl.value) {
     try {
@@ -58,15 +71,9 @@ function attach() {
     }
     attachedVideoTrack = undefined;
   }
-  if (!showCameraVideo.value && attachedVideoTrack && videoEl.value) {
-    try {
-      attachedVideoTrack.detach?.(videoEl.value);
-    } catch {
-      /* ignore */
-    }
-    attachedVideoTrack = undefined;
-  }
-  if (local.video && !local.cameraOff && videoEl.value) {
+  if (!showCameraVideo.value) {
+    releaseVideoPreview();
+  } else if (local.video && videoEl.value) {
     mediaDebugVideoElement('LocalUser', 'attach:before', local.id || 'local', videoEl.value, {
       cameraOff: local.cameraOff,
       trackMuted: local.video.isMuted?.(),
@@ -85,20 +92,18 @@ function attach() {
         error: err instanceof Error ? err.message : String(err),
       });
     }
-  } else {
-    mediaDebug('LocalUser', 'attach:skipped', {
-      hasVideo: !!local.video,
-      hasElement: !!videoEl.value,
-      cameraOff: local.cameraOff,
-    });
   }
-  if (local.audio && audioEl.value) local.audio.attach?.(audioEl.value);
+  if (local.audio && audioEl.value) {
+    local.audio.attach?.(audioEl.value);
+  } else {
+    clearMediaElement(audioEl.value);
+  }
 }
 
 function detach() {
-  if (attachedVideoTrack && videoEl.value) attachedVideoTrack.detach?.(videoEl.value);
-  attachedVideoTrack = undefined;
+  releaseVideoPreview();
   if (local.audio && audioEl.value) local.audio.detach?.(audioEl.value);
+  clearMediaElement(audioEl.value);
 }
 
 watch(
@@ -107,6 +112,7 @@ watch(
     await nextTick();
     attach();
   },
+  { flush: 'sync' },
 );
 
 function onPointerDown(e: PointerEvent) {
@@ -147,6 +153,8 @@ function onPointerUp(e: PointerEvent) {
 
 onMounted(attach);
 onBeforeUnmount(detach);
+
+defineExpose({ attach, videoEl });
 </script>
 
 <template>

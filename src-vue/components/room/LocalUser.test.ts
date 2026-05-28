@@ -135,19 +135,25 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
-  it('detaches the camera track when the camera turns off', async () => {
+  it('clears srcObject when the camera turns off', async () => {
     const local = useLocalStore();
     local.setMyID('local-1');
     local.videoType = 'camera';
     local.cameraOff = false;
     local.video = makeTrack('video');
-    const detach = vi.spyOn(local.video, 'detach');
     const { wrapper } = await mountWithApp(LocalUser);
     await nextTick();
+    const video = wrapper.find('video.vid').element as HTMLVideoElement;
+    Object.defineProperty(video, 'srcObject', {
+      configurable: true,
+      writable: true,
+      value: { id: 'preview' },
+    });
     local.cameraOff = true;
+    local.video = undefined;
     await nextTick();
     await flushPromises();
-    expect(detach).toHaveBeenCalled();
+    expect(video.srcObject).toBeNull();
     wrapper.unmount();
   });
 
@@ -180,6 +186,22 @@ describe('LocalUser', () => {
     await flushPromises();
     expect(playSpy).toHaveBeenCalled();
     playSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('skips video attach when the preview element is not mounted yet', async () => {
+    const local = useLocalStore();
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    const track = makeTrack('video');
+    local.video = track;
+    const { wrapper } = await mountWithApp(LocalUser);
+    await nextTick();
+    track.attach.mockClear();
+    const comp = wrapper.findComponent(LocalUser);
+    comp.vm.videoEl = null;
+    comp.vm.attach();
+    expect(track.attach).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
+import { clearMediaElement } from '@/utils/clearMediaElement';
 
 const props = defineProps<{ id: string; track?: JitsiTrackLike }>();
 const el = ref<HTMLVideoElement | null>(null);
@@ -10,6 +11,7 @@ function attach(t?: JitsiTrackLike) {
 }
 function detach(t?: JitsiTrackLike) {
   if (t && el.value) t.detach?.(el.value);
+  clearMediaElement(el.value);
 }
 
 onMounted(() => {

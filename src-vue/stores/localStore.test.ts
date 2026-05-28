@@ -48,6 +48,17 @@ describe('localStore', () => {
     expect(store.videoType).toBe('desktop');
   });
 
+  it('setLocalTracks disposes camera tracks while camera is off', () => {
+    const dispose = vi.fn();
+    const store = useLocalStore();
+    store.cameraOff = true;
+    store.setLocalTracks([
+      { getType: () => 'video', videoType: 'camera', dispose } as never,
+    ]);
+    expect(store.video).toBeUndefined();
+    expect(dispose).toHaveBeenCalled();
+  });
+
   it('publishLocalPosition sends command when id is set', () => {
     const engine = getMediaEngineInstance();
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
@@ -433,6 +444,24 @@ describe('localStore', () => {
     store.video = video as never;
     await store.disableCamera();
     expect(store.cameraOff).toBe(true);
+    expect(stop).toHaveBeenCalled();
+  });
+
+  it('disableCamera stops raw tracks captured before preview detach', async () => {
+    const stop = vi.fn();
+    const video = {
+      getType: () => 'video',
+      videoType: 'camera',
+      dispose: vi.fn(),
+      getOriginalStream: () => ({ getTracks: () => [{ stop }] }),
+      getTrack: () => ({ stop }),
+    };
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'getConference').mockReturnValue({ removeTrack } as never);
+    const store = useLocalStore();
+    store.video = video as never;
+    await store.disableCamera();
     expect(stop).toHaveBeenCalled();
   });
 

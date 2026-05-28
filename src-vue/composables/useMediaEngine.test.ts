@@ -274,6 +274,21 @@ describe('useMediaEngine', () => {
     expect(api.engineError.value).toBeUndefined();
   });
 
+  it('ignores conferenceError events while the room is still joined', async () => {
+    const engine = getMediaEngineInstance();
+    const api = useMediaEngine();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    await api.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await api.joinRoom('room', 'Alice', {});
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    engine.emit('conferenceError', 'late error');
+    expect(api.joined.value).toBe(true);
+    expect(api.engineError.value).toBeUndefined();
+  });
+
   it('rethrows joinRoom errors and clears isJoining', async () => {
     const jitsi = getJitsiTestContext();
     const engine = getMediaEngineInstance();

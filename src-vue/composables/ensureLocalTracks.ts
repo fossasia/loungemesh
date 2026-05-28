@@ -1,6 +1,7 @@
 import type { MediaService } from '@/services/MediaService';
 import type { JitsiTrack } from '@/types/jitsi';
 import type { useLocalStore } from '@/stores/localStore';
+import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { mediaDebug } from '@/utils/mediaDebug';
 
 type LocalStore = ReturnType<typeof useLocalStore>;
@@ -17,9 +18,19 @@ export async function ensureLocalTracks(
   if (!devices.length) return existing;
   const tracks = await engine.createLocalTracks(devices);
   const merged = [...existing];
+  const used = new Set<JitsiTrack>();
   for (const track of tracks) {
-    if (track.getType?.() === 'audio' && !local.audio) merged.push(track);
-    if (track.getType?.() === 'video' && !local.video && !local.cameraOff) merged.push(track);
+    if (track.getType?.() === 'audio' && !local.audio) {
+      merged.push(track);
+      used.add(track);
+    }
+    if (track.getType?.() === 'video' && !local.video && !local.cameraOff) {
+      merged.push(track);
+      used.add(track);
+    }
+  }
+  for (const track of tracks) {
+    if (!used.has(track)) disposeJitsiTrack(track);
   }
   local.setLocalTracks(merged);
   mediaDebug('ensureLocalTracks', 'created', {
