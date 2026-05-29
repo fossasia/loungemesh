@@ -4,6 +4,11 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 import './styles/global.css';
 
+import {
+  installBenignJitsiConsoleFilter,
+  installPreGestureAudioContextShim,
+} from '@/utils/jitsiConsole';
+
 import App from './App.vue';
 import { routes } from './router/routes';
 import { useLocalStore } from '@/stores/localStore';
@@ -11,6 +16,8 @@ import { useLocalStore } from '@/stores/localStore';
 const mediaRoutes = new Set(['session', 'enter']);
 
 export function bootstrap(mountSelector = '#app') {
+  installPreGestureAudioContextShim();
+  installBenignJitsiConsoleFilter();
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);

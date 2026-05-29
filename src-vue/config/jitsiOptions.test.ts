@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conferenceNameDefault, conferenceOptions } from './jitsiOptions';
+import { conferenceNameDefault, conferenceOptions, jitsiInitOptions } from './jitsiOptions';
 
 describe('jitsiOptions', () => {
   it('exports flowspace defaults', () => {
@@ -8,5 +8,7 @@ describe('jitsiOptions', () => {
     expect(conferenceOptions.openBridgeChannel).toBe('datachannel');
     expect(conferenceOptions.p2p).toEqual({ enabled: false });
     expect(conferenceOptions.disableSimulcast).toBe(true);
+    expect(jitsiInitOptions.disableAudioLevels).toBe(true);
+    expect(jitsiInitOptions.enableWindowOnErrorHandler).toBe(false);
   });
 });

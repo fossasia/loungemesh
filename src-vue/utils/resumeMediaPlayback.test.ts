@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { installMediaPlaybackUnlock } from './resumeMediaPlayback';
+import { flushPromises } from '@vue/test-utils';
 
 describe('installMediaPlaybackUnlock', () => {
   beforeEach(() => {
-    // Reset the module-level `installed` flag between tests by re-importing.
-    // We do this by directly manipulating the listeners array from window.
     vi.resetModules();
   });
 
   it('registers event listeners and calls resumePlayback on gesture', async () => {
-    // Fresh import so `installed` is false
     const { installMediaPlaybackUnlock: install } = await import('./resumeMediaPlayback');
     const resume = vi.fn();
     const engine = { resumePlayback: resume } as never;
@@ -32,10 +29,9 @@ describe('installMediaPlaybackUnlock', () => {
     const engine = { resumePlayback: resume } as never;
 
     install(engine);
-    install(engine); // second call — should be a no-op
+    install(engine);
 
     window.dispatchEvent(new PointerEvent('pointerdown'));
-    // Still only 1 listener registered, so called once
     expect(resume).toHaveBeenCalledTimes(1);
   });
 
@@ -47,5 +43,33 @@ describe('installMediaPlaybackUnlock', () => {
       install(engine);
       window.dispatchEvent(new PointerEvent('pointerdown'));
     }).not.toThrow();
+  });
+
+  it('resolves whenPlaybackUnlocked after the first gesture', async () => {
+    const { installMediaPlaybackUnlock, whenPlaybackUnlocked } = await import(
+      './resumeMediaPlayback'
+    );
+    installMediaPlaybackUnlock({ resumePlayback: vi.fn() } as never);
+    const pending = whenPlaybackUnlocked();
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it('resolves whenPlaybackUnlocked immediately after unlock', async () => {
+    const { installMediaPlaybackUnlock, whenPlaybackUnlocked } = await import(
+      './resumeMediaPlayback'
+    );
+    installMediaPlaybackUnlock({ resumePlayback: vi.fn() } as never);
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    await expect(whenPlaybackUnlocked()).resolves.toBeUndefined();
+  });
+
+  it('unlockMediaPlaybackNow resumes the engine without waiting for a gesture', async () => {
+    const { unlockMediaPlaybackNow } = await import('./resumeMediaPlayback');
+    const resume = vi.fn();
+    unlockMediaPlaybackNow({ resumePlayback: resume } as never);
+    expect(resume).toHaveBeenCalledTimes(1);
+    unlockMediaPlaybackNow({ resumePlayback: resume } as never);
+    expect(resume).toHaveBeenCalledTimes(2);
   });
 });

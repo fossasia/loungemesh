@@ -1,5 +1,10 @@
 export const conferenceNameDefault = 'flowspace';
 
+export const jitsiInitOptions = {
+  disableAudioLevels: true,
+  enableWindowOnErrorHandler: false,
+};
+
 export const conferenceOptions = {
   /**
    * Bridge channel to JVB. REQUIRED for the bridge to forward remote video:

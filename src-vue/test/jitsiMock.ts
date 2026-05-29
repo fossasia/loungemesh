@@ -96,7 +96,7 @@ export function installJitsiMock(): JitsiMockHandles {
   const jsMeet = {
     setLogLevel: vi.fn(),
     init: vi.fn(),
-    logLevels: { ERROR: 'error' },
+    logLevels: { ERROR: 'error', OFF: 'off' },
     events,
     JitsiConnection: vi.fn(function JitsiConnection() {
       return connection;

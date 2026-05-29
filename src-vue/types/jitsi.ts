@@ -89,7 +89,7 @@ export interface JitsiMeetJSEvents {
 export interface JitsiMeetJS {
   init(options: Record<string, unknown>): void;
   setLogLevel(level: unknown): void;
-  logLevels: { ERROR: unknown };
+  logLevels: { ERROR: unknown; OFF: unknown };
   events: JitsiMeetJSEvents;
   JitsiConnection: new (
     appId: string | null,
