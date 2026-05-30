@@ -1,11 +1,21 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { watchTrackSpeaking } from './speakingMeter';
+import { flushPromises } from '@vue/test-utils';
 import { makeTrack } from '@/test/makeTrack';
 
 describe('watchTrackSpeaking', () => {
   let rafCb: FrameRequestCallback | null = null;
+  let watchTrackSpeaking: typeof import('./speakingMeter').watchTrackSpeaking;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    const { resetMediaPlaybackUnlockForTests, installMediaPlaybackUnlock } = await import(
+      './resumeMediaPlayback'
+    );
+    resetMediaPlaybackUnlockForTests();
+    installMediaPlaybackUnlock({ resumePlayback: vi.fn() } as never);
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    ({ watchTrackSpeaking } = await import('./speakingMeter'));
+
     rafCb = null;
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       rafCb = cb;
@@ -52,7 +62,7 @@ describe('watchTrackSpeaking', () => {
     return track;
   }
 
-  it('uses hysteresis while already speaking', () => {
+  it('uses hysteresis while already speaking', async () => {
     let level = 80;
     vi.stubGlobal(
       'AudioContext',
@@ -80,6 +90,7 @@ describe('watchTrackSpeaking', () => {
     );
     const onChange = vi.fn();
     const stop = watchTrackSpeaking(trackWithStream(), onChange);
+    await flushPromises();
     rafCb?.(0);
     expect(onChange).toHaveBeenCalledWith(true);
     onChange.mockClear();
@@ -89,20 +100,22 @@ describe('watchTrackSpeaking', () => {
     stop();
   });
 
-  it('reports speaking when level exceeds threshold', () => {
+  it('reports speaking when level exceeds threshold', async () => {
     const onChange = vi.fn();
     const stop = watchTrackSpeaking(trackWithStream(), onChange);
+    await flushPromises();
     rafCb?.(0);
     expect(onChange).toHaveBeenCalledWith(true);
     stop();
   });
 
-  it('clears an active speaking state when muted', () => {
+  it('clears an active speaking state when muted', async () => {
     let muted = false;
     const track = trackWithStream(false);
     track.isMuted = () => muted;
     const onChange = vi.fn();
     const stop = watchTrackSpeaking(track, onChange);
+    await flushPromises();
     rafCb?.(0);
     expect(onChange).toHaveBeenCalledWith(true);
     onChange.mockClear();
@@ -112,12 +125,24 @@ describe('watchTrackSpeaking', () => {
     stop();
   });
 
-  it('clears speaking while muted from the start', () => {
+  it('clears speaking while muted from the start', async () => {
     const onChange = vi.fn();
     const track = trackWithStream(true);
     const stop = watchTrackSpeaking(track, onChange);
+    await flushPromises();
     rafCb?.(0);
     expect(onChange).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('treats missing isMuted as unmuted for speaking monitor', async () => {
+    const onChange = vi.fn();
+    const track = trackWithStream();
+    delete (track as { isMuted?: () => boolean }).isMuted;
+    const stop = watchTrackSpeaking(track, onChange);
+    await flushPromises();
+    rafCb?.(0);
+    expect(onChange).toHaveBeenCalledWith(true);
     stop();
   });
 
@@ -139,10 +164,51 @@ describe('watchTrackSpeaking', () => {
     stop();
   });
 
-  it('runs cleanup without throwing', () => {
+  it('runs cleanup without throwing', async () => {
     const onChange = vi.fn();
     const stop = watchTrackSpeaking(trackWithStream(), onChange);
+    await flushPromises();
     rafCb?.(0);
     expect(() => stop()).not.toThrow();
+  });
+
+  it('ignores late frames after cleanup', async () => {
+    const onChange = vi.fn();
+    const stop = watchTrackSpeaking(trackWithStream(), onChange);
+    await flushPromises();
+    rafCb?.(0);
+    onChange.mockClear();
+    stop();
+    onChange.mockClear();
+    rafCb?.(0);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('watchTrackSpeaking before playback unlock', () => {
+  it('skips setup when stopped before unlock resolves', async () => {
+    vi.resetModules();
+    let resolveUnlock: (() => void) | undefined;
+    vi.doMock('./resumeMediaPlayback', () => ({
+      whenPlaybackUnlocked: () =>
+        new Promise<void>((resolve) => {
+          resolveUnlock = resolve;
+        }),
+    }));
+    const { watchTrackSpeaking } = await import('./speakingMeter');
+    const AudioContextCtor = vi.fn();
+    vi.stubGlobal('AudioContext', AudioContextCtor);
+    const track = makeTrack('audio');
+    track.getOriginalStream = () =>
+      ({
+        getAudioTracks: () => [{ id: 'a1' }],
+      }) as unknown as MediaStream;
+    const stop = watchTrackSpeaking(track, vi.fn());
+    stop();
+    resolveUnlock?.();
+    await flushPromises();
+    expect(AudioContextCtor).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+    vi.doUnmock('./resumeMediaPlayback');
   });
 });

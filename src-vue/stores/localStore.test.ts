@@ -174,17 +174,20 @@ describe('localStore', () => {
     } as never);
     const createSpy = vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([fresh as never]);
     const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+    const refreshSpy = vi.spyOn(engine, 'refreshRemoteAudio');
 
     const store = useLocalStore();
     store.audio = existing as never;
     store.mute = false;
 
-    // Mute → stop and release the device entirely (no hoarding).
+    // Mute → signal mute to peers, then stop and release the device entirely.
     await store.toggleMute();
+    expect(existing.mute).toHaveBeenCalled();
     expect(store.mute).toBe(true);
     expect(store.audio).toBeUndefined();
     expect(removeTrack).toHaveBeenCalledWith(existing);
     expect(existing.dispose).toHaveBeenCalled();
+    expect(refreshSpy).toHaveBeenCalled();
 
     // Unmute → acquire a brand-new track and publish it.
     await store.toggleMute();
@@ -192,6 +195,7 @@ describe('localStore', () => {
     expect(createSpy).toHaveBeenCalledWith(['audio']);
     expect(addSpy).toHaveBeenCalledWith(fresh);
     expect(store.audio).toBe(fresh);
+    expect(refreshSpy).toHaveBeenCalled();
   });
 
   it('enableMic just unmutes an existing live track', async () => {

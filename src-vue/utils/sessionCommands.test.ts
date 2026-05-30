@@ -23,6 +23,9 @@ describe('handleSessionCommand', () => {
 
     handleSessionCommand('react', { value: JSON.stringify({ id: 'u1', emoji: '👍' }) });
     expect(features.userReactions.u1?.emoji).toBe('👍');
+
+    handleSessionCommand('hand', { value: JSON.stringify({ id: 'u2', raised: true }) });
+    expect(conference.users.u2.properties.handRaised).toBe(true);
   });
 
   it('handles lobby, poll, notes, and moderator actions', () => {
@@ -56,6 +59,16 @@ describe('handleSessionCommand', () => {
 
     handleSessionCommand('notes', { value: JSON.stringify({ text: 'hello' }) });
     expect(features.sharedNotes).toBe('hello');
+    expect(features.hasUnreadNotes).toBe(true);
+
+    handleSessionCommand('wb', {
+      value: JSON.stringify({
+        action: 'stroke',
+        stroke: { id: 's1', color: '#000', width: 2, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      }),
+    });
+    expect(features.whiteboardStrokes).toHaveLength(1);
+    expect(features.hasUnreadWhiteboard).toBe(true);
 
     conference.addUser('other');
     const leaveSpy = vi.spyOn(conference, 'leaveConference');

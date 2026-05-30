@@ -12,6 +12,9 @@ import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 import { playbackGainForUser } from '@/utils/participantPlaybackGain';
 import { mediaDebug, mediaDebugTrack } from '@/utils/mediaDebug';
 import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
+import { normalizeSessionError } from '@/services/sessionErrorCodes';
+import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
+import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -24,9 +27,15 @@ export function wireStoreSync(engine: MediaService): void {
     useConnectionStore().$patch({ connected: false });
   });
   engine.on('connectionFailed', (detail) => {
-    useConnectionStore().$patch({ connected: false, error: detail, connection: undefined });
+    mediaDebug('wiring', 'connectionFailed', { detail });
+    useConnectionStore().$patch({
+      connected: false,
+      error: normalizeSessionError(detail, 'connection'),
+      connection: undefined,
+    });
   });
   engine.on('conferenceJoined', () => {
+    unlockMediaPlaybackNow(engine);
     mediaDebug('wiring', 'conferenceJoined', { localUserId: engine.getLocalUserId() });
     conferenceStore.isJoined = true;
     conferenceStore.isJoining = false;
@@ -73,7 +82,7 @@ export function wireStoreSync(engine: MediaService): void {
     mediaDebug('wiring', 'conferenceError', { detail, joined: engine.isJoined() });
     if (!detail?.trim() || engine.isJoined()) return;
     conferenceStore.$patch({
-      error: detail,
+      error: normalizeSessionError(detail, 'conference'),
       conferenceObject: undefined,
       isJoined: false,
       isJoining: false,
@@ -81,6 +90,12 @@ export function wireStoreSync(engine: MediaService): void {
   });
   engine.on('userJoined', (id, user) => {
     conferenceStore.addUser(id, user);
+    const props = sanitizeParticipantProperties(
+      (user as { _properties?: Record<string, unknown> })._properties,
+    );
+    if ('handRaised' in props) {
+      applyParticipantHandRaised(id, parseHandRaised(props.handRaised));
+    }
     const features = useSessionFeaturesStore();
     if (features.isHost) {
       engine.sendCommand(
@@ -110,9 +125,13 @@ export function wireStoreSync(engine: MediaService): void {
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     conferenceStore.setUserTrack(id, kind, track);
     if (kind === 'audio') {
-      const user = conferenceStore.users[id]!;
-      const proximity = track.isMuted() ? 0 : (user.volume ?? 1);
-      engine.setParticipantVolume(id, playbackGainForUser(user, proximity));
+      if (track.isMuted()) {
+        engine.disconnectParticipantAudio?.(id);
+      } else {
+        const user = conferenceStore.users[id]!;
+        const proximity = user.volume ?? 1;
+        engine.setParticipantVolume(id, playbackGainForUser(user, proximity));
+      }
     }
     if (kind === 'video') emitMediaStateSnapshot('trackAdded');
     scheduleReceiverRefresh();
@@ -131,7 +150,7 @@ export function wireStoreSync(engine: MediaService): void {
       }
     } else if (track.isMuted()) {
       conferenceStore.patchUser(id, { mute: true });
-      engine.setParticipantVolume(id, 0);
+      engine.disconnectParticipantAudio?.(id);
     } else {
       conferenceStore.setUserTrack(id, kind, track);
       const user = conferenceStore.users[id]!;
@@ -145,6 +164,7 @@ export function wireStoreSync(engine: MediaService): void {
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     mediaDebugTrack('wiring', 'trackRemoved', track, { resolvedParticipantId: id, kind });
     if (!id) return;
+    if (kind === 'audio') engine.disconnectParticipantAudio?.(id);
     conferenceStore.clearUserTrack(id, kind);
     if (kind === 'video') emitMediaStateSnapshot('trackRemoved');
     scheduleReceiverRefresh();
@@ -153,6 +173,7 @@ export function wireStoreSync(engine: MediaService): void {
     conferenceStore.ingestChatMessage(id, text, nr);
   });
   engine.on('participantPropertyChanged', (id, properties) => {
+    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const user = conferenceStore.users[id];
     if (!user) return;
     const safe = sanitizeParticipantProperties(properties);
@@ -163,9 +184,16 @@ export function wireStoreSync(engine: MediaService): void {
       patch.speaking = safe.speaking === true || safe.speaking === 'true';
     }
     if ('handRaised' in safe) {
-      patch.properties = { ...patch.properties!, handRaised: safe.handRaised };
+      patch.properties = {
+        ...patch.properties!,
+        handRaised: parseHandRaised(safe.handRaised),
+      };
     }
     conferenceStore.patchUser(id, patch);
+  });
+  engine.on('participantSpeakingChanged', (id, speaking) => {
+    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
+    conferenceStore.patchUser(id, { speaking });
   });
   engine.on('command', (name, payload) => {
     handleSessionCommand(name, payload);

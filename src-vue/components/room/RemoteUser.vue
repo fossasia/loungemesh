@@ -65,7 +65,7 @@ const handUp = computed(
     :data-recording-name="nameLabel"
     :style="style"
   >
-    <div class="videoContainer" :class="{ desktop: isDesktop }">
+    <div class="videoContainer" :class="{ desktop: isDesktop, speaking: speaking && showAvatar }">
       <UserBackdrop
         v-if="showAvatar"
         :onStage="user.properties?.onStage === true || user.properties?.onStage === 'true'"
@@ -95,9 +95,21 @@ const handUp = computed(
   border-radius: 100px;
   position: relative;
   z-index: 1;
+  box-sizing: border-box;
+  border: 4px solid transparent;
+  transition: border-color 0.2s ease;
+}
+.videoContainer.speaking {
+  border-color: var(--color-blue100);
+  animation: speakPulse 1.8s ease-in-out infinite;
 }
 .videoContainer.desktop {
   border-radius: var(--radius-sm);
+}
+
+@keyframes speakPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.3); }
+  50%       { box-shadow: 0 0 0 8px rgba(79, 110, 247, 0.08); }
 }
 .floatReact {
   position: absolute;

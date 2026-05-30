@@ -1,4 +1,5 @@
 import { getConnectionOptions } from '@/config/connectionOptions';
+import { jitsiInitOptions } from '@/config/jitsiOptions';
 import { conferenceErrorDetail } from '@/services/conferenceErrorDetail';
 import { secureConferenceName } from '@/utils/secureConferenceName';
 import type { JitsiConference, JitsiMeetJS, JitsiTrack, ReceiverConstraints } from '@/types/jitsi';
@@ -9,7 +10,14 @@ import type {
   MediaServiceEventMap,
 } from './MediaService';
 import { sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
-import { mediaDebug, mediaDebugTrack } from '@/utils/mediaDebug';
+import { mediaDebug, mediaDebugTrack, isMediaDebugEnabled } from '@/utils/mediaDebug';
+import {
+  installBenignJitsiConsoleFilter,
+  isFlowspaceStubAudioContext,
+  unlockAudioContextConstructor,
+  withStubAudioContextDuringInit,
+} from '@/utils/jitsiConsole';
+import { startSpeakingLevelMonitor } from '@/utils/speakingLevel';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -79,13 +87,17 @@ export class JitsiAdapter implements MediaService {
   private gainNodes = new Map<string, GainNode>();
   private mediaSources = new Map<string, MediaStreamAudioSourceNode>();
   private pendingRemoteAudio = new Map<string, JitsiTrack>();
+  private speakingMonitors = new Map<string, () => void>();
   private playbackUnlocked = false;
 
   init(): void {
     if (this.jsMeet) return;
+    installBenignJitsiConsoleFilter();
     const jsMeet = getJitsiMeetJS();
-    jsMeet.setLogLevel(jsMeet.logLevels.ERROR);
-    jsMeet.init({});
+    jsMeet.setLogLevel(isMediaDebugEnabled() ? jsMeet.logLevels.ERROR : jsMeet.logLevels.OFF);
+    withStubAudioContextDuringInit(() => {
+      jsMeet.init(jitsiInitOptions);
+    });
     this.jsMeet = jsMeet;
   }
 
@@ -124,9 +136,7 @@ export class JitsiAdapter implements MediaService {
       const detail = connection.xmpp?.lastErrorMsg;
       this.emit(
         'connectionFailed',
-        detail && String(detail).trim().length
-          ? String(detail)
-          : 'Connection failed — check Jitsi is up, PUBLIC_URL / VITE_JITSI_PUBLIC_URL, firewall, and UDP 10000.',
+        detail && String(detail).trim().length ? String(detail) : 'connection_failed',
       );
       this.connection = undefined;
     });
@@ -256,6 +266,7 @@ export class JitsiAdapter implements MediaService {
       'host',
       'lobby',
       'react',
+      'hand',
       'poll',
       'notes',
       'mod',
@@ -308,18 +319,46 @@ export class JitsiAdapter implements MediaService {
     const node = this.gainNodes.get(userId);
     if (!node || !this.audioContext) return;
     const clamped = Math.max(0, Math.min(1, gain));
+    if (clamped === 0) {
+      node.gain.value = 0;
+      return;
+    }
     node.gain.setTargetAtTime(clamped, this.audioContext.currentTime, 0.015);
+  }
+
+  disconnectParticipantAudio(userId: string): void {
+    this.removeParticipantAudio(userId);
   }
 
   resumePlayback(): void {
     this.playbackUnlocked = true;
+    this.refreshRemoteAudio();
+  }
+
+  refreshRemoteAudio(): void {
+    if (!this.playbackUnlocked) return;
+    unlockAudioContextConstructor();
     const ctx = this.ensureAudioContext();
-    if (ctx.state === 'suspended') {
-      void ctx.resume();
-    }
+    if (ctx.state === 'suspended') void ctx.resume();
+
     const pending = [...this.pendingRemoteAudio.values()];
     this.pendingRemoteAudio.clear();
     pending.forEach((track) => this.wireRemoteAudioTrack(track));
+
+    const conference = this.conference;
+    const getParticipants = (
+      conference as { getParticipants?: () => unknown[] } | undefined
+    )?.getParticipants;
+    if (!getParticipants || !conference) return;
+    for (const participant of getParticipants.call(conference)) {
+      const tracks =
+        (participant as { getTracks?: () => JitsiTrack[] }).getTracks?.() ?? [];
+      for (const track of tracks) {
+        const t = track as JitsiTrack;
+        if (t.isLocal?.()) continue;
+        if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      }
+    }
   }
 
   setReceiverConstraints(constraints: ReceiverConstraints): void {
@@ -425,6 +464,18 @@ export class JitsiAdapter implements MediaService {
   }
 
   private ensureAudioContext(): AudioContext {
+    unlockAudioContextConstructor();
+    if (
+      this.audioContext &&
+      (this.audioContext.state === 'closed' || isFlowspaceStubAudioContext(this.audioContext))
+    ) {
+      try {
+        void this.audioContext.close();
+      } catch {
+        /* already closed */
+      }
+      this.audioContext = undefined;
+    }
     if (!this.audioContext) {
       this.audioContext = new AudioContext();
     }
@@ -448,16 +499,28 @@ export class JitsiAdapter implements MediaService {
     }
 
     const ctx = this.ensureAudioContext();
+    if (ctx.state === 'suspended') void ctx.resume();
     this.removeParticipantAudio(id);
 
     const source = ctx.createMediaStreamSource(stream);
     const gain = ctx.createGain();
+    const analyser = ctx.createAnalyser();
     gain.gain.value = 1;
     source.connect(gain);
+    source.connect(analyser);
     gain.connect(ctx.destination);
 
     this.mediaSources.set(id, source);
     this.gainNodes.set(id, gain);
+    this.speakingMonitors.get(id)?.();
+    this.speakingMonitors.set(
+      id,
+      startSpeakingLevelMonitor({
+        analyser,
+        isInactive: () => track.isMuted?.() ?? false,
+        onChange: (speaking) => this.emit('participantSpeakingChanged', id, speaking),
+      }),
+    );
 
     // If AudioContext is still suspended (user hasn't interacted yet),
     // resume when it transitions to running so audio starts immediately.
@@ -475,6 +538,8 @@ export class JitsiAdapter implements MediaService {
   }
 
   private removeParticipantAudio(userId: string): void {
+    this.speakingMonitors.get(userId)?.();
+    this.speakingMonitors.delete(userId);
     const source = this.mediaSources.get(userId);
     const gain = this.gainNodes.get(userId);
     try {
@@ -489,6 +554,8 @@ export class JitsiAdapter implements MediaService {
   }
 
   private disposeAudioGraph(): void {
+    for (const stop of this.speakingMonitors.values()) stop();
+    this.speakingMonitors.clear();
     for (const id of [...this.gainNodes.keys()]) {
       this.removeParticipantAudio(id);
     }

@@ -86,7 +86,7 @@ describe('JitsiAdapter', () => {
     adapter.on('connectionFailed', onFail);
     await adapter.connect();
     mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_FAILED);
-    expect(onFail).toHaveBeenCalledWith(expect.stringContaining('Connection failed'));
+    expect(onFail).toHaveBeenCalledWith('connection_failed');
   });
 
   it('reuses connection and calls connect when not connected', async () => {
@@ -423,6 +423,19 @@ describe('JitsiAdapter', () => {
     adapter.init();
     adapter.init();
     expect(mock.jsMeet.init).toHaveBeenCalledTimes(1);
+    expect(mock.jsMeet.init).toHaveBeenCalledWith({
+      disableAudioLevels: true,
+      enableWindowOnErrorHandler: false,
+    });
+    expect(mock.jsMeet.setLogLevel).toHaveBeenCalledWith('off');
+  });
+
+  it('init uses error log level when media debug is enabled', () => {
+    vi.stubEnv('VITE_MEDIA_DEBUG', 'true');
+    const debugAdapter = new JitsiAdapter();
+    debugAdapter.init();
+    expect(mock.jsMeet.setLogLevel).toHaveBeenCalledWith('error');
+    vi.unstubAllEnvs();
   });
 
   it('reuses AudioContext for multiple remote audio tracks', async () => {
@@ -537,6 +550,13 @@ describe('JitsiAdapter', () => {
       close = vi.fn();
       createGain = vi.fn();
       createMediaStreamSource = vi.fn();
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        frequencyBinCount: 256,
+        getByteFrequencyData: vi.fn(),
+      }));
     }
     vi.stubGlobal('AudioContext', SuspendedCtx);
     try {
@@ -556,6 +576,13 @@ describe('JitsiAdapter', () => {
       close = vi.fn();
       createGain = vi.fn();
       createMediaStreamSource = vi.fn();
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        frequencyBinCount: 256,
+        getByteFrequencyData: vi.fn(),
+      }));
     }
     vi.stubGlobal('AudioContext', RunningCtx);
     try {
@@ -595,6 +622,13 @@ describe('JitsiAdapter', () => {
         created.push(g);
         return g;
       });
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        frequencyBinCount: 256,
+        getByteFrequencyData: vi.fn(),
+      }));
       constructor() {
         instance = this as unknown as { state: string; onstatechange: (() => void) | null };
       }
@@ -614,7 +648,8 @@ describe('JitsiAdapter', () => {
       adapter.setParticipantVolume('a1', 1.5);
       expect(gainA.gain.setTargetAtTime).toHaveBeenCalledWith(1, 0, 0.015);
       adapter.setParticipantVolume('a1', -0.5);
-      expect(gainA.gain.setTargetAtTime).toHaveBeenCalledWith(0, 0, 0.015);
+      expect(gainA.gain.value).toBe(0);
+      expect(gainA.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
       handlerA();
       expect(gainA.connect).toHaveBeenCalledTimes(1);
       instance!.state = 'running';
@@ -648,6 +683,13 @@ describe('JitsiAdapter', () => {
       close = vi.fn();
       createMediaStreamSource = vi.fn(() => ({ connect: vi.fn() }));
       createGain = vi.fn(() => ({ connect: vi.fn(), gain: { value: 1 } }));
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        frequencyBinCount: 256,
+        getByteFrequencyData: vi.fn(),
+      }));
     }
     vi.stubGlobal('AudioContext', MockAudioContext);
     try {
@@ -684,6 +726,13 @@ describe('JitsiAdapter', () => {
         disconnect: vi.fn(),
         gain: { value: 1, setTargetAtTime: vi.fn() },
       }));
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        frequencyBinCount: 256,
+        getByteFrequencyData: vi.fn(),
+      }));
     }
     vi.stubGlobal('AudioContext', RunningAudioContext);
     try {
@@ -697,5 +746,75 @@ describe('JitsiAdapter', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('refreshRemoteAudio re-wires participant audio and reports speaking', async () => {
+    let rafCb: FrameRequestCallback | null = null;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      rafCb = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    class SpeakingCtx {
+      state = 'running';
+      currentTime = 0;
+      destination = { maxChannelCount: 2 };
+      onstatechange: (() => void) | null = null;
+      resume = vi.fn();
+      close = vi.fn();
+      createMediaStreamSource = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }));
+      createGain = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        gain: { value: 1, setTargetAtTime: vi.fn() },
+      }));
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        smoothingTimeConstant: 0.65,
+        frequencyBinCount: 256,
+        getByteFrequencyData: (buf: Uint8Array) => buf.fill(80),
+      }));
+    }
+    vi.stubGlobal('AudioContext', SpeakingCtx);
+
+    const remoteTrack = makeRemoteAudioTrack('remote-speak');
+    mock.conference._remoteTracks.push(remoteTrack);
+    const onSpeaking = vi.fn();
+    adapter.on('participantSpeakingChanged', onSpeaking);
+
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    adapter.resumePlayback();
+    adapter.refreshRemoteAudio();
+    rafCb?.(0);
+    expect(onSpeaking).toHaveBeenCalledWith('remote-speak', true);
+    adapter.disconnect();
+    vi.unstubAllGlobals();
+  });
+
+  it('recreates a stored stub AudioContext on refresh', async () => {
+    const {
+      resetPreGestureAudioContextShimForTests,
+      isFlowspaceStubAudioContext,
+      installPreGestureAudioContextShim,
+      unlockAudioContextConstructor,
+    } = await import('@/utils/jitsiConsole');
+    resetPreGestureAudioContextShimForTests();
+    installPreGestureAudioContextShim();
+    const stubCtx = new AudioContext();
+    expect(isFlowspaceStubAudioContext(stubCtx)).toBe(true);
+    (adapter as unknown as { audioContext?: AudioContext; playbackUnlocked?: boolean }).audioContext =
+      stubCtx;
+    (adapter as unknown as { playbackUnlocked: boolean }).playbackUnlocked = true;
+    unlockAudioContextConstructor();
+    adapter.refreshRemoteAudio();
+    const nextCtx = (adapter as unknown as { audioContext?: AudioContext }).audioContext;
+    expect(nextCtx).not.toBe(stubCtx);
+    expect(isFlowspaceStubAudioContext(nextCtx)).toBe(false);
+    resetPreGestureAudioContextShimForTests();
   });
 });

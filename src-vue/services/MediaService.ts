@@ -27,6 +27,7 @@ export type MediaServiceEvent =
   | 'trackRemoved'
   | 'messageReceived'
   | 'participantPropertyChanged'
+  | 'participantSpeakingChanged'
   | 'displayNameChanged'
   | 'command'
   | 'tokenExpired';
@@ -44,6 +45,7 @@ export type MediaServiceEventMap = {
   trackRemoved: [track: JitsiTrack];
   messageReceived: [id: string, text: string, nr: number];
   participantPropertyChanged: [id: string, properties: Record<string, unknown>];
+  participantSpeakingChanged: [id: string, speaking: boolean];
   displayNameChanged: [id: string, displayName: string];
   command: [name: string, payload: { value: string }];
   /** Fired when Jitsi reports AUTHENTICATION_REQUIRED (JWT expired) */
@@ -61,8 +63,12 @@ export interface MediaService {
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;
   /** 0.0–1.0 gain for spatial audio */
   setParticipantVolume(userId: string, gain: number): void;
+  /** Tear down remote audio routing when a participant is fully muted. */
+  disconnectParticipantAudio?(userId: string): void;
   /** Resume Web Audio after autoplay policy (call on first user gesture). */
   resumePlayback?(): void;
+  /** Reconnect remote audio after the output graph was suspended (e.g. local mic off). */
+  refreshRemoteAudio?(): void;
   setReceiverConstraints(constraints: ReceiverConstraints): void;
   setDisplayName(name: string): void;
   setLocalParticipantProperty(key: string, value: unknown): void;

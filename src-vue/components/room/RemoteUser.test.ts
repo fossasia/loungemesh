@@ -32,6 +32,19 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
+  it('shows speaking highlight on avatar when camera is off', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u-avatar', { _displayName: 'Cam Off' } as never);
+    const u = conference.users['u-avatar'];
+    u.speaking = true;
+    u.mute = false;
+    u.pos = { x: 0, y: 0 };
+
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-avatar' } });
+    expect(wrapper.find('.videoContainer.speaking').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('shows avatar when remote camera is off', async () => {
     const conference = useConferenceStore();
     conference.addUser('u-muted-flag', { _displayName: 'Muted Flag' } as never);

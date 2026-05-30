@@ -3,6 +3,7 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
+import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
 
 type CommandPayload = { value: string };
 
@@ -65,13 +66,22 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       if (data?.id && data.emoji) features.setReaction(data.id, data.emoji);
       break;
     }
+    case 'hand': {
+      const data = parse<{ id?: string; raised?: boolean }>(payload);
+      if (!data?.id || typeof data.raised !== 'boolean') break;
+      applyParticipantHandRaised(data.id, data.raised, { notify: true });
+      break;
+    }
     case 'poll': {
       features.applyPoll(parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload));
       break;
     }
     case 'notes': {
       const data = parse<{ text?: string }>(payload);
-      if (data?.text != null) features.sharedNotes = data.text;
+      if (data?.text != null) {
+        features.sharedNotes = data.text;
+        features.bumpNotesActivity();
+      }
       break;
     }
     case 'access': {
@@ -112,7 +122,9 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
           void local.toggleMute();
         } else if (conference.users[data.id]) {
           conference.patchUser(data.id, { mute: true });
-          getMediaEngineInstance().setParticipantVolume(data.id, 0);
+          const engine = getMediaEngineInstance();
+          engine.setParticipantVolume(data.id, 0);
+          engine.disconnectParticipantAudio?.(data.id);
         }
       }
       break;
@@ -120,8 +132,14 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
     case 'wb': {
       const data = parse<WhiteboardCommand>(payload);
       if (!data) break;
-      if (data.action === 'clear') features.clearWhiteboard();
-      if (data.action === 'stroke') features.addWhiteboardStroke(data.stroke);
+      if (data.action === 'clear') {
+        features.clearWhiteboard();
+        features.bumpWhiteboardActivity();
+      }
+      if (data.action === 'stroke') {
+        features.addWhiteboardStroke(data.stroke);
+        features.bumpWhiteboardActivity();
+      }
       break;
     }
     default:

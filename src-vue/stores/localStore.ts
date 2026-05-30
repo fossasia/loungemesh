@@ -33,6 +33,7 @@ import {
 } from '@/utils/releaseLocalMedia';
 import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { mediaDebug } from '@/utils/mediaDebug';
+import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { useConferenceStore } from './conferenceStore';
 
 function uniqueTracks(tracks: Array<JitsiTrack | undefined>): JitsiTrack[] {
@@ -236,6 +237,7 @@ export const useLocalStore = defineStore('local', {
       if (this.audio) {
         if (this.audio.isMuted()) await this.audio.unmute();
         this.mute = false;
+        engine.refreshRemoteAudio?.();
         return;
       }
       try {
@@ -259,11 +261,21 @@ export const useLocalStore = defineStore('local', {
       } catch {
         /* user denied or device unavailable */
       }
+      engine.refreshRemoteAudio?.();
     },
     async disableMic() {
       const engine = getMediaEngineInstance();
       const conf = engine.getConference();
       const track = this.audio;
+      // Signal mute to peers immediately so remote Web Audio graphs drop before
+      // removeTrack/dispose completes asynchronously.
+      if (track && !track.isMuted?.()) {
+        try {
+          await track.mute();
+        } catch {
+          /* track may already be gone */
+        }
+      }
       // Flip UI state first, then fully release the device so the mic indicator
       // turns off — we re-acquire a fresh track on the next unmute.
       this.mute = true;
@@ -271,6 +283,8 @@ export const useLocalStore = defineStore('local', {
       this.speaking = false;
       await nextTick();
       await releaseLocalMediaTracks(uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]), conf);
+      unlockMediaPlaybackNow(engine);
+      engine.refreshRemoteAudio?.();
     },
     async toggleCamera() {
       if (this.cameraOff) {

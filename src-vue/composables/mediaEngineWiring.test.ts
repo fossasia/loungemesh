@@ -74,6 +74,25 @@ describe('wireStoreSync', () => {
     expect(conference.users.u1.user?._displayName).toBe('Carol');
   });
 
+  it('syncs remote speaking level from received audio', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    wireStoreSync(engine);
+    conference.addUser('u1');
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
+      'participantSpeakingChanged',
+      'u1',
+      true,
+    );
+    expect(conference.users.u1.speaking).toBe(true);
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
+      'participantSpeakingChanged',
+      'u1',
+      false,
+    );
+    expect(conference.users.u1.speaking).toBe(false);
+  });
+
   it('syncs speaking participant property', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
@@ -184,7 +203,7 @@ describe('wireStoreSync', () => {
     const conference = useConferenceStore();
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
-    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+    const disconnectSpy = vi.spyOn(engine, 'disconnectParticipantAudio');
     wireStoreSync(engine);
     await engine.connect();
     jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
@@ -197,8 +216,8 @@ describe('wireStoreSync', () => {
       isMuted: () => true,
     });
     expect(conference.users.u1.mute).toBe(true);
-    expect(volSpy).toHaveBeenCalledWith('u1', 0);
-    volSpy.mockRestore();
+    expect(disconnectSpy).toHaveBeenCalledWith('u1');
+    disconnectSpy.mockRestore();
   });
 
   it('handles track mute/removed events with no participant id', async () => {

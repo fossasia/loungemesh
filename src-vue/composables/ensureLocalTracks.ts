@@ -3,6 +3,7 @@ import type { JitsiTrack } from '@/types/jitsi';
 import type { useLocalStore } from '@/stores/localStore';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { mediaDebug } from '@/utils/mediaDebug';
+import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 
 type LocalStore = ReturnType<typeof useLocalStore>;
 
@@ -17,6 +18,7 @@ export async function ensureLocalTracks(
   if (!local.cameraOff && !local.video) devices.push('video');
   if (!devices.length) return existing;
   const tracks = await engine.createLocalTracks(devices);
+  unlockMediaPlaybackNow(engine);
   const merged = [...existing];
   const used = new Set<JitsiTrack>();
   for (const track of tracks) {

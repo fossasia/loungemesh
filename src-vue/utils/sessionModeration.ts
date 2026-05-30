@@ -12,6 +12,7 @@ export function muteParticipant(
   if (conference.users[id]) {
     conference.patchUser(id, { mute: true });
     engine.setParticipantVolume(id, 0);
+    engine.disconnectParticipantAudio?.(id);
   }
 }
 

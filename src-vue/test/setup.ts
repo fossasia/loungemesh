@@ -23,7 +23,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-if (!globalThis.AudioContext) {
+if (!globalThis.AudioContext?.prototype?.createOscillator) {
   class MockAudioContext {
     state = 'running';
     currentTime = 0;
@@ -32,13 +32,41 @@ if (!globalThis.AudioContext) {
     close = vi.fn().mockResolvedValue(undefined);
     createGain() {
       return {
-        gain: { value: 1, setTargetAtTime: vi.fn() },
+        gain: {
+          value: 1,
+          setTargetAtTime: vi.fn(),
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
         connect: vi.fn(),
         disconnect: vi.fn(),
       };
     }
     createMediaStreamSource() {
       return { connect: vi.fn(), disconnect: vi.fn() };
+    }
+    createAnalyser() {
+      return {
+        fftSize: 512,
+        smoothingTimeConstant: 0.65,
+        frequencyBinCount: 256,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        getByteFrequencyData: vi.fn(),
+      };
+    }
+    createOscillator() {
+      return {
+        type: 'sine',
+        frequency: {
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
     }
   }
   // @ts-expect-error test shim
