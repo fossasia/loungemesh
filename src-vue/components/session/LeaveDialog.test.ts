@@ -45,10 +45,12 @@ describe('LeaveDialog', () => {
     expect(wrapper.find('.record').exists()).toBe(false);
   });
 
-  it('shows the live recording state', () => {
+  it('shows the live recording state', async () => {
     const wrapper = mountDialog({ isRecording: true });
     expect(wrapper.find('.dot.live').exists()).toBe(true);
     expect(wrapper.find('.record').text()).toContain('Stop recording');
+    await wrapper.find('.record').trigger('click');
+    expect(wrapper.emitted('toggle-recording')).toHaveLength(1);
   });
 
   it('emits cancel when the backdrop is clicked', async () => {

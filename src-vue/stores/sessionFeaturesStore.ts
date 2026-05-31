@@ -44,8 +44,18 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     userGrants: {} as Record<string, Partial<UserGrants>>,
     panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'notes' | 'whiteboard',
     pendingHostClaim: false,
+    notesActivitySeq: 0,
+    notesSeenSeq: 0,
+    whiteboardActivitySeq: 0,
+    whiteboardSeenSeq: 0,
   }),
   getters: {
+    hasUnreadNotes(): boolean {
+      return this.notesActivitySeq > this.notesSeenSeq;
+    },
+    hasUnreadWhiteboard(): boolean {
+      return this.whiteboardActivitySeq > this.whiteboardSeenSeq;
+    },
     isHost(): boolean {
       const local = useLocalStore();
       if (!local.id) return false;
@@ -145,10 +155,33 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         this.userGrants[data.userId] = mergeGrants(base, data.grants);
       }
     },
+    bumpNotesActivity() {
+      if (this.panel === 'notes') {
+        this.markNotesSeen();
+        return;
+      }
+      this.notesActivitySeq += 1;
+    },
+    markNotesSeen() {
+      this.notesSeenSeq = this.notesActivitySeq;
+    },
+    bumpWhiteboardActivity() {
+      if (this.panel === 'whiteboard') {
+        this.markWhiteboardSeen();
+        return;
+      }
+      this.whiteboardActivitySeq += 1;
+    },
+    markWhiteboardSeen() {
+      this.whiteboardSeenSeq = this.whiteboardActivitySeq;
+    },
     togglePanel(name: typeof this.panel) {
       if (name === 'notes' && !this.canUseNotes) return;
       if (name === 'whiteboard' && !this.canUseWhiteboard) return;
-      this.panel = this.panel === name ? '' : name;
+      const opening = this.panel !== name;
+      this.panel = opening ? name : '';
+      if (opening && name === 'notes') this.markNotesSeen();
+      if (opening && name === 'whiteboard') this.markWhiteboardSeen();
     },
     resetHostForJoin() {
       this.hostId = '';
@@ -162,6 +195,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.pendingHostClaim = false;
       this.roomDefaults = defaultUserGrants();
       this.userGrants = {};
+      this.notesActivitySeq = 0;
+      this.notesSeenSeq = 0;
+      this.whiteboardActivitySeq = 0;
+      this.whiteboardSeenSeq = 0;
     },
   },
 });

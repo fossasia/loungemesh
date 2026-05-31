@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
+import { playUiSound } from '@/utils/uiSounds';
 
 const username = ref('');
 const sessionName = ref('');
@@ -14,6 +15,7 @@ function onSubmit(e: Event) {
   const user = username.value.trim();
   const room = (sessionName.value || conferenceNameDefault).trim();
   if (room.length > 0) {
+    playUiSound('success');
     emit('submit', { displayName: user, sessionName: room });
   }
 }

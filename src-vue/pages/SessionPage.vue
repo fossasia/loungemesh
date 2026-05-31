@@ -37,6 +37,7 @@ import { useSessionRecorder } from '@/composables/useSessionRecorder';
 import { useSessionRecording } from '@/composables/useSessionRecording';
 import { useSessionExport } from '@/composables/useSessionExport';
 import { makeRecorderSources } from '@/utils/sessionRecorderSources';
+import { playUiSound } from '@/utils/uiSounds';
 
 /** Absorbs `props: true` route param so it is not forwarded as a stray DOM attribute (multi-root page). */
 /* v8 ignore next */
@@ -77,6 +78,7 @@ const recording = useSessionRecording(recorder, exportRecording);
 const showLeaveDialog = ref(false);
 
 function requestLeave() {
+  playUiSound('tap');
   if (features.isHost) {
     showLeaveDialog.value = true;
     return;
@@ -123,13 +125,19 @@ async function doLeave() {
     <IconButton
       :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
       :warning="local.cameraOff"
+      :sound="local.cameraOff ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleCamera()"
     >
       <template #icon>
         <AppIcon :name="local.cameraOff ? 'video-off' : 'video'" />
       </template>
     </IconButton>
-    <IconButton :label="local.mute ? 'Unmute' : 'Mute'" :warning="local.mute" @click="local.toggleMute()">
+    <IconButton
+      :label="local.mute ? 'Unmute' : 'Mute'"
+      :warning="local.mute"
+      :sound="local.mute ? 'toggleOn' : 'toggleOff'"
+      @click="local.toggleMute()"
+    >
       <template #icon>
         <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
       </template>
@@ -146,6 +154,7 @@ async function doLeave() {
         v-if="features.isHost"
         label="Moderator"
         :active="features.panel === 'moderator'"
+        sound="panel"
         @click="features.togglePanel('moderator')"
       >
         <template #icon><AppIcon name="more-vertical" /></template>

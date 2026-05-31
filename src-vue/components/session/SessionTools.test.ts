@@ -42,10 +42,12 @@ describe('SessionTools', () => {
     conference.addUser('local-1');
     vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue('local-1');
     const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountWithApp(SessionTools);
     await wrapper.find('[aria-label="Raise hand"]').trigger('click');
     expect(features.handRaised).toBe(true);
     expect(propSpy).toHaveBeenCalledWith('handRaised', true);
+    expect(cmdSpy).toHaveBeenCalledWith('hand', JSON.stringify({ id: 'local-1', raised: true }));
     await wrapper.find('[aria-label="Poll"]').trigger('click');
     expect(features.panel).toBe('poll');
     await wrapper.find('[aria-label="Shared notes"]').trigger('click');
@@ -245,9 +247,11 @@ describe('SessionTools', () => {
     conference.addUser('engine-user');
     vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue('engine-user');
     const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountWithApp(SessionTools);
     await wrapper.find('[aria-label="Raise hand"]').trigger('click');
     expect(propSpy).toHaveBeenCalledWith('handRaised', true);
+    expect(cmdSpy).toHaveBeenCalledWith('hand', JSON.stringify({ id: 'engine-user', raised: true }));
     expect(conference.users['engine-user'].properties.handRaised).toBe(true);
     wrapper.unmount();
   });

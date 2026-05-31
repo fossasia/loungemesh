@@ -4,13 +4,13 @@ import { useSessionPollControls } from '@/composables/useSessionPollControls';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import { REACTION_EMOJIS } from '@/constants/sessionEmojis';
-import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { sendSessionReaction } from '@/utils/sessionReactions';
+import { playUiSound } from '@/utils/uiSounds';
+import { applyParticipantHandRaised } from '@/utils/sessionHandRaise';
 
 const features = useSessionFeaturesStore();
-const conference = useConferenceStore();
 const local = useLocalStore();
 const { engine } = useMediaEngine();
 const {
@@ -23,17 +23,13 @@ const {
 } = useSessionPollControls();
 
 function toggleHand() {
-  features.handRaised = !features.handRaised;
-  engine.setLocalParticipantProperty('handRaised', features.handRaised);
-  const id = engine.getLocalUserId();
-  if (id && conference.users[id]) {
-    conference.patchUser(id, {
-      properties: {
-        ...conference.users[id].properties,
-        handRaised: features.handRaised,
-      },
-    });
-  }
+  const id = local.id || engine.getLocalUserId();
+  if (!id) return;
+  const raised = !features.handRaised;
+  features.handRaised = raised;
+  engine.setLocalParticipantProperty('handRaised', raised);
+  engine.sendCommand('hand', JSON.stringify({ id, raised }));
+  applyParticipantHandRaised(id, raised);
 }
 
 function toggleReactions() {
@@ -42,6 +38,7 @@ function toggleReactions() {
 }
 
 function sendReaction(emoji: string) {
+  playUiSound('reaction');
   sendSessionReaction(
     local.id,
     engine.getLocalUserId(),
@@ -65,6 +62,7 @@ function openPanel(name: 'notes' | 'whiteboard') {
       <IconButton
         label="Reactions"
         :highlight="features.panel === 'reactions'"
+        sound="panel"
         @click="toggleReactions"
       >
         <template #icon><AppIcon name="smile" /></template>
@@ -85,11 +83,16 @@ function openPanel(name: 'notes' | 'whiteboard') {
         </div>
       </div>
     </div>
-    <IconButton label="Raise hand" :highlight="features.handRaised" @click="toggleHand">
+    <IconButton
+      label="Raise hand"
+      :highlight="features.handRaised"
+      :sound="features.handRaised ? 'handLower' : 'handRaise'"
+      @click="toggleHand"
+    >
       <template #icon><AppIcon name="hand" /></template>
     </IconButton>
     <div class="toolWrap">
-      <IconButton label="Poll" :active="features.panel === 'poll'" @click="togglePollPanel">
+      <IconButton label="Poll" :active="features.panel === 'poll'" sound="panel" @click="togglePollPanel">
         <template #icon><AppIcon name="bar-chart" /></template>
       </IconButton>
       <div v-if="features.panel === 'poll'" class="toolPop pollPop" @pointerdown.stop>
@@ -124,6 +127,8 @@ function openPanel(name: 'notes' | 'whiteboard') {
     <IconButton
       label="Shared notes"
       :active="features.panel === 'notes'"
+      :activity-dot="features.hasUnreadNotes"
+      sound="panel"
       :title="features.canUseNotes ? 'Shared notes' : 'Notes — ask host for access'"
       @click="openPanel('notes')"
     >
@@ -132,6 +137,8 @@ function openPanel(name: 'notes' | 'whiteboard') {
     <IconButton
       label="Whiteboard"
       :active="features.panel === 'whiteboard'"
+      :activity-dot="features.hasUnreadWhiteboard"
+      sound="panel"
       :title="features.canUseWhiteboard ? 'Whiteboard' : 'Whiteboard — ask host for access'"
       @click="openPanel('whiteboard')"
     >

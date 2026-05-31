@@ -84,7 +84,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <IconButton label="Screenshare" :active="sharing" @click="toggleShare">
+  <IconButton
+    label="Screenshare"
+    :active="sharing"
+    :sound="sharing ? 'toggleOff' : 'toggleOn'"
+    @click="toggleShare"
+  >
     <template #icon><AppIcon name="monitor-up" /></template>
   </IconButton>
 </template>

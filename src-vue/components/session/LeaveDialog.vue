@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { playUiSound } from '@/utils/uiSounds';
+
 defineProps<{
   isHost: boolean;
   isRecording: boolean;
@@ -14,20 +16,38 @@ const emit = defineEmits<{
   (e: 'export-recording'): void;
   (e: 'toggle-recording'): void;
 }>();
+
+function onCancel() {
+  playUiSound('tap');
+  emit('cancel');
+}
+
+function onLeave() {
+  playUiSound('leave');
+  emit('leave');
+}
+
+function onExport() {
+  playUiSound('tap');
+}
+
+function onToggleRecording(isRecording: boolean) {
+  playUiSound(isRecording ? 'recordStop' : 'record');
+}
 </script>
 
 <template>
-  <div class="leaveBackdrop" @click.self="emit('cancel')">
+  <div class="leaveBackdrop" @click.self="onCancel">
     <div class="leaveCard" role="dialog" aria-modal="true" aria-labelledby="leaveTitle">
       <h2 id="leaveTitle" class="title">Leave the session?</h2>
 
       <template v-if="isHost">
         <p class="sub">Export the session before you go — recordings save labeled participant tiles with mixed room audio.</p>
         <div class="exportGrid">
-          <button type="button" class="export" @click="emit('export-notes')">
+          <button type="button" class="export" @click="onExport(); emit('export-notes')">
             Download notes <span class="ext">.md</span>
           </button>
-          <button type="button" class="export" @click="emit('export-whiteboard')">
+          <button type="button" class="export" @click="onExport(); emit('export-whiteboard')">
             Download whiteboard <span class="ext">.png</span>
           </button>
           <button
@@ -36,12 +56,17 @@ const emit = defineEmits<{
             class="export"
             :disabled="!hasRecording"
             :title="hasRecording ? 'Download the recorded session' : 'Start a recording during the session to enable this'"
-            @click="emit('export-recording')"
+            @click="onExport(); emit('export-recording')"
           >
             Download recording <span class="ext">.webm</span>
           </button>
         </div>
-        <button v-if="recordingSupported" type="button" class="record" @click="emit('toggle-recording')">
+        <button
+          v-if="recordingSupported"
+          type="button"
+          class="record"
+          @click="onToggleRecording(isRecording); emit('toggle-recording')"
+        >
           <span class="dot" :class="{ live: isRecording }" />
           {{ isRecording ? 'Stop recording' : 'Start recording' }}
         </button>
@@ -49,8 +74,8 @@ const emit = defineEmits<{
       <p v-else class="sub">You'll be disconnected from this space.</p>
 
       <div class="actions">
-        <button type="button" class="btn cancel" @click="emit('cancel')">Stay</button>
-        <button type="button" class="btn leave" @click="emit('leave')">Leave call</button>
+        <button type="button" class="btn cancel" @click="onCancel">Stay</button>
+        <button type="button" class="btn leave" @click="onLeave">Leave call</button>
       </div>
     </div>
   </div>

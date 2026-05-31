@@ -485,4 +485,23 @@ describe('ChatPanel', () => {
     expect(wrapper.find('.messages').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('shows an activity dot and plays a sound for remote messages while closed', async () => {
+    vi.mock('@/utils/uiSounds', () => ({ playUiSound: vi.fn() }));
+    const { playUiSound } = await import('@/utils/uiSounds');
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    conference.messages = [{ id: 'remote-1', text: 'hello', nr: 1 }];
+    const { wrapper } = await mountWithApp(ChatPanel);
+    expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(true);
+    conference.messages.push({ id: 'remote-2', text: 'again', nr: 2 });
+    await flushPromises();
+    expect(playUiSound).toHaveBeenCalledWith('chatMessage');
+    await wrapper.find('button.ibtn').trigger('click');
+    expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(false);
+    wrapper.unmount();
+    vi.doUnmock('@/utils/uiSounds');
+  });
 });

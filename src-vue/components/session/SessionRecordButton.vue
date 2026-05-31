@@ -11,6 +11,7 @@ defineEmits<{ (e: 'toggle'): void }>();
     class="recordBtn"
     :label="isRecording ? 'Stop recording' : 'Record session'"
     :warning="isRecording"
+    :sound="isRecording ? 'recordStop' : 'record'"
     @click="$emit('toggle')"
   >
     <template #icon>

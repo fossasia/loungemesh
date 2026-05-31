@@ -341,7 +341,9 @@ ${app_host} {
 	route {
 		handle /xmpp-websocket* {
 			reverse_proxy 127.0.0.1:8001 {
-				transport http { versions 1.1 }
+				transport http {
+					versions 1.1
+				}
 				stream_timeout 24h
 			}
 		}
@@ -350,7 +352,9 @@ ${app_host} {
 		}
 		handle /colibri-ws* {
 			reverse_proxy 127.0.0.1:8001 {
-				transport http { versions 1.1 }
+				transport http {
+					versions 1.1
+				}
 				stream_timeout 24h
 			}
 		}
@@ -365,7 +369,9 @@ ${jitsi_host} {
 	route {
 		handle /xmpp-websocket* {
 			reverse_proxy 127.0.0.1:8001 {
-				transport http { versions 1.1 }
+				transport http {
+					versions 1.1
+				}
 				stream_timeout 24h
 			}
 		}
@@ -374,13 +380,18 @@ ${jitsi_host} {
 		}
 		handle /colibri-ws* {
 			reverse_proxy 127.0.0.1:8001 {
-				transport http { versions 1.1 }
+				transport http {
+					versions 1.1
+				}
 				stream_timeout 24h
 			}
 		}
 		handle {
 			reverse_proxy 127.0.0.1:8001 {
-				transport http { versions 1.1; keepalive 30s }
+				transport http {
+					versions 1.1
+					keepalive 30s
+				}
 				stream_timeout 24h
 			}
 		}

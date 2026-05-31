@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { playUiSound, type UiSoundId } from '@/utils/uiSounds';
+
 defineOptions({ inheritAttrs: false });
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     label: string;
     active?: boolean;
@@ -9,19 +11,35 @@ withDefaults(
     warning?: boolean;
     ghost?: boolean;
     primary?: boolean;
+    /** Short click feedback; set false to silence this button. */
+    sound?: UiSoundId | false;
+    /** Unread / new-activity indicator dot. */
+    activityDot?: boolean;
   }>(),
-  { ghost: false, primary: false }
+  { ghost: false, primary: false, sound: 'tap', activityDot: false },
 );
+
+function onClick(): void {
+  if (props.sound !== false) playUiSound(props.sound);
+}
 </script>
 
 <template>
   <button
     class="ibtn"
-    :class="{ active: !!active, highlight: !!highlight, warning: !!warning, ghost, primary }"
+    :class="{
+      active: !!active,
+      highlight: !!highlight,
+      warning: !!warning,
+      ghost,
+      primary,
+      hasActivityDot: !!activityDot,
+    }"
     type="button"
     :title="label"
     :aria-label="label"
     v-bind="$attrs"
+    @click="onClick"
   >
     <span class="icon"><slot name="icon" /></span>
     <span class="sr-only">{{ label }}</span>
@@ -133,6 +151,25 @@ withDefaults(
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.ibtn.hasActivityDot::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-blue100);
+  border: 2px solid var(--btn-default-bg);
+  pointer-events: none;
+}
+
+.ibtn.highlight.hasActivityDot::after,
+.ibtn.active.hasActivityDot::after,
+.ibtn.warning.hasActivityDot::after {
+  border-color: currentColor;
 }
 
 .sr-only {

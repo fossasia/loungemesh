@@ -4,6 +4,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { applyVote, canVote, pollResultsSenderId, publishPollResultsToChat } from '@/utils/sessionPoll';
+import { playUiSound } from '@/utils/uiSounds';
 
 /** Poll create / vote / close actions shared by the footer poll popover. */
 export function useSessionPollControls() {
@@ -30,6 +31,7 @@ export function useSessionPollControls() {
     };
     features.applyPoll(poll);
     engine.sendCommand('poll', JSON.stringify(poll));
+    playUiSound('success');
   }
 
   function vote(optionId: string) {
@@ -39,6 +41,7 @@ export function useSessionPollControls() {
     const poll = applyVote(features.activePoll!, optionId);
     features.applyPoll(poll);
     engine.sendCommand('poll', JSON.stringify(poll));
+    playUiSound('success');
   }
 
   function closePoll() {
@@ -49,6 +52,7 @@ export function useSessionPollControls() {
     publishPollResultsToChat(conference, poll, senderId);
     features.applyPoll(null);
     engine.sendCommand('poll', JSON.stringify(null));
+    playUiSound('tap');
   }
 
   function togglePollPanel() {

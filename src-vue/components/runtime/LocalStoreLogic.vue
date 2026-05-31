@@ -181,6 +181,13 @@ watch(
 watch(() => localStore.audio, bindSpeakingMonitor, { immediate: true });
 
 watch(
+  () => localStore.mute,
+  () => {
+    if (conferenceStore.isJoined) engine.refreshRemoteAudio?.();
+  },
+);
+
+watch(
   () => conferenceStore.usersEpoch,
   () => {
     localStore.ensureRoomBounds();

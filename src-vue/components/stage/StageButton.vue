@@ -26,6 +26,7 @@ onBeforeUnmount(() => {
   <IconButton
     label="Stage"
     :active="local.onStage"
+    :sound="local.onStage ? 'toggleOff' : 'toggleOn'"
     :title="features.canUseStage ? 'Stage' : 'Stage — ask host for access'"
     @click="toggle"
   >

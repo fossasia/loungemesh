@@ -15,6 +15,7 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
 import { joinFromEnterPage } from '@/utils/enterPageJoin';
 import AppIcon from '@/components/ui/AppIcon.vue';
+import { playUiSound } from '@/utils/uiSounds';
 
 const props = defineProps<{ id: string }>();
 
@@ -36,6 +37,7 @@ watch(
 );
 
 async function join() {
+  playUiSound('success');
   joiningSession.value = true;
   await joinFromEnterPage(local, engine, conference, router, ensureLocalTracks);
 }
@@ -63,6 +65,7 @@ onBeforeUnmount(() => {
     <IconButton
       :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
       :warning="local.cameraOff"
+      :sound="local.cameraOff ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleCamera()"
     >
       <template #icon>
@@ -72,6 +75,7 @@ onBeforeUnmount(() => {
     <IconButton
       :label="local.mute ? 'Unmute' : 'Mute'"
       :warning="local.mute"
+      :sound="local.mute ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleMute()"
     >
       <template #icon>

@@ -159,4 +159,19 @@ describe('sessionFeaturesStore', () => {
     features.approveLobby('g1');
     expect(features.lobbyWaiting).toHaveLength(0);
   });
+
+  it('tracks unread notes and whiteboard activity', () => {
+    const features = useSessionFeaturesStore();
+    features.setRoomDefault('notes', true);
+    features.setRoomDefault('whiteboard', true);
+    features.bumpNotesActivity();
+    expect(features.hasUnreadNotes).toBe(true);
+    features.togglePanel('notes');
+    expect(features.hasUnreadNotes).toBe(false);
+
+    features.bumpWhiteboardActivity();
+    expect(features.hasUnreadWhiteboard).toBe(true);
+    features.togglePanel('whiteboard');
+    expect(features.hasUnreadWhiteboard).toBe(false);
+  });
 });

@@ -25,12 +25,14 @@ import {
 } from './chatPanelActions';
 import { CHAT_EMOJIS } from './insertEmoji';
 import { chatPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
+import { playUiSound } from '@/utils/uiSounds';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
 const features = useSessionFeaturesStore();
 const { engine, joined: engineJoined } = useMediaEngine();
 const open = ref(false);
+const chatSeenCount = ref(0);
 const chatRoot = ref<HTMLElement | null>(null);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
 const chatError = ref('');
@@ -39,6 +41,14 @@ const editDraft = ref('');
 const historyOpen = ref<Record<string, boolean>>({});
 
 const localUserId = computed(() => local.id || engine.getLocalUserId() || '');
+
+const hasUnreadChat = computed(
+  () => !open.value && conference.messages.length > chatSeenCount.value,
+);
+
+function markChatSeen() {
+  chatSeenCount.value = conference.messages.length;
+}
 
 function chatReady() {
   return isChatReady(
@@ -61,6 +71,7 @@ function sendMessage() {
       conference.appendChatMessage(createChatMessage(senderId, text, -Date.now(), messageId));
       el.value = '';
       chatError.value = '';
+      playUiSound('send');
     },
   );
   if (!result.ok && result.reason === 'not_ready') {
@@ -135,12 +146,26 @@ async function scrollChatIfOpen() {
 
 async function onChatPanelOpen(isOpen: boolean) {
   if (!isOpen) return;
+  markChatSeen();
   chatError.value = '';
   await nextTick();
   scrollChatToBottom(chatRoot.value);
 }
 
-watch(() => conference.messages.length, scrollChatIfOpen);
+function onIncomingMessages(nextCount: number, prevCount: number) {
+  if (nextCount <= prevCount) return;
+  if (open.value) {
+    markChatSeen();
+    void scrollChatIfOpen();
+    return;
+  }
+  const latest = conference.messages[nextCount - 1];
+  if (latest && latest.id !== localUserId.value) {
+    playUiSound('chatMessage');
+  }
+}
+
+watch(() => conference.messages.length, onIncomingMessages);
 watch(open, onChatPanelOpen);
 watch(
   () => [conference.isJoined, engineJoined.value, conference.conferenceObject],
@@ -269,7 +294,13 @@ watch(
       </div>
     </MenuCard>
 
-    <IconButton label="Chat" :highlight="open" @click="open = !open">
+    <IconButton
+      label="Chat"
+      :highlight="open"
+      :activity-dot="hasUnreadChat"
+      sound="panel"
+      @click="open = !open"
+    >
       <template #icon><AppIcon name="chat" /></template>
     </IconButton>
   </div>
