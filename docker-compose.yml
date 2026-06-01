@@ -1,15 +1,15 @@
-# Flowspace (Vue SPA) + local Jitsi Meet (docker-jitsi-meet stack).
+# LoungeMesh (Vue SPA) + local Jitsi Meet (docker-jitsi-meet stack).
 #
 #   docker compose up -d --build
 #
-# Flowspace UI: http://127.0.0.1:8780
+# LoungeMesh UI: http://127.0.0.1:8780
 # Jitsi web:    http://127.0.0.1:8001  (PUBLIC_URL in .env)
 #
 # Image versions are pinned here so Dependabot can open update PRs automatically.
 # Do NOT use ${JITSI_IMAGE_VERSION} or floating tags like :stable — pin explicitly.
 
 services:
-  flowspace:
+  loungemesh:
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,8 +22,8 @@ services:
         VITE_EVENTYAY_API_BASE: ${VITE_EVENTYAY_API_BASE-}
         VITE_SESSION_PREFIX: ${VITE_SESSION_PREFIX-}
     ports:
-      - "127.0.0.1:${FLOWSPACE_PORT:-8780}:80"
-      - "[::1]:${FLOWSPACE_PORT:-8780}:80"
+      - "127.0.0.1:${LOUNGEMESH_PORT:-8780}:80"
+      - "[::1]:${LOUNGEMESH_PORT:-8780}:80"
     depends_on:
       jitsi-web:
         condition: service_started

@@ -16,9 +16,9 @@ describe('ErrorHandler', () => {
     conf.$patch({ error: SESSION_ERROR_CODES.JOIN_FAILED });
     const { wrapper } = await mountWithApp(ErrorHandler);
     expect(wrapper.text()).toContain("Couldn't connect to the session.");
-    expect(wrapper.text()).toContain('FS-E001');
+    expect(wrapper.text()).toContain('LM-E001');
     expect(wrapper.text()).toContain("Couldn't join this session.");
-    expect(wrapper.text()).toContain('FS-E003');
+    expect(wrapper.text()).toContain('LM-E003');
     expect(wrapper.text()).not.toContain('xmpp');
     await wrapper.find('button.close').trigger('click');
     expect(conn.error).toBeUndefined();
@@ -29,7 +29,7 @@ describe('ErrorHandler', () => {
     const conf = useConferenceStore();
     conf.$patch({ error: SESSION_ERROR_CODES.SESSION_UNAVAILABLE, isJoined: true });
     const { wrapper } = await mountWithApp(ErrorHandler);
-    expect(wrapper.text()).not.toContain('FS-E004');
+    expect(wrapper.text()).not.toContain('LM-E004');
     wrapper.unmount();
   });
 });

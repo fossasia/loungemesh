@@ -188,7 +188,7 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
       ctx.fillStyle = '#cbd5e1';
       ctx.font = '600 30px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Recording Flowspace session', canvas.width / 2, canvas.height / 2);
+      ctx.fillText('Recording LoungeMesh session', canvas.width / 2, canvas.height / 2);
       ctx.textAlign = 'start';
     }
     refreshAudioMix();

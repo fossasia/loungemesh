@@ -12,14 +12,14 @@ describe('EnterPage', () => {
 
   it('mounts and navigates to session on join', async () => {
     const { wrapper, router } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
-      props: { id: 'flowspace' },
+      route: '/enter/loungemesh',
+      props: { id: 'loungemesh' },
     });
     expect(wrapper.text()).toContain('Join');
     const push = vi.spyOn(router, 'push');
     await wrapper.find('.btn-primary-round').trigger('click');
     await flushPromises();
-    expect(push).toHaveBeenCalledWith('/session/flowspace');
+    expect(push).toHaveBeenCalledWith('/session/loungemesh');
     wrapper.unmount();
   });
 
@@ -28,8 +28,8 @@ describe('EnterPage', () => {
     local.mute = false;
     local.cameraOff = false;
     const { wrapper } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
-      props: { id: 'flowspace' },
+      route: '/enter/loungemesh',
+      props: { id: 'loungemesh' },
     });
     const labels = wrapper.findAll('button.ibtn').map((b) => b.attributes('aria-label'));
     expect(labels).toContain('Mute');
@@ -43,8 +43,8 @@ describe('EnterPage', () => {
     local.mute = true;
     local.cameraOff = true;
     const { wrapper } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
-      props: { id: 'flowspace' },
+      route: '/enter/loungemesh',
+      props: { id: 'loungemesh' },
     });
     const labels = wrapper.findAll('button.ibtn').map((b) => b.attributes('aria-label'));
     expect(labels).toContain('Unmute');
@@ -56,7 +56,7 @@ describe('EnterPage', () => {
     const conference = useConferenceStore();
     conference.setConferenceName('keep-name');
     const { wrapper } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
+      route: '/enter/loungemesh',
       props: { id: '' },
     });
     expect(conference.conferenceName).toBe('keep-name');
@@ -68,8 +68,8 @@ describe('EnterPage', () => {
     const cameraSpy = vi.spyOn(local, 'toggleCamera').mockResolvedValue(undefined);
     const muteSpy = vi.spyOn(local, 'toggleMute').mockResolvedValue(undefined);
     const { wrapper } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
-      props: { id: 'flowspace' },
+      route: '/enter/loungemesh',
+      props: { id: 'loungemesh' },
     });
     await wrapper.find('[aria-label="Turn off camera"]').trigger('click');
     await wrapper.find('[aria-label="Mute"]').trigger('click');
@@ -82,8 +82,8 @@ describe('EnterPage', () => {
     const local = useLocalStore();
     const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
     const { wrapper } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
-      props: { id: 'flowspace' },
+      route: '/enter/loungemesh',
+      props: { id: 'loungemesh' },
     });
     wrapper.unmount();
     expect(stopSpy).toHaveBeenCalled();
@@ -93,8 +93,8 @@ describe('EnterPage', () => {
     const local = useLocalStore();
     const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
     const { wrapper, router } = await mountWithApp(EnterPage, {
-      route: '/enter/flowspace',
-      props: { id: 'flowspace' },
+      route: '/enter/loungemesh',
+      props: { id: 'loungemesh' },
     });
     vi.spyOn(router, 'push').mockResolvedValue(undefined as never);
     await wrapper.find('.btn-primary-round').trigger('click');

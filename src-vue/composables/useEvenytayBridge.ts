@@ -1,7 +1,7 @@
 /**
- * postMessage bridge between Flowspace (iframe) and Eventyay (parent window).
+ * postMessage bridge between LoungeMesh (iframe) and Eventyay (parent window).
  *
- * When Flowspace is embedded in the Eventyay video platform, this composable:
+ * When LoungeMesh is embedded in the Eventyay video platform, this composable:
  *  - Announces itself to the parent so the parent can show a "participants: N" count.
  *  - Receives a new JWT from the parent when the current one is about to expire.
  *  - Notifies the parent when the local user joins / leaves.
@@ -12,11 +12,11 @@
 import { onMounted, onUnmounted } from 'vue';
 
 export type BridgeMessage =
-  | { source: 'flowspace'; type: 'ready' }
-  | { source: 'flowspace'; type: 'participant_joined'; count: number }
-  | { source: 'flowspace'; type: 'participant_left'; count: number }
-  | { source: 'flowspace'; type: 'token_expired'; opaqueToken: string }
-  | { source: 'eventyay'; type: 'flowspace:new_token'; jwt: string };
+  | { source: 'loungemesh'; type: 'ready' }
+  | { source: 'loungemesh'; type: 'participant_joined'; count: number }
+  | { source: 'loungemesh'; type: 'participant_left'; count: number }
+  | { source: 'loungemesh'; type: 'token_expired'; opaqueToken: string }
+  | { source: 'eventyay'; type: 'loungemesh:new_token'; jwt: string };
 
 function getAllowedOrigins(): string[] {
   const raw = (import.meta.env.VITE_ALLOW_IFRAME_FROM as string | undefined)?.trim() ?? '';
@@ -58,15 +58,15 @@ export function useEventyayBridge() {
   const inIframe = isInIframe();
 
   function announce(): void {
-    postToParent({ source: 'flowspace', type: 'ready' });
+    postToParent({ source: 'loungemesh', type: 'ready' });
   }
 
   function notifyJoined(count: number): void {
-    postToParent({ source: 'flowspace', type: 'participant_joined', count });
+    postToParent({ source: 'loungemesh', type: 'participant_joined', count });
   }
 
   function notifyLeft(count: number): void {
-    postToParent({ source: 'flowspace', type: 'participant_left', count });
+    postToParent({ source: 'loungemesh', type: 'participant_left', count });
   }
 
   async function handleMessage(e: MessageEvent): Promise<void> {
@@ -74,7 +74,7 @@ export function useEventyayBridge() {
     if (allowed.length > 0 && !allowed.includes(e.origin)) return;
     if (!e.data || e.data.source !== 'eventyay') return;
 
-    if (e.data.type === 'flowspace:new_token') {
+    if (e.data.type === 'loungemesh:new_token') {
       const jwt = e.data.jwt as string;
       if (jwt && _jwtRefreshCallback) {
         _jwtRefreshCallback(jwt);

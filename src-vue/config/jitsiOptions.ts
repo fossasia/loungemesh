@@ -1,4 +1,4 @@
-export const conferenceNameDefault = 'flowspace';
+export const conferenceNameDefault = 'loungemesh';
 
 export const jitsiInitOptions = {
   disableAudioLevels: true,
@@ -16,10 +16,10 @@ export const conferenceOptions = {
    * identically in local dev and production.
    */
   openBridgeChannel: 'datachannel' as const,
-  /** Always use JVB — P2P breaks replaceTrack / remote media in Flowspace. */
+  /** Always use JVB — P2P breaks replaceTrack / remote media in LoungeMesh. */
   p2p: { enabled: false },
   /**
-   * Single video encoding per sender. Simpler and reliable for Flowspace tiles;
+   * Single video encoding per sender. Simpler and reliable for LoungeMesh tiles;
    * avoids simulcast setParameters edge cases across Chrome/Firefox.
    */
   disableSimulcast: true,

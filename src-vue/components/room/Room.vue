@@ -17,7 +17,7 @@ watch(
     if (!base) return;
     try {
       const res = await fetch(
-        `${base.replace(/\/$/, '')}/v1/events/${encodeURIComponent(id)}/flowspace`,
+        `${base.replace(/\/$/, '')}/v1/events/${encodeURIComponent(id)}/loungemesh`,
         { headers: { Accept: 'application/vnd.api+json' } }
       );
       if (!res.ok) return;

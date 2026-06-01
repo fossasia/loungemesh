@@ -2,7 +2,7 @@
 /**
  * Safe env setup: merges templates into `.env` without overwriting existing secrets.
  *
- * Usually invoked via scripts/flowspace.sh (npm run setup / npm run deploy), e.g.:
+ * Usually invoked via scripts/loungemesh.sh (npm run setup / npm run deploy), e.g.:
  *
  *   node scripts/setup-env.mjs development
  *   node scripts/setup-env.mjs production --app-host=... --jitsi-host=... --public-ip=...
@@ -36,7 +36,7 @@ const PASSWORD_KEYS = new Set([
 const PRODUCTION_URL_KEYS = new Set([
   'PUBLIC_URL',
   'VITE_JITSI_PUBLIC_URL',
-  'FLOWSPACE_PUBLIC_URL',
+  'LOUNGEMESH_PUBLIC_URL',
   'DOCKER_HOST_ADDRESS',
   'JVB_WS_DOMAIN',
   'JVB_WS_TLS',
@@ -180,7 +180,7 @@ function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, j
       let next = current;
       if (key === 'DOCKER_HOST_ADDRESS') next = publicIp;
       else if (key === 'PUBLIC_URL') next = jitsiUrl;
-      else if (key === 'VITE_JITSI_PUBLIC_URL' || key === 'FLOWSPACE_PUBLIC_URL') next = appUrl;
+      else if (key === 'VITE_JITSI_PUBLIC_URL' || key === 'LOUNGEMESH_PUBLIC_URL') next = appUrl;
       else if (key === 'JVB_WS_DOMAIN') next = jitsiHost;
       else if (key === 'JVB_WS_TLS') next = '1';
 
@@ -337,7 +337,7 @@ if (args.mode === 'production') {
   if (!jitsiHost || !publicIp || isPlaceholder(jitsiHost) || isPlaceholder(publicIp)) {
     console.error(
       'Production setup requires jitsi host and public IP.\n' +
-        '  First time: ./scripts/flowspace.sh bootstrap --app-host=... --jitsi-host=... --email=...\n' +
+        '  First time: ./scripts/loungemesh.sh bootstrap --app-host=... --jitsi-host=... --email=...\n' +
         '  Or re-run deploy after bootstrap (npm run deploy merges .env from your existing values)',
     );
     process.exit(1);
@@ -347,7 +347,7 @@ if (args.mode === 'production') {
   args.publicIp = publicIp;
   if (!args.appHost) {
     args.appHost = stripProtocol(
-      prior.get('FLOWSPACE_APP_HOST') || prior.get('FLOWSPACE_PUBLIC_URL') || '',
+      prior.get('LOUNGEMESH_APP_HOST') || prior.get('LOUNGEMESH_PUBLIC_URL') || '',
     );
   }
   templateText = applyProductionPlaceholders(templateText, {
@@ -372,8 +372,8 @@ const { merged, summary } = mergeMaps(existingMap, templateMap, {
 
 if (args.mode === 'production' && args.appHost) {
   const app = stripProtocol(args.appHost);
-  merged.set('FLOWSPACE_PUBLIC_URL', `https://${app}`);
-  merged.set('FLOWSPACE_APP_HOST', app);
+  merged.set('LOUNGEMESH_PUBLIC_URL', `https://${app}`);
+  merged.set('LOUNGEMESH_APP_HOST', app);
   merged.set('VITE_JITSI_PUBLIC_URL', `https://${app}`);
 }
 

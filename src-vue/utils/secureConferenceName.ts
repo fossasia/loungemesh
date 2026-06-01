@@ -1,7 +1,7 @@
 export function secureConferenceName(
   name: string | undefined,
   prefix: string | undefined = undefined,
-  defaultPrefix = 'fls'
+  defaultPrefix = 'lms'
 ): string {
   if (!name) throw new Error('no Conference Name was provided');
   let n = name.toLowerCase();

@@ -1,11 +1,11 @@
 /**
- * Eventyay access guard for Flowspace.
+ * Eventyay access guard for LoungeMesh.
  *
  * Flow:
  *   1. Eventyay plugin issues an opaque token and redirects the user to
  *      /join/<jitsiRoom>?token=<opaque>&event=<slug>&room=<slug>
  *   2. This composable exchanges the opaque token for a signed Jitsi JWT
- *      by calling VITE_EVENTYAY_JWT_ENDPOINT (the eventyay-flowspace plugin API).
+ *      by calling VITE_EVENTYAY_JWT_ENDPOINT (the eventyay-loungemesh plugin API).
  *   3. The resolved Jitsi JWT is stored in sessionStorage so it survives
  *      the in-page navigation from /join → /session.
  *   4. When VITE_EVENTYAY_API_BASE is not set, the app is in open mode
@@ -20,7 +20,7 @@ export type AccessState =
   | { status: 'granted'; jwt: string | null; displayName: string; jitsiRoom: string }
   | { status: 'denied'; reason: string };
 
-const SESSION_KEY = 'flowspace:access';
+const SESSION_KEY = 'loungemesh:access';
 
 export interface StoredAccess {
   jwt: string | null;
@@ -67,7 +67,7 @@ export function getStoredOpaqueToken(): string | null {
 }
 
 /**
- * Fetch a fresh Jitsi JWT from the eventyay-flowspace token refresh endpoint.
+ * Fetch a fresh Jitsi JWT from the eventyay-loungemesh token refresh endpoint.
  * Called by JitsiAdapter when the Jitsi conference emits AUTHENTICATION_REQUIRED.
  */
 export async function refreshJwt(): Promise<string | null> {

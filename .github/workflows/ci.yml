@@ -70,7 +70,7 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            APP_DIR="${{ vars.DEPLOY_PATH || '/opt/flowspace' }}"
+            APP_DIR="${{ vars.DEPLOY_PATH || '/opt/loungemesh' }}"
             BRANCH="${{ github.ref_name }}"
             cd "$APP_DIR"
             echo "==> Deploying ${{ github.sha }} (${BRANCH})"
@@ -78,4 +78,4 @@ jobs:
             git reset --hard "origin/$BRANCH"
             # --auto-ip detects the current server public IP and updates DOCKER_HOST_ADDRESS
             # automatically, so deploys keep working even after an Elastic IP reassignment.
-            bash scripts/flowspace.sh deploy --auto-ip
+            bash scripts/loungemesh.sh deploy --auto-ip

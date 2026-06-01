@@ -18,7 +18,7 @@ describe('HomePage', () => {
 
   it('mounts and submits username and session', async () => {
     const { wrapper, router } = await mountWithApp(HomePage, { route: '/' });
-    expect(wrapper.text()).toContain('Flowspace');
+    expect(wrapper.text()).toContain('LoungeMesh');
     const push = vi.spyOn(router, 'push');
     const inputs = wrapper.findAll('input[type="text"]');
     await inputs[0].setValue('Alex');

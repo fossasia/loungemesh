@@ -19,9 +19,9 @@ test.describe('Session shell', () => {
     });
   });
 
-  test('session page title is Flowspace', async ({ page }) => {
+  test('session page title is LoungeMesh', async ({ page }) => {
     await page.goto('/session/my-session');
-    await expect(page).toHaveTitle(/Flowspace/i);
+    await expect(page).toHaveTitle(/LoungeMesh/i);
   });
 
   test('home page input accepts text', async ({ page }) => {
@@ -48,7 +48,7 @@ test.describe('Session shell', () => {
     const response = await page.goto('/manifest.json');
     expect(response?.status()).toBe(200);
     const body = await response?.json();
-    expect(body?.name).toMatch(/Flowspace/i);
+    expect(body?.name).toMatch(/LoungeMesh/i);
     expect(body?.theme_color).toBeTruthy();
   });
 });

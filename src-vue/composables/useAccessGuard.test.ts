@@ -49,7 +49,7 @@ describe('useAccessGuard — sessionStorage helpers', () => {
 
   it('getStoredJwt returns null for expired entries', () => {
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'old-jwt',
         displayName: 'Bob',
@@ -63,7 +63,7 @@ describe('useAccessGuard — sessionStorage helpers', () => {
 
   it('getStoredOpaqueToken returns null when opaque token is missing', () => {
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'j',
         displayName: 'A',
@@ -76,7 +76,7 @@ describe('useAccessGuard — sessionStorage helpers', () => {
 
   it('getStoredOpaqueToken returns opaque token when stored', () => {
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'j',
         displayName: 'A',
@@ -90,7 +90,7 @@ describe('useAccessGuard — sessionStorage helpers', () => {
 
   it('getStoredJwt returns stored JWT when not expired', () => {
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'valid-jwt',
         displayName: 'Carol',
@@ -116,7 +116,7 @@ describe('refreshJwt', () => {
   it('returns null when endpoint is unset but opaque token exists', async () => {
     vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', '');
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'j',
         displayName: 'A',
@@ -129,14 +129,14 @@ describe('refreshJwt', () => {
   });
 
   it('returns null when no stored token exists', async () => {
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://example.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://example.com/api/v1/loungemesh/token/');
     expect(await refreshJwt()).toBeNull();
   });
 
   it('returns null when refresh response has no jwt', async () => {
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://example.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://example.com/api/v1/loungemesh/token/');
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'j',
         displayName: 'A',
@@ -150,9 +150,9 @@ describe('refreshJwt', () => {
   });
 
   it('returns null when refresh network call fails', async () => {
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://example.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://example.com/api/v1/loungemesh/token/');
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'j',
         displayName: 'A',
@@ -167,7 +167,7 @@ describe('refreshJwt', () => {
 
   it('refreshes jwt from API', async () => {
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'old',
         displayName: 'A',
@@ -176,7 +176,7 @@ describe('refreshJwt', () => {
         expiresAt: new Date(Date.now() + 3600_000).toISOString(),
       }),
     );
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -188,15 +188,15 @@ describe('refreshJwt', () => {
   });
 
   it('returns null when stored access JSON is invalid', async () => {
-    sessionStorage.setItem('flowspace:access', 'not-json');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    sessionStorage.setItem('loungemesh:access', 'not-json');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     expect(await refreshJwt()).toBeNull();
   });
 
   it('returns null when refresh HTTP response is not ok', async () => {
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'j',
         displayName: 'A',
@@ -230,9 +230,9 @@ describe('useAccessGuard.check', () => {
 
   it('ignores sessionStorage when the stored room differs', async () => {
     vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.com');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     sessionStorage.setItem(
-      'flowspace:access',
+      'loungemesh:access',
       JSON.stringify({
         jwt: 'jwt',
         displayName: 'Alice',
@@ -255,7 +255,7 @@ describe('useAccessGuard.check', () => {
       opaqueToken: 'tok',
       expiresAt: new Date(Date.now() + 3600_000).toISOString(),
     };
-    sessionStorage.setItem('flowspace:access', JSON.stringify(stored));
+    sessionStorage.setItem('loungemesh:access', JSON.stringify(stored));
     const result = await withRouter('/join/room-a?token=ignored', (guard) => guard.check('room-a'));
     expect(result.status).toBe('granted');
     if (result.status === 'granted') expect(result.jwt).toBe('jwt');
@@ -263,7 +263,7 @@ describe('useAccessGuard.check', () => {
 
   it('exchanges token via API', async () => {
     vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.com');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -282,7 +282,7 @@ describe('useAccessGuard.check', () => {
 
   it('grants with empty optional fields from API', async () => {
     vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.com');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -301,7 +301,7 @@ describe('useAccessGuard.check', () => {
 
   it('uses forbidden fallback when 403 body is not JSON', async () => {
     vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.com');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -318,7 +318,7 @@ describe('useAccessGuard.check', () => {
 
   it('handles forbidden, server error, and network failure', async () => {
     vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.com');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
 
     vi.stubGlobal(
       'fetch',
@@ -345,7 +345,7 @@ describe('useAccessGuard.check', () => {
 
   it('still grants when sessionStorage setItem throws', async () => {
     vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.com');
-    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/flowspace/token/');
+    vi.stubEnv('VITE_EVENTYAY_JWT_ENDPOINT', 'https://eventyay.com/api/v1/loungemesh/token/');
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('quota');
     });

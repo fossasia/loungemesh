@@ -4,7 +4,7 @@ import { playUiSound, resetUiSoundsForTests, type UiSoundId } from './uiSounds';
 describe('playUiSound', () => {
   beforeEach(() => {
     resetUiSoundsForTests();
-    localStorage.removeItem('flowspace:ui-sounds');
+    localStorage.removeItem('loungemesh:ui-sounds');
   });
 
   afterEach(() => {
@@ -34,7 +34,7 @@ describe('playUiSound', () => {
   });
 
   it('no-ops when ui sounds are disabled', () => {
-    localStorage.setItem('flowspace:ui-sounds', '0');
+    localStorage.setItem('loungemesh:ui-sounds', '0');
     const AudioContextCtor = vi.fn();
     vi.stubGlobal('AudioContext', AudioContextCtor);
     playUiSound('tap');

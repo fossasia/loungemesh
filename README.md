@@ -1,8 +1,8 @@
-# Flowspace
+# LoungeMesh
 
 Spatial video lounge for informal online and hybrid events — move freely in a shared 2D space with proximity-based audio. Built for [Eventyay](https://eventyay.com) integration and self-hosted Jitsi.
 
-**Documentation:** [docs.flowspace.com](https://docs.flowspace.com) — built with TypeDoc + VitePress, deployed via [GitHub Actions](.github/workflows/docs.yml) to GitHub Pages (`DOCS_CNAME` + `DOCS_BASE_URL` repo variables). See [Publishing docs](docs-site/guide/publishing-docs.md).
+**Documentation:** [docs.loungemesh.com](https://docs.loungemesh.com) — built with TypeDoc + VitePress, deployed via [GitHub Actions](.github/workflows/docs.yml) to GitHub Pages (`DOCS_CNAME` + `DOCS_BASE_URL` repo variables). See [Publishing docs](docs-site/guide/publishing-docs.md).
 
 ## Quick start
 
@@ -21,7 +21,7 @@ npm run setup
 npm run docker:up
 ```
 
-- Flowspace: http://127.0.0.1:8780  
+- LoungeMesh: http://127.0.0.1:8780  
 - Jitsi: http://127.0.0.1:8001  
 
 Use `127.0.0.1` for Docker smoke tests; some systems resolve `localhost` to IPv6 first, which can reset the mapped container port.
@@ -44,11 +44,11 @@ Use `127.0.0.1` for Docker smoke tests; some systems resolve `localhost` to IPv6
 | `npm run docs:build` | Build docs to `docs-site/.vitepress/dist` |
 | `npm run test:e2e` | Playwright smoke tests (after `npm run build`) |
 | `npm run typecheck` | Type-check `.ts` and `.vue` with `vue-tsc` |
-| `npm run setup` | Create `.env` for local dev + Docker (`flowspace.sh dev`) |
-| `npm run deploy` | Rebuild Docker stack on server (`flowspace.sh deploy`) |
+| `npm run setup` | Create `.env` for local dev + Docker (`loungemesh.sh dev`) |
+| `npm run deploy` | Rebuild Docker stack on server (`loungemesh.sh deploy`) |
 | `npm run fix:jvb` | Fix a JVB advertising the wrong public IP |
 
-Production server setup uses `./scripts/flowspace.sh bootstrap` — see
+Production server setup uses `./scripts/loungemesh.sh bootstrap` — see
 [Deployment](docs-site/guide/deployment.md).
 
 ## License

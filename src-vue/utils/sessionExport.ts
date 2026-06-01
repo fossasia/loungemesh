@@ -15,7 +15,7 @@ export function safeSessionSlug(sessionId: string | undefined): string {
   return slug || 'session';
 }
 
-/** Build a timestamped export file name, e.g. `flowspace-standup-20260531-2310.md`. */
+/** Build a timestamped export file name, e.g. `loungemesh-standup-20260531-2310.md`. */
 export function exportFileName(
   kind: ExportKind,
   sessionId: string | undefined,
@@ -25,12 +25,12 @@ export function exportFileName(
   const stamp =
     `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
     `-${pad(now.getHours())}${pad(now.getMinutes())}`;
-  return `flowspace-${safeSessionSlug(sessionId)}-${stamp}.${EXTENSIONS[kind]}`;
+  return `loungemesh-${safeSessionSlug(sessionId)}-${stamp}.${EXTENSIONS[kind]}`;
 }
 
 /** Render shared notes as a small Markdown document. */
 export function notesToMarkdown(notes: string, sessionId: string | undefined, now: Date = new Date()): string {
-  const heading = `# Flowspace notes — ${safeSessionSlug(sessionId)}`;
+  const heading = `# LoungeMesh notes — ${safeSessionSlug(sessionId)}`;
   const when = `_Exported ${now.toISOString()}_`;
   const body = notes.trim().length ? notes.trim() : '_No notes were taken in this session._';
   return `${heading}\n\n${when}\n\n${body}\n`;

@@ -20,7 +20,7 @@ ARG VITE_DISABLE_STUN_TURN_DISCOVERY
 ARG VITE_EVENTYAY_API_BASE
 ARG VITE_EVENTYAY_JWT_ENDPOINT
 ARG VITE_SESSION_PREFIX
-# Comma-separated origins allowed to embed Flowspace in an iframe.
+# Comma-separated origins allowed to embed LoungeMesh in an iframe.
 # Baked at build time into the SPA (used in meta tag + postMessage).
 ARG VITE_ALLOW_IFRAME_FROM
 

@@ -18,7 +18,7 @@ export type UiSoundId =
 let audioContext: AudioContext | undefined;
 
 function uiSoundsDisabled(): boolean {
-  return typeof window !== 'undefined' && localStorage.getItem('flowspace:ui-sounds') === '0';
+  return typeof window !== 'undefined' && localStorage.getItem('loungemesh:ui-sounds') === '0';
 }
 
 /** Test helper */

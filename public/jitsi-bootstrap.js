@@ -1,13 +1,13 @@
 /**
  * Runs before lib-jitsi-meet. Suppresses lib-jitsi console noise unless media debug is on.
- * Debug: localStorage.setItem('flowspace:media-debug', '1') then reload.
+ * Debug: localStorage.setItem('loungemesh:media-debug', '1') then reload.
  */
-(function installFlowspaceJitsiBootstrap() {
+(function installLoungeMeshJitsiBootstrap() {
   var FILTER_VERSION = 3;
 
   function isMediaDebug() {
     try {
-      return localStorage.getItem('flowspace:media-debug') === '1';
+      return localStorage.getItem('loungemesh:media-debug') === '1';
     } catch {
       return false;
     }
@@ -40,14 +40,14 @@
       .join(' ');
   }
 
-  function isFlowspaceLog(text) {
-    return text.indexOf('[flowspace:media]') !== -1;
+  function isLoungeMeshLog(text) {
+    return text.indexOf('[loungemesh:media]') !== -1;
   }
 
   function shouldFilter(args) {
     if (isMediaDebug()) return false;
     var text = argText(args);
-    if (isFlowspaceLog(text)) return false;
+    if (isLoungeMeshLog(text)) return false;
     for (var i = 0; i < jitsiPatterns.length; i++) {
       if (jitsiPatterns[i].test(text)) return true;
     }
@@ -56,10 +56,10 @@
 
   function installConsoleFilter() {
     if (isMediaDebug()) return;
-    if (window.__flowspaceJitsiConsoleFilterVersion === FILTER_VERSION) return;
+    if (window.__loungemeshJitsiConsoleFilterVersion === FILTER_VERSION) return;
 
-    if (!window.__flowspaceConsoleOriginals) {
-      window.__flowspaceConsoleOriginals = {
+    if (!window.__loungemeshConsoleOriginals) {
+      window.__loungemeshConsoleOriginals = {
         log: console.log.bind(console),
         info: console.info.bind(console),
         warn: console.warn.bind(console),
@@ -69,7 +69,7 @@
       };
     }
 
-    var originals = window.__flowspaceConsoleOriginals;
+    var originals = window.__loungemeshConsoleOriginals;
     ['log', 'info', 'warn', 'error', 'debug'].forEach(function (level) {
       console[level] = function () {
         if (shouldFilter(arguments)) return;
@@ -81,13 +81,13 @@
       originals.trace.apply(console, arguments);
     };
 
-    window.__flowspaceJitsiConsoleFilter = true;
-    window.__flowspaceJitsiConsoleFilterVersion = FILTER_VERSION;
+    window.__loungemeshJitsiConsoleFilter = true;
+    window.__loungemeshJitsiConsoleFilterVersion = FILTER_VERSION;
   }
 
   installConsoleFilter();
 
-  window.__flowspaceSilenceJitsiLogs = function silenceJitsiLogs() {
+  window.__loungemeshSilenceJitsiLogs = function silenceJitsiLogs() {
     if (isMediaDebug()) return;
     var js = window.JitsiMeetJS;
     if (js && js.logLevels && js.setLogLevel) {

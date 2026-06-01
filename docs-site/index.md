@@ -1,7 +1,7 @@
 ---
 layout: home
 hero:
-  name: Flowspace
+  name: LoungeMesh
   text: Spatial video lounges
   tagline: Informal hallway-style interaction for online and hybrid events
   actions:

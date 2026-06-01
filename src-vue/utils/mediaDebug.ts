@@ -1,7 +1,7 @@
 import { conferenceOptions } from '@/config/jitsiOptions';
 
-const LOG_PREFIX = '[flowspace:media]';
-const LS_KEY = 'flowspace:media-debug';
+const LOG_PREFIX = '[loungemesh:media]';
+const LS_KEY = 'loungemesh:media-debug';
 
 type TrackLike = {
   getType?: () => string;
@@ -14,7 +14,7 @@ type TrackLike = {
   attach?: (el: HTMLElement) => void;
 };
 
-/** True when `VITE_MEDIA_DEBUG=true` or `localStorage['flowspace:media-debug'] === '1'`. */
+/** True when `VITE_MEDIA_DEBUG=true` or `localStorage['loungemesh:media-debug'] === '1'`. */
 export function isMediaDebugEnabled(): boolean {
   if (import.meta.env.VITE_MEDIA_DEBUG === 'true') return true;
   if (typeof localStorage === 'undefined') return false;
@@ -26,8 +26,8 @@ export function mediaDebugHelp(): void {
   if (!isMediaDebugEnabled()) return;
   console.info(
     LOG_PREFIX,
-    'Debug logging on. Filter console by "flowspace:media".',
-    'Disable: localStorage.removeItem("flowspace:media-debug") and reload.',
+    'Debug logging on. Filter console by "loungemesh:media".',
+    'Disable: localStorage.removeItem("loungemesh:media-debug") and reload.',
     'Or unset VITE_MEDIA_DEBUG and rebuild.',
   );
 }

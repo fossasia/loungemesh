@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Flowspace — one script for local dev and production.
+# LoungeMesh — one script for local dev and production.
 #
 # COMMANDS
 #   dev        Set up local .env (auto-detects LAN IP) and optionally start Docker
@@ -8,13 +8,13 @@
 #   fix-jvb    Force JVB to advertise the correct public IP (ICE broken / 172.18.x.x in logs)
 #
 # EXAMPLES
-#   ./scripts/flowspace.sh dev                        # local setup — zero config needed
-#   ./scripts/flowspace.sh deploy
-#   ./scripts/flowspace.sh bootstrap \
-#     --app-host=flowspace.example.com \
+#   ./scripts/loungemesh.sh dev                        # local setup — zero config needed
+#   ./scripts/loungemesh.sh deploy
+#   ./scripts/loungemesh.sh bootstrap \
+#     --app-host=loungemesh.example.com \
 #     --jitsi-host=jitsi.example.com \
 #     --email=admin@example.com                       # --public-ip auto-detected if omitted
-#   ./scripts/flowspace.sh fix-jvb                    # --public-ip auto-detected
+#   ./scripts/loungemesh.sh fix-jvb                    # --public-ip auto-detected
 #
 # npm aliases: npm run setup | npm run docker:up | npm run deploy | npm run fix:jvb
 set -euo pipefail
@@ -79,10 +79,10 @@ ensure_docker() {
     return 0
   fi
   # Docker group may exist but not apply until re-login
-  if [[ "${FLOWSPACE_DOCKER_REEXEC:-}" != 1 ]] && ! docker info >/dev/null 2>&1; then
+  if [[ "${LOUNGEMESH_DOCKER_REEXEC:-}" != 1 ]] && ! docker info >/dev/null 2>&1; then
     if id -nG "$USER" 2>/dev/null | grep -qw docker; then
-      export FLOWSPACE_DOCKER_REEXEC=1
-      exec sg docker -c "cd '$ROOT' && FLOWSPACE_DOCKER_REEXEC=1 bash scripts/flowspace.sh deploy $*"
+      export LOUNGEMESH_DOCKER_REEXEC=1
+      exec sg docker -c "cd '$ROOT' && LOUNGEMESH_DOCKER_REEXEC=1 bash scripts/loungemesh.sh deploy $*"
     fi
     echo "Docker permission denied. Add your user to the docker group:"
     echo "  sudo usermod -aG docker \$USER && newgrp docker"
@@ -181,7 +181,7 @@ update_ip_in_env() {
   docker compose stop jvb jicofo 2>/dev/null || true
   sudo rm -rf docker/jitsi-config/jvb
   mkdir -p docker/jitsi-config/jvb
-  echo "${new_ip}" > docker/jitsi-config/.flowspace-docker-host
+  echo "${new_ip}" > docker/jitsi-config/.loungemesh-docker-host
   export DOCKER_HOST_ADDRESS="$new_ip"
 }
 
@@ -203,7 +203,7 @@ validate_docker_host() {
     echo ""
     echo "ERROR: DOCKER_HOST_ADDRESS is not set in .env."
     echo "  Remote participants cannot send audio/video (JVB advertises wrong ICE URLs)."
-    echo "  Fix: ./scripts/flowspace.sh bootstrap --app-host=... --jitsi-host=... --public-ip=ELASTIC_IP"
+    echo "  Fix: ./scripts/loungemesh.sh bootstrap --app-host=... --jitsi-host=... --public-ip=ELASTIC_IP"
     echo ""
     exit 1
   fi
@@ -214,7 +214,7 @@ validate_docker_host() {
     echo ""
     echo "ERROR: DOCKER_HOST_ADDRESS=${ip} is a private/Docker address."
     echo "  Browsers cannot reach it. Set it to your server's public Elastic IP."
-    echo "  Then run: ./scripts/flowspace.sh fix-jvb --public-ip=ELASTIC_IP"
+    echo "  Then run: ./scripts/loungemesh.sh fix-jvb --public-ip=ELASTIC_IP"
     echo ""
     exit 1
   fi
@@ -224,7 +224,7 @@ validate_docker_host() {
 regenerate_jvb_if_needed() {
   local mode="$1"
   [[ "$mode" == "dev" ]] && return 0
-  local marker="./docker/jitsi-config/.flowspace-docker-host"
+  local marker="./docker/jitsi-config/.loungemesh-docker-host"
   local ip="${DOCKER_HOST_ADDRESS:-}"
   [[ -z "$ip" ]] && return 0
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$ip" ]]; then
@@ -237,7 +237,7 @@ regenerate_jvb_if_needed() {
 }
 
 regenerate_web_if_needed() {
-  local marker="./docker/jitsi-config/.flowspace-public-url"
+  local marker="./docker/jitsi-config/.loungemesh-public-url"
   local url="${PUBLIC_URL:-}"
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$url" ]]; then
     echo "==> PUBLIC_URL changed to ${url} — regenerating Jitsi web config"
@@ -308,12 +308,12 @@ check_ws() {
 
 verify_websockets() {
   local http_port="${HTTP_PORT:-8001}"
-  local flowspace_port="${FLOWSPACE_PORT:-8780}"
+  local loungemesh_port="${LOUNGEMESH_PORT:-8780}"
   echo "Quick checks:"
   curl -sfI "http://127.0.0.1:${http_port}/" | head -1 || \
     echo "WARN: jitsi-web not responding on :${http_port}"
-  curl -sfI "http://127.0.0.1:${flowspace_port}/" | head -1 || \
-    echo "WARN: flowspace not responding on :${flowspace_port}"
+  curl -sfI "http://127.0.0.1:${loungemesh_port}/" | head -1 || \
+    echo "WARN: loungemesh not responding on :${loungemesh_port}"
 
   local ws_line
   ws_line=$(check_ws "http://127.0.0.1:${http_port}/xmpp-websocket")
@@ -326,10 +326,10 @@ verify_websockets() {
   if [[ "$pub_url" == *https://* ]]; then
     local pub_host="${pub_url#https://}"
     local pub_line
-    pub_line=$(check_ws "https://${pub_host}/xmpp-websocket" "${FLOWSPACE_PUBLIC_URL:-}")
+    pub_line=$(check_ws "https://${pub_host}/xmpp-websocket" "${LOUNGEMESH_PUBLIC_URL:-}")
     echo "  xmpp-websocket (Caddy):  ${pub_line:-no response (is Caddy running?)}"
     if [[ "$pub_line" != *"101"* ]]; then
-      echo "  WARN: Run ./scripts/flowspace.sh bootstrap --update-caddy ... to refresh Caddyfile"
+      echo "  WARN: Run ./scripts/loungemesh.sh bootstrap --update-caddy ... to refresh Caddyfile"
     fi
   fi
 }
@@ -411,7 +411,7 @@ EOF
 # ── commands ──────────────────────────────────────────────────────────────────
 
 cmd_dev() {
-  echo "==> Flowspace local dev setup"
+  echo "==> LoungeMesh local dev setup"
   ensure_node
   node scripts/setup-env.mjs development $FORCE_FLAGS
 
@@ -451,7 +451,7 @@ cmd_dev() {
 
 cmd_deploy() {
   if [[ ! -f .env ]]; then
-    echo "Missing .env — run: ./scripts/flowspace.sh dev   (or bootstrap for production)"
+    echo "Missing .env — run: ./scripts/loungemesh.sh dev   (or bootstrap for production)"
     exit 1
   fi
   ensure_docker
@@ -494,14 +494,14 @@ cmd_deploy() {
   echo "==> Pulling latest Jitsi images"
   docker compose pull
 
-  echo "==> Building Flowspace SPA (VITE_* vars are baked into the image)"
-  docker compose build --pull --no-cache flowspace
+  echo "==> Building LoungeMesh SPA (VITE_* vars are baked into the image)"
+  docker compose build --pull --no-cache loungemesh
 
   # --force-recreate with NO service list restarts EVERY container so each one
   # picks up the fresh .env values and the rebuilt image. Docker Compose resolves
-  # the start order from depends_on: prosody → jvb + jicofo → jitsi-web → flowspace.
-  # Naming specific services here caused jitsi-web and flowspace to be silently skipped.
-  echo "==> Starting all services (prosody → jvb/jicofo → jitsi-web → flowspace)"
+  # the start order from depends_on: prosody → jvb + jicofo → jitsi-web → loungemesh.
+  # Naming specific services here caused jitsi-web and loungemesh to be silently skipped.
+  echo "==> Starting all services (prosody → jvb/jicofo → jitsi-web → loungemesh)"
   docker compose up -d --remove-orphans --force-recreate
 
   # jitsi-web writes its nginx config on first start after a config wipe.
@@ -520,7 +520,7 @@ cmd_deploy() {
 
 cmd_bootstrap() {
   [[ -n "$JITSI_HOST" ]] || {
-    echo "Usage: ./scripts/flowspace.sh bootstrap --app-host=... --jitsi-host=... [--public-ip=...] [--email=...] [--deploy]"
+    echo "Usage: ./scripts/loungemesh.sh bootstrap --app-host=... --jitsi-host=... [--public-ip=...] [--email=...] [--deploy]"
     echo "  --public-ip is optional; omit to auto-detect the server's public IP."
     exit 1
   }
@@ -558,14 +558,14 @@ cmd_bootstrap() {
       sudo apt-get install -y docker-compose-plugin
       echo ""
       echo "Docker installed. Log out and back in (docker group), then re-run:"
-      echo "  ./scripts/flowspace.sh bootstrap --skip-system --app-host=${APP_HOST} --jitsi-host=${JITSI_HOST} --public-ip=${PUBLIC_IP} --deploy"
+      echo "  ./scripts/loungemesh.sh bootstrap --skip-system --app-host=${APP_HOST} --jitsi-host=${JITSI_HOST} --public-ip=${PUBLIC_IP} --deploy"
       exit 0
     fi
     sudo apt-get install -y docker-compose-plugin
     ensure_caddy
   fi
 
-  [[ -f package.json ]] || { echo "Run from the flowspace repo root."; exit 1; }
+  [[ -f package.json ]] || { echo "Run from the loungemesh repo root."; exit 1; }
 
   echo "==> Production .env"
   ensure_node
@@ -592,7 +592,7 @@ cmd_bootstrap() {
     if ! id -nG "$USER" | grep -qw docker; then
       sudo usermod -aG docker "$USER"
       echo "Added $USER to docker group — SSH out and back in, then:"
-      echo "  cd $ROOT && ./scripts/flowspace.sh deploy"
+      echo "  cd $ROOT && ./scripts/loungemesh.sh deploy"
       exit 0
     fi
     cmd_deploy
@@ -604,7 +604,7 @@ cmd_bootstrap() {
   echo "  Jitsi: https://${jh}"
   echo "  AWS security group required: TCP 22, 80, 443 and UDP 10000"
   echo ""
-  echo "To deploy: ./scripts/flowspace.sh deploy"
+  echo "To deploy: ./scripts/loungemesh.sh deploy"
 }
 
 cmd_fix_jvb() {
@@ -630,11 +630,11 @@ cmd_fix_jvb() {
   fi
 
   local app_host jitsi_host
-  app_host=$(strip_proto "${FLOWSPACE_PUBLIC_URL:-${FLOWSPACE_APP_HOST:-}}")
+  app_host=$(strip_proto "${LOUNGEMESH_PUBLIC_URL:-${LOUNGEMESH_APP_HOST:-}}")
   jitsi_host=$(strip_proto "${PUBLIC_URL:-}")
 
   [[ -n "$app_host" && -n "$jitsi_host" ]] || {
-    echo "Set FLOWSPACE_PUBLIC_URL and PUBLIC_URL in .env first."
+    echo "Set LOUNGEMESH_PUBLIC_URL and PUBLIC_URL in .env first."
     exit 1
   }
 
@@ -663,7 +663,7 @@ cmd_fix_jvb() {
   docker compose stop jvb jicofo 2>/dev/null || true
   sudo rm -rf docker/jitsi-config/jvb
   mkdir -p docker/jitsi-config/jvb
-  echo "${PUBLIC_IP}" > docker/jitsi-config/.flowspace-docker-host
+  echo "${PUBLIC_IP}" > docker/jitsi-config/.loungemesh-docker-host
 
   cmd_deploy
 
@@ -685,7 +685,7 @@ cmd_fix_jvb() {
   fi
   echo ""
   echo "Security group: UDP ${JVB_PORT:-10000} must be open to 0.0.0.0/0"
-  echo "Debug: localStorage.setItem('flowspace:media-debug','1'); location.reload()"
+  echo "Debug: localStorage.setItem('loungemesh:media-debug','1'); location.reload()"
 }
 
 # ── dispatch ──────────────────────────────────────────────────────────────────
@@ -698,7 +698,7 @@ case "$COMMAND" in
   help|-h|--help) _usage; exit 0 ;;
   *)
     echo "Unknown command: ${COMMAND}"
-    echo "Run: ./scripts/flowspace.sh help"
+    echo "Run: ./scripts/loungemesh.sh help"
     exit 1
     ;;
 esac

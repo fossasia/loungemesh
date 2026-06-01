@@ -13,9 +13,9 @@ describe('conferenceErrorDetail', () => {
   });
 
   it('filters ignorable errors for active sessions', () => {
-    expect(shouldShowConferenceError('FS-E003', false)).toBe(true);
+    expect(shouldShowConferenceError('LM-E003', false)).toBe(true);
     expect(shouldShowConferenceError('conference_error', true)).toBe(false);
-    expect(shouldShowConferenceError('FS-E004', true)).toBe(false);
+    expect(shouldShowConferenceError('LM-E004', true)).toBe(false);
     expect(shouldShowConferenceError('', true)).toBe(false);
     expect(shouldShowConferenceError(undefined, false)).toBe(false);
   });

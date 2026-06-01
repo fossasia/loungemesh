@@ -799,14 +799,14 @@ describe('JitsiAdapter', () => {
   it('recreates a stored stub AudioContext on refresh', async () => {
     const {
       resetPreGestureAudioContextShimForTests,
-      isFlowspaceStubAudioContext,
+      isLoungeMeshStubAudioContext,
       installPreGestureAudioContextShim,
       unlockAudioContextConstructor,
     } = await import('@/utils/jitsiConsole');
     resetPreGestureAudioContextShimForTests();
     installPreGestureAudioContextShim();
     const stubCtx = new AudioContext();
-    expect(isFlowspaceStubAudioContext(stubCtx)).toBe(true);
+    expect(isLoungeMeshStubAudioContext(stubCtx)).toBe(true);
     (adapter as unknown as { audioContext?: AudioContext; playbackUnlocked?: boolean }).audioContext =
       stubCtx;
     (adapter as unknown as { playbackUnlocked: boolean }).playbackUnlocked = true;
@@ -814,7 +814,7 @@ describe('JitsiAdapter', () => {
     adapter.refreshRemoteAudio();
     const nextCtx = (adapter as unknown as { audioContext?: AudioContext }).audioContext;
     expect(nextCtx).not.toBe(stubCtx);
-    expect(isFlowspaceStubAudioContext(nextCtx)).toBe(false);
+    expect(isLoungeMeshStubAudioContext(nextCtx)).toBe(false);
     resetPreGestureAudioContextShimForTests();
   });
 });

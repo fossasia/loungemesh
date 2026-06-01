@@ -1,7 +1,7 @@
 # Deployment
 
 Everything (local dev and production) runs through a single script,
-`scripts/flowspace.sh`, and a single template, `env.example`. There are no
+`scripts/loungemesh.sh`, and a single template, `env.example`. There are no
 separate `env.development.example` / `env.production.example` files and no
 per-task scripts to remember.
 
@@ -11,8 +11,8 @@ For a step-by-step AWS free-tier walkthrough with HTTPS, see
 ## Local / Docker
 
 ```bash
-npm run setup          # = flowspace.sh dev: writes .env, auto-detects your LAN IP
-npm run docker:up      # Flowspace :8780, Jitsi :8001
+npm run setup          # = loungemesh.sh dev: writes .env, auto-detects your LAN IP
+npm run docker:up      # LoungeMesh :8780, Jitsi :8001
 ```
 
 `npm run setup` needs **zero configuration** — it copies `env.example` to `.env`
@@ -25,8 +25,8 @@ First time on a fresh Linux host (installs Docker + Caddy, writes `.env`, gets
 HTTPS certificates, and deploys):
 
 ```bash
-./scripts/flowspace.sh bootstrap \
-  --app-host=flowspace.example.com \
+./scripts/loungemesh.sh bootstrap \
+  --app-host=loungemesh.example.com \
   --jitsi-host=jitsi.example.com \
   --email=admin@example.com \
   --deploy
@@ -36,7 +36,7 @@ HTTPS certificates, and deploys):
 Redeploy after `git pull`:
 
 ```bash
-npm run deploy         # = flowspace.sh deploy
+npm run deploy         # = loungemesh.sh deploy
 ```
 
 `deploy` re-merges `.env` from `env.example` (**existing passwords and keys are
@@ -48,7 +48,7 @@ If the server's public IP can change (e.g. an Elastic IP is reassigned), deploy
 with `--auto-ip` so `DOCKER_HOST_ADDRESS` is re-detected on every deploy:
 
 ```bash
-./scripts/flowspace.sh deploy --auto-ip
+./scripts/loungemesh.sh deploy --auto-ip
 ```
 
 This is exactly what CI runs, so auto-deploys keep working across IP changes.
@@ -58,7 +58,7 @@ This is exactly what CI runs, so auto-deploys keep working across IP changes.
 `.github/workflows/ci.yml` runs typecheck, unit tests with coverage, build, docs
 build, a Docker Compose config validation, and Playwright e2e. On a push to
 `main`/`master`/`dev` it deploys over SSH **only if** the `DEPLOY_HOST` Actions
-variable is set. The deploy step runs `flowspace.sh deploy --auto-ip` on the
+variable is set. The deploy step runs `loungemesh.sh deploy --auto-ip` on the
 server, so it tolerates IP changes.
 
 Required GitHub **Actions variables / secrets**:
@@ -66,7 +66,7 @@ Required GitHub **Actions variables / secrets**:
 | Kind | Name | Value |
 |------|------|-------|
 | Variable | `DEPLOY_HOST` | Server public IP / hostname |
-| Variable | `DEPLOY_PATH` | App dir on server (optional, default `/opt/flowspace`) |
+| Variable | `DEPLOY_PATH` | App dir on server (optional, default `/opt/loungemesh`) |
 | Secret | `DEPLOY_USER` | SSH user (e.g. `ubuntu`) |
 | Secret | `DEPLOY_SSH_PRIVATE_KEY` | Private key for that user |
 
@@ -80,7 +80,7 @@ your public IP, the JVB is advertising the wrong address. Fix the running bridge
 without a full redeploy:
 
 ```bash
-npm run fix:jvb        # = flowspace.sh fix-jvb, public IP auto-detected
+npm run fix:jvb        # = loungemesh.sh fix-jvb, public IP auto-detected
 ```
 
 ## Production build (static only)

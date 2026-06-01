@@ -3,10 +3,10 @@
 ```mermaid
 flowchart TD
   subgraph eventyay [Eventyay Django app]
-    Plugin[eventyay-flowspace plugin]
-    PluginAPI[/api/v1/flowspace/token/]
+    Plugin[eventyay-loungemesh plugin]
+    PluginAPI[/api/v1/loungemesh/token/]
   end
-  subgraph flowspace [Flowspace Vue SPA]
+  subgraph loungemesh [LoungeMesh Vue SPA]
     subgraph vue [Vue 3 UI layer]
       Pages[Pages and components]
       Stores[Pinia UI state]
@@ -49,7 +49,7 @@ flowchart TD
 3. **Pinia for UI state** — connection and conference stores hold reactive UI data; lifecycle lives in `useMediaEngine`.
 4. **Performance** — route-level code splitting, proximity math in a Web Worker, `GainNode` ramps for smooth audio, `shallowReactive` users map, composite `:key` on remote users to limit re-renders.
 5. **Access control** — gated behind Eventyay JWT when `VITE_EVENTYAY_API_BASE` is set; open mode for self-hosted deployments.
-6. **Iframe embedding** — Eventyay embeds Flowspace with a `postMessage` bridge; "Open in new tab" is the primary UX. Frame-ancestors CSP is configurable at Docker runtime.
+6. **Iframe embedding** — Eventyay embeds LoungeMesh with a `postMessage` bridge; "Open in new tab" is the primary UX. Frame-ancestors CSP is configurable at Docker runtime.
 
 ## Key modules
 
@@ -69,7 +69,7 @@ flowchart TD
 ```
 User clicks lounge icon in Eventyay
   ↓
-eventyay-flowspace plugin issues opaque token
+eventyay-loungemesh plugin issues opaque token
   ↓
 Redirect → /join/<jitsiRoom>?token=<opaque>
   ↓

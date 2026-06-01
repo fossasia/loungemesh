@@ -28,7 +28,7 @@ const message = computed(() => {
       <h1 class="denied-title">Lounge not available</h1>
       <p class="denied-msg">{{ message }}</p>
       <p class="denied-hint">
-        This Flowspace lounge is integrated with
+        This LoungeMesh lounge is integrated with
         <a href="https://eventyay.com" target="_blank" rel="noopener noreferrer">Eventyay</a>.
         Sessions and access are configured per-event by the organizer.
       </p>

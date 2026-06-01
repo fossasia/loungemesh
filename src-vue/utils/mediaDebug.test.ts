@@ -33,12 +33,12 @@ describe('mediaDebug', () => {
     vi.stubEnv('VITE_MEDIA_DEBUG', 'true');
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     mediaDebug('scope', 'msg', { x: 1 });
-    expect(info).toHaveBeenCalledWith('[flowspace:media]', 'scope', 'msg', { x: 1 });
+    expect(info).toHaveBeenCalledWith('[loungemesh:media]', 'scope', 'msg', { x: 1 });
     info.mockRestore();
   });
 
   it('logs when localStorage flag is set', () => {
-    localStorage.setItem('flowspace:media-debug', '1');
+    localStorage.setItem('loungemesh:media-debug', '1');
     expect(isMediaDebugEnabled()).toBe(true);
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     mediaDebugTrack('wiring', 'trackAdded', {
@@ -91,7 +91,7 @@ describe('mediaDebug', () => {
     vi.stubEnv('VITE_MEDIA_DEBUG', 'true');
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     mediaDebug('scope', 'plain message');
-    expect(info).toHaveBeenCalledWith('[flowspace:media]', 'scope', 'plain message');
+    expect(info).toHaveBeenCalledWith('[loungemesh:media]', 'scope', 'plain message');
     info.mockRestore();
   });
 
@@ -133,7 +133,7 @@ describe('mediaDebug', () => {
       mediaDebugVideoAfterAttach('RemoteVideo', 'u2', el2);
       info.mockClear();
       el2.dispatchEvent(new Event('error'));
-      expect(info).toHaveBeenCalledWith('[flowspace:media]', 'RemoteVideo', 'video-element-error', {
+      expect(info).toHaveBeenCalledWith('[loungemesh:media]', 'RemoteVideo', 'video-element-error', {
         participantId: 'u2',
       });
       info.mockRestore();
@@ -153,7 +153,7 @@ describe('mediaDebug', () => {
       const info = vi.spyOn(console, 'info').mockImplementation(() => {});
       mediaDebugBridgeHint('wss://host/colibri-ws/172.16.0.1/abc');
       expect(info).toHaveBeenCalledWith(
-        '[flowspace:media]',
+        '[loungemesh:media]',
         'diagnosis',
         expect.stringContaining('Docker bridge IP'),
         expect.objectContaining({ colibriUrl: 'wss://host/colibri-ws/172.16.0.1/abc' }),
@@ -161,7 +161,7 @@ describe('mediaDebug', () => {
       info.mockClear();
       mediaDebugBridgeHint('wss://host/colibri-ws/endpoint/1006');
       expect(info).toHaveBeenCalledWith(
-        '[flowspace:media]',
+        '[loungemesh:media]',
         'diagnosis',
         expect.stringContaining('colibri WebSocket failed'),
       );

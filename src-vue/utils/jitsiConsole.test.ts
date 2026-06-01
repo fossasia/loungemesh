@@ -12,7 +12,7 @@ describe('jitsiConsole', () => {
   beforeEach(() => {
     resetJitsiConsoleFilterForTests();
     resetPreGestureAudioContextShimForTests();
-    delete (window as { __flowspaceJitsiConsoleFilter?: boolean }).__flowspaceJitsiConsoleFilter;
+    delete (window as { __loungemeshJitsiConsoleFilter?: boolean }).__loungemeshJitsiConsoleFilter;
   });
 
   afterEach(() => {
@@ -40,10 +40,10 @@ describe('jitsiConsole', () => {
     installBenignJitsiConsoleFilter();
     console.log('2026-06-01T08:02:41.930Z [INFO] [core:JitsiMeetJS] This appears to be firefox');
     console.trace('2026-06-01T08:02:41.950Z [TRACE] [xmpp:strophe.util] Strophe 0 Websocket open');
-    console.log('[flowspace:media] pipeline ok');
+    console.log('[loungemesh:media] pipeline ok');
     console.trace('app trace');
     expect(log).toHaveBeenCalledTimes(1);
-    expect(log.mock.calls[0]?.[0]).toBe('[flowspace:media] pipeline ok');
+    expect(log.mock.calls[0]?.[0]).toBe('[loungemesh:media] pipeline ok');
     expect(trace).toHaveBeenCalledTimes(1);
     expect(trace.mock.calls[0]?.[0]).toBe('app trace');
   });
@@ -51,7 +51,7 @@ describe('jitsiConsole', () => {
   it('reuses bootstrap console originals when present', () => {
     vi.stubEnv('VITE_MEDIA_DEBUG', 'false');
     const trace = vi.fn();
-    window.__flowspaceConsoleOriginals = {
+    window.__loungemeshConsoleOriginals = {
       log: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -63,7 +63,7 @@ describe('jitsiConsole', () => {
     console.warn('2026-06-01T08:02:41.931Z [WARN] [core:JitsiMeetJS] Analytics disabled, disposing.');
     console.error('real failure');
     expect(trace).not.toHaveBeenCalled();
-    expect(window.__flowspaceConsoleOriginals?.error).toHaveBeenCalledWith('real failure');
+    expect(window.__loungemeshConsoleOriginals?.error).toHaveBeenCalledWith('real failure');
   });
 
   it('filters benign websocket and AudioContext console noise on all levels', () => {
@@ -91,8 +91,8 @@ describe('jitsiConsole', () => {
 
   it('skips installing when bootstrap already patched console at current version', () => {
     vi.stubEnv('VITE_MEDIA_DEBUG', 'false');
-    (window as { __flowspaceJitsiConsoleFilter?: boolean }).__flowspaceJitsiConsoleFilter = true;
-    window.__flowspaceJitsiConsoleFilterVersion = 3;
+    (window as { __loungemeshJitsiConsoleFilter?: boolean }).__loungemeshJitsiConsoleFilter = true;
+    window.__loungemeshJitsiConsoleFilterVersion = 3;
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     installBenignJitsiConsoleFilter();
     console.log('2026-06-01T08:02:41.930Z [INFO] [core:JitsiMeetJS] noisy');

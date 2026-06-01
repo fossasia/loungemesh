@@ -4,7 +4,7 @@ This page is a living snapshot of what is built, what is in progress, and what i
 
 ## What is working
 
-### Flowspace SPA
+### LoungeMesh SPA
 
 | Area | Status |
 |------|--------|
@@ -37,16 +37,16 @@ This page is a living snapshot of what is built, what is in progress, and what i
 | Web app manifest + mobile meta | ✅ Complete |
 | Blue theme (`#e4eaff` background, `#4f6ef7` accent) | ✅ Complete |
 
-### eventyay-flowspace plugin
+### eventyay-loungemesh plugin
 
 | Area | Status |
 |------|--------|
-| `FlowspaceRoom` model | ✅ Complete |
-| `FlowspaceAccessToken` model | ✅ Complete |
-| JWT issuance (`issue_jitsi_jwt`, `verify_flowspace_token`) | ✅ Complete |
-| `FlowspaceIframeView` (embed page with "Open in new tab") | ✅ Complete |
-| `FlowspaceTokenAPIView` (opaque → JWT exchange) | ✅ Complete |
-| `FlowspaceTokenRefreshView` (JWT renewal) | ✅ Complete |
+| `LoungeMeshRoom` model | ✅ Complete |
+| `LoungeMeshAccessToken` model | ✅ Complete |
+| JWT issuance (`issue_jitsi_jwt`, `verify_loungemesh_token`) | ✅ Complete |
+| `LoungeMeshIframeView` (embed page with "Open in new tab") | ✅ Complete |
+| `LoungeMeshTokenAPIView` (opaque → JWT exchange) | ✅ Complete |
+| `LoungeMeshTokenRefreshView` (JWT renewal) | ✅ Complete |
 | Organizer room list view | ✅ Complete |
 | Room create/edit control views | ✅ Complete |
 | `allow_guests` access control enforcement | ✅ Complete |
@@ -63,7 +63,7 @@ This page is a living snapshot of what is built, what is in progress, and what i
 
 ## What is in progress / planned
 
-### Flowspace SPA
+### LoungeMesh SPA
 
 | Area | Notes |
 |------|-------|
@@ -73,13 +73,13 @@ This page is a living snapshot of what is built, what is in progress, and what i
 | Virtual scrolling for large participant lists | Planned for >20 participants |
 | Adaptive simulcast controls per participant count | Depends on JVB config |
 
-### eventyay-flowspace plugin
+### eventyay-loungemesh plugin
 
 | Area | Notes |
 |------|-------|
 | Ticket / order validation | Model has `order_code`; view does not yet enforce ticket check |
 | Locale / translation strings | `.po` headers exist; strings not yet translated |
-| Event-level Flowspace URL setting in Eventyay admin | Plugin setting not yet registered |
+| Event-level LoungeMesh URL setting in Eventyay admin | Plugin setting not yet registered |
 | Room deletion view | Not yet implemented (manual admin only) |
 
 ---
@@ -92,6 +92,6 @@ See [Architecture](../architecture.md) for the full layered diagram and design d
 
 1. **Service worker** — register and cache critical shell assets for fast repeat loads.
 2. **Ticket gating** — check Eventyay order status before issuing access tokens.
-3. **Room settings** — register `flowspace_url` and `flowspace_jitsi_*` as Eventyay event settings.
+3. **Room settings** — register `loungemesh_url` and `loungemesh_jitsi_*` as Eventyay event settings.
 4. **Quality UI** — surface participant count and automatically adjust `channelLastN`.
 5. **Translation** — complete German and other locale strings.

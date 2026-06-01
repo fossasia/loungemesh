@@ -12,7 +12,7 @@ import { useMediaEngine } from './useMediaEngine';
 
 function storeJwtAccess() {
   sessionStorage.setItem(
-    'flowspace:access',
+    'loungemesh:access',
     JSON.stringify({
       jwt: 'stored-jwt',
       displayName: 'Alice',
@@ -157,7 +157,7 @@ describe('useMediaEngine', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://eventyay.com',
-        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'injected-jwt' },
+        data: { source: 'eventyay', type: 'loungemesh:new_token', jwt: 'injected-jwt' },
       }),
     );
     await flushPromises();
@@ -212,7 +212,7 @@ describe('useMediaEngine', () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     useMediaEngine();
     expect(info).toHaveBeenCalledWith(
-      '[flowspace:media]',
+      '[loungemesh:media]',
       expect.stringContaining('Debug logging on'),
       expect.any(String),
       expect.any(String),

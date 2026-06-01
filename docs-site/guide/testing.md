@@ -1,6 +1,6 @@
 # Testing and documentation
 
-Flowspace uses **three separate quality layers**. They are not interchangeable: Vitest “100% coverage” does not mean the user guide documents every feature, and passing `docs:build` does not prove the API prose is complete.
+LoungeMesh uses **three separate quality layers**. They are not interchangeable: Vitest “100% coverage” does not mean the user guide documents every feature, and passing `docs:build` does not prove the API prose is complete.
 
 ## Unit and component tests (Vitest)
 

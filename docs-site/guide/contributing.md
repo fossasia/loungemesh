@@ -1,12 +1,12 @@
 # Contributing
 
-Thank you for your interest in Flowspace. This guide covers how to set up your environment and the norms we follow.
+Thank you for your interest in LoungeMesh. This guide covers how to set up your environment and the norms we follow.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/fossasia/flowspace.git
-cd flowspace
+git clone https://github.com/fossasia/loungemesh.git
+cd loungemesh
 npm install
 npm run setup
 npm run dev                  # http://localhost:5173
@@ -17,7 +17,7 @@ For a full local stack with Jitsi:
 ```bash
 npm run setup
 npm run docker:up
-# Flowspace → http://localhost:8780
+# LoungeMesh → http://localhost:8780
 # Jitsi web → http://localhost:8001
 ```
 
@@ -80,12 +80,12 @@ Keep **tests** and **docs** changes in **separate commits** from source changes.
 
 ## Eventyay plugin development
 
-The `eventyay-flowspace` plugin lives in the Eventyay repository at `plugins/eventyay-flowspace/`.
+The `eventyay-loungemesh` plugin lives in the Eventyay repository at `plugins/eventyay-loungemesh/`.
 
 To run the plugin's own test suite:
 
 ```bash
-cd plugins/eventyay-flowspace
+cd plugins/eventyay-loungemesh
 pip install pytest PyJWT -e .
 pytest tests/
 ```

@@ -12,9 +12,9 @@ type ConsoleOriginals = Record<ConsoleLevel, (...args: unknown[]) => void>;
 
 declare global {
   interface Window {
-    __flowspaceJitsiConsoleFilter?: boolean;
-    __flowspaceJitsiConsoleFilterVersion?: number;
-    __flowspaceConsoleOriginals?: ConsoleOriginals;
+    __loungemeshJitsiConsoleFilter?: boolean;
+    __loungemeshJitsiConsoleFilterVersion?: number;
+    __loungemeshConsoleOriginals?: ConsoleOriginals;
   }
 }
 
@@ -36,9 +36,9 @@ const JITSI_LIBRARY_PATTERNS = [
 export function resetJitsiConsoleFilterForTests(): void {
   consoleFilterInstalled = false;
   if (typeof window !== 'undefined') {
-    delete window.__flowspaceJitsiConsoleFilter;
-    delete window.__flowspaceJitsiConsoleFilterVersion;
-    delete window.__flowspaceConsoleOriginals;
+    delete window.__loungemeshJitsiConsoleFilter;
+    delete window.__loungemeshJitsiConsoleFilterVersion;
+    delete window.__loungemeshConsoleOriginals;
   }
 }
 
@@ -65,20 +65,20 @@ function argText(args: unknown[]): string {
     .join(' ');
 }
 
-function isFlowspaceLog(text: string): boolean {
-  return text.includes('[flowspace:media]');
+function isLoungeMeshLog(text: string): boolean {
+  return text.includes('[loungemesh:media]');
 }
 
 function shouldFilterConsoleArgs(args: unknown[]): boolean {
   if (isMediaDebugEnabled()) return false;
   const text = argText(args);
-  if (isFlowspaceLog(text)) return false;
+  if (isLoungeMeshLog(text)) return false;
   return JITSI_LIBRARY_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function ensureConsoleOriginals(): ConsoleOriginals {
-  if (!window.__flowspaceConsoleOriginals) {
-    window.__flowspaceConsoleOriginals = {
+  if (!window.__loungemeshConsoleOriginals) {
+    window.__loungemeshConsoleOriginals = {
       log: console.log.bind(console),
       info: console.info.bind(console),
       warn: console.warn.bind(console),
@@ -87,14 +87,14 @@ function ensureConsoleOriginals(): ConsoleOriginals {
       trace: console.trace.bind(console),
     };
   }
-  return window.__flowspaceConsoleOriginals;
+  return window.__loungemeshConsoleOriginals;
 }
 
 /** Hide lib-jitsi console noise unless media debug is on. */
 export function installBenignJitsiConsoleFilter(): void {
   if (isMediaDebugEnabled()) return;
   if (
-    window.__flowspaceJitsiConsoleFilterVersion === CONSOLE_FILTER_VERSION ||
+    window.__loungemeshJitsiConsoleFilterVersion === CONSOLE_FILTER_VERSION ||
     consoleFilterInstalled
   ) {
     consoleFilterInstalled = true;
@@ -116,12 +116,12 @@ export function installBenignJitsiConsoleFilter(): void {
     originals.trace(...args);
   }) as typeof console.trace;
 
-  window.__flowspaceJitsiConsoleFilter = true;
-  window.__flowspaceJitsiConsoleFilterVersion = CONSOLE_FILTER_VERSION;
+  window.__loungemeshJitsiConsoleFilter = true;
+  window.__loungemeshJitsiConsoleFilterVersion = CONSOLE_FILTER_VERSION;
 }
 
 class StubAudioContext {
-  readonly __flowspaceStub = true;
+  readonly __loungemeshStub = true;
   state: AudioContextState = 'suspended';
 
   suspend(): Promise<void> {
@@ -194,8 +194,8 @@ export function unlockAudioContextConstructor(): void {
   }
 }
 
-export function isFlowspaceStubAudioContext(ctx: unknown): boolean {
-  return !!(ctx && typeof ctx === 'object' && '__flowspaceStub' in ctx);
+export function isLoungeMeshStubAudioContext(ctx: unknown): boolean {
+  return !!(ctx && typeof ctx === 'object' && '__loungemeshStub' in ctx);
 }
 
 /** Jitsi calls LocalStatsCollector.init() even when disableAudioLevels is true. */

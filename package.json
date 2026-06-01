@@ -1,6 +1,6 @@
 {
   "version": "0.7.0",
-  "name": "flowspace",
+  "name": "loungemesh",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,11 +16,11 @@
     "docs:dev": "vitepress dev docs-site",
     "docs:build": "npm run docs:api && vitepress build docs-site",
     "docs:preview": "vitepress preview docs-site",
-    "setup": "bash scripts/flowspace.sh dev",
+    "setup": "bash scripts/loungemesh.sh dev",
     "setup:prod": "node scripts/setup-env.mjs production",
     "docker:up": "docker compose up -d --build",
-    "deploy": "bash scripts/flowspace.sh deploy",
-    "fix:jvb": "bash scripts/flowspace.sh fix-jvb"
+    "deploy": "bash scripts/loungemesh.sh deploy",
+    "fix:jvb": "bash scripts/loungemesh.sh fix-jvb"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

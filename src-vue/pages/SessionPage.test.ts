@@ -41,8 +41,8 @@ describe('SessionPage', () => {
     local.setMyID('guest');
     features.setHost('host');
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: {
         stubs: {
           ...sessionStubs,
@@ -65,8 +65,8 @@ describe('SessionPage', () => {
     local.setMyID('host');
     features.setHost('host');
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: {
         stubs: {
           ...sessionStubs,
@@ -93,8 +93,8 @@ describe('SessionPage', () => {
     local.onStage = true;
 
     const { wrapper, router } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: {
         stubs: {
           ...sessionStubs,
@@ -129,8 +129,8 @@ describe('SessionPage', () => {
     const features = useSessionFeaturesStore();
     features.setHost('someone-else');
     const { wrapper, router } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: { stubs: sessionStubs },
     });
     await flushPromises();
@@ -157,8 +157,8 @@ describe('SessionPage', () => {
     } as never;
 
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: { stubs: sessionStubs },
     });
     await flushPromises();
@@ -192,8 +192,8 @@ describe('SessionPage', () => {
     local.cameraOff = false;
     const toggleSpy = vi.spyOn(local, 'toggleCamera').mockResolvedValue(undefined);
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: { stubs: sessionStubs },
     });
     await flushPromises();
@@ -207,8 +207,8 @@ describe('SessionPage', () => {
     const local = useLocalStore();
     local.cameraOff = true;
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: { stubs: sessionStubs },
     });
     await flushPromises();
@@ -220,8 +220,8 @@ describe('SessionPage', () => {
     const local = useLocalStore();
     local.mute = true;
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: {
         stubs: {
           ...sessionStubs,
@@ -284,8 +284,8 @@ describe('SessionPage', () => {
     features.setHost('host');
     features.panel = 'whiteboard';
     const { wrapper } = await mountWithApp(SessionPage, {
-      route: '/session/flowspace',
-      props: { id: 'flowspace' },
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
       global: {
         stubs: {
           ...sessionStubs,

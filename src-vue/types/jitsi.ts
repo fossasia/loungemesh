@@ -1,4 +1,4 @@
-/** Typed subset of lib-jitsi-meet used by Flowspace. */
+/** Typed subset of lib-jitsi-meet used by LoungeMesh. */
 
 export type TrackType = 'audio' | 'video';
 

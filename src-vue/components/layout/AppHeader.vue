@@ -11,12 +11,12 @@ withDefaults(
 
 <template>
   <a v-if="variant === 'home'" class="hdr home" href="/" rel="home">
-    <img :src="logo" alt="Flowspace" class="logo" width="32" height="32" />
-    <span class="brand"><slot>Flowspace</slot></span>
+    <img :src="logo" alt="LoungeMesh" class="logo" width="32" height="32" />
+    <span class="brand"><slot>LoungeMesh</slot></span>
   </a>
   <div v-else class="sessionBrand" aria-hidden="true">
     <img :src="logo" alt="" class="logoMark" width="40" height="40" />
-    <span class="brandWord">Flowspace</span>
+    <span class="brandWord">LoungeMesh</span>
   </div>
 </template>
 

@@ -1,19 +1,19 @@
 export const SESSION_ERROR_CODES = {
-  CONNECTION_FAILED: 'FS-E001',
-  CONNECTION_LOST: 'FS-E002',
-  JOIN_FAILED: 'FS-E003',
-  SESSION_UNAVAILABLE: 'FS-E004',
-  AUTH_FAILED: 'FS-E005',
-  NETWORK: 'FS-E006',
-  NOT_READY: 'FS-E007',
-  UNKNOWN: 'FS-E008',
+  CONNECTION_FAILED: 'LM-E001',
+  CONNECTION_LOST: 'LM-E002',
+  JOIN_FAILED: 'LM-E003',
+  SESSION_UNAVAILABLE: 'LM-E004',
+  AUTH_FAILED: 'LM-E005',
+  NETWORK: 'LM-E006',
+  NOT_READY: 'LM-E007',
+  UNKNOWN: 'LM-E008',
 } as const;
 
 export type SessionErrorCode = (typeof SESSION_ERROR_CODES)[keyof typeof SESSION_ERROR_CODES];
 
 export type SessionErrorContext = 'connection' | 'conference' | 'join';
 
-const CODE_PATTERN = /^FS-E\d{3}$/;
+const CODE_PATTERN = /^LM-E\d{3}$/;
 
 const USER_MESSAGES: Record<SessionErrorCode, string> = {
   [SESSION_ERROR_CODES.CONNECTION_FAILED]: "Couldn't connect to the session.",
@@ -39,7 +39,7 @@ export const SESSION_ERROR_DETAILS: Record<SessionErrorCode, string> = {
   [SESSION_ERROR_CODES.AUTH_FAILED]:
     'JWT missing, expired, or rejected by the Jitsi secure domain.',
   [SESSION_ERROR_CODES.NETWORK]:
-    'Browser is offline or could not reach Flowspace / Jitsi endpoints.',
+    'Browser is offline or could not reach LoungeMesh / Jitsi endpoints.',
   [SESSION_ERROR_CODES.NOT_READY]:
     'Join was attempted before the Jitsi connection was ready.',
   [SESSION_ERROR_CODES.UNKNOWN]: 'Unclassified session or connection failure.',

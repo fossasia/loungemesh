@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress';
 const base = process.env.DOCS_BASE_URL ?? '/';
 
 export default defineConfig({
-  title: 'Flowspace',
+  title: 'LoungeMesh',
   description: 'Spatial video lounge for informal online and hybrid events',
   base,
   ignoreDeadLinks: true,
@@ -13,7 +13,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Architecture', link: '/architecture' },
       { text: 'API', link: '/api/README' },
-      { text: 'GitHub', link: 'https://github.com/eventyay/flowspace' },
+      { text: 'GitHub', link: 'https://github.com/eventyay/loungemesh' },
     ],
     sidebar: [
       {
@@ -33,6 +33,6 @@ export default defineConfig({
       { text: 'Architecture', link: '/architecture' },
       { text: 'API reference', link: '/api/README' },
     ],
-    socialLinks: [{ icon: 'github', link: 'https://github.com/eventyay/flowspace' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/eventyay/loungemesh' }],
   },
 });

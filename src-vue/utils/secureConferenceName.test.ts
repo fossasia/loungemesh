@@ -7,7 +7,7 @@ describe('secureConferenceName', () => {
   });
 
   it('uses default prefix when none provided', () => {
-    expect(secureConferenceName('Hallway')).toBe('flshallway');
+    expect(secureConferenceName('Hallway')).toBe('lmshallway');
   });
 
   it('throws when name is missing', () => {

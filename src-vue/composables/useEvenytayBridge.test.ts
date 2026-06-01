@@ -72,7 +72,7 @@ describe('useEventyayBridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://eventyay.com',
-        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'jwt-1' },
+        data: { source: 'eventyay', type: 'loungemesh:new_token', jwt: 'jwt-1' },
       }),
     );
     expect(refresh).toHaveBeenCalledWith('jwt-1');
@@ -80,7 +80,7 @@ describe('useEventyayBridge', () => {
     wrapper.vm.notifyJoined(4);
     wrapper.vm.notifyLeft(2);
     expect(postMessage).toHaveBeenCalledWith(
-      { source: 'flowspace', type: 'participant_joined', count: 4 },
+      { source: 'loungemesh', type: 'participant_joined', count: 4 },
       'https://eventyay.com',
     );
 
@@ -88,7 +88,7 @@ describe('useEventyayBridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://evil.com',
-        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'bad' },
+        data: { source: 'eventyay', type: 'loungemesh:new_token', jwt: 'bad' },
       }),
     );
     wrapper.unmount();
@@ -120,7 +120,7 @@ describe('useEventyayBridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://eventyay.com',
-        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: '' },
+        data: { source: 'eventyay', type: 'loungemesh:new_token', jwt: '' },
       }),
     );
     expect(refresh).not.toHaveBeenCalled();
@@ -158,7 +158,7 @@ describe('useEventyayBridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://any.example',
-        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'jwt-open' },
+        data: { source: 'eventyay', type: 'loungemesh:new_token', jwt: 'jwt-open' },
       }),
     );
     expect(refresh).toHaveBeenCalledWith('jwt-open');
@@ -177,7 +177,7 @@ describe('useEventyayBridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://eventyay.com',
-        data: { source: 'eventyay', type: 'flowspace:new_token', jwt: 'jwt-2' },
+        data: { source: 'eventyay', type: 'loungemesh:new_token', jwt: 'jwt-2' },
       }),
     );
     expect(refresh).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe('useEventyayBridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         origin: 'https://eventyay.com',
-        data: { source: 'other', type: 'flowspace:new_token', jwt: 'x' },
+        data: { source: 'other', type: 'loungemesh:new_token', jwt: 'x' },
       }),
     );
     expect(refresh).not.toHaveBeenCalled();

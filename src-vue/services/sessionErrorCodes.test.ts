@@ -11,7 +11,7 @@ import {
 
 describe('sessionErrorCodes', () => {
   it('recognizes stored codes', () => {
-    expect(isSessionErrorCode('FS-E001')).toBe(true);
+    expect(isSessionErrorCode('LM-E001')).toBe(true);
     expect(isSessionErrorCode('connect fail')).toBe(false);
   });
 
@@ -52,20 +52,20 @@ describe('sessionErrorCodes', () => {
   });
 
   it('formats concise user-facing messages', () => {
-    expect(formatUserFacingError('connect fail')).toMatch(/FS-E00[1368]/);
-    expect(formatUserFacingError('FS-E003')).toBe("Couldn't join this session. (FS-E003)");
+    expect(formatUserFacingError('connect fail')).toMatch(/LM-E00[1368]/);
+    expect(formatUserFacingError('LM-E003')).toBe("Couldn't join this session. (LM-E003)");
     expect(userMessageForCode(SESSION_ERROR_CODES.NETWORK)).toBe('Check your network connection.');
   });
 
   it('normalizes raw details to codes', () => {
     expect(normalizeSessionError('room join failed', 'join')).toBe(SESSION_ERROR_CODES.JOIN_FAILED);
-    expect(normalizeSessionError('FS-E005')).toBe(SESSION_ERROR_CODES.AUTH_FAILED);
+    expect(normalizeSessionError('LM-E005')).toBe(SESSION_ERROR_CODES.AUTH_FAILED);
   });
 
   it('filters ignorable conference errors while joined', () => {
-    expect(shouldShowConferenceError('FS-E004', false)).toBe(true);
+    expect(shouldShowConferenceError('LM-E004', false)).toBe(true);
     expect(shouldShowConferenceError('conference_error', true)).toBe(false);
-    expect(shouldShowConferenceError('FS-E003', true)).toBe(true);
+    expect(shouldShowConferenceError('LM-E003', true)).toBe(true);
     expect(shouldShowConferenceError(undefined, false)).toBe(false);
     expect(shouldShowConferenceError('   ', false)).toBe(false);
   });

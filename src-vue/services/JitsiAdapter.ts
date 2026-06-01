@@ -13,7 +13,7 @@ import { sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 import { mediaDebug, mediaDebugTrack, isMediaDebugEnabled } from '@/utils/mediaDebug';
 import {
   installBenignJitsiConsoleFilter,
-  isFlowspaceStubAudioContext,
+  isLoungeMeshStubAudioContext,
   unlockAudioContextConstructor,
   withStubAudioContextDuringInit,
 } from '@/utils/jitsiConsole';
@@ -31,12 +31,12 @@ function getJitsiMeetJS(): JitsiMeetJS {
 
 function ensureDisconnectReturnsPromise(connection: import('@/types/jitsi').JitsiConnection): void {
   const mutable = connection as import('@/types/jitsi').JitsiConnection & {
-    __flowspaceDisconnectWrapped?: boolean;
+    __loungemeshDisconnectWrapped?: boolean;
   };
-  if (mutable.__flowspaceDisconnectWrapped) return;
+  if (mutable.__loungemeshDisconnectWrapped) return;
   const disconnect = mutable.disconnect.bind(mutable);
   mutable.disconnect = (event?: unknown) => Promise.resolve(disconnect(event));
-  mutable.__flowspaceDisconnectWrapped = true;
+  mutable.__loungemeshDisconnectWrapped = true;
 }
 
 function shouldDisableTurnCredentialDiscovery(): boolean {
@@ -169,7 +169,7 @@ export class JitsiAdapter implements MediaService {
       throw new Error('Jitsi connection is not ready.');
     }
 
-    const name = secureConferenceName(room, import.meta.env.VITE_SESSION_PREFIX, 'fls');
+    const name = secureConferenceName(room, import.meta.env.VITE_SESSION_PREFIX, 'lms');
     const conference = connection.initJitsiConference(
       name,
       conferenceOptions ? { ...conferenceOptions } : {},
@@ -467,7 +467,7 @@ export class JitsiAdapter implements MediaService {
     unlockAudioContextConstructor();
     if (
       this.audioContext &&
-      (this.audioContext.state === 'closed' || isFlowspaceStubAudioContext(this.audioContext))
+      (this.audioContext.state === 'closed' || isLoungeMeshStubAudioContext(this.audioContext))
     ) {
       try {
         void this.audioContext.close();

@@ -28,7 +28,7 @@ function goSession(payload: { displayName: string; sessionName: string }) {
     <AppHeader variant="home" />
     <main class="page">
       <div class="center">
-        <h1 class="title">Flowspace</h1>
+        <h1 class="title">LoungeMesh</h1>
         <p class="sub">Spatial video lounges for informal online events</p>
         <NameInputForm class="formWrap" @submit="goSession" />
       </div>

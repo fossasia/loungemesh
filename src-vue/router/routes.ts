@@ -34,7 +34,7 @@ export const routes: RouteRecordRaw[] = [
   },
   /**
    * /join/:id — Eventyay entry point.
-   * Receives ?token=<opaque> from the eventyay-flowspace plugin,
+   * Receives ?token=<opaque> from the eventyay-loungemesh plugin,
    * validates access, then redirects to /session/:id.
    */
   { path: '/join', redirect: defaultJoinRedirect },
