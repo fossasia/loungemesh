@@ -113,7 +113,13 @@ merge_env() {
   local extra=("$@")
   if [[ "$mode" == "prod" ]]; then
     echo "==> Merging .env from env.example (production, passwords unchanged)"
-    node scripts/setup-env.mjs production --from-env ${extra[@]+"${extra[@]}"}
+    local prod_extra=(--from-env)
+    [[ ${#extra[@]} -gt 0 ]] && prod_extra+=("${extra[@]}")
+    # Bootstrap may still have host/IP in shell vars when deploy runs immediately after.
+    [[ -n "$PUBLIC_IP" ]] && prod_extra+=(--public-ip="$PUBLIC_IP")
+    [[ -n "$JITSI_HOST" ]] && prod_extra+=(--jitsi-host="$(strip_proto "$JITSI_HOST")")
+    [[ -n "$APP_HOST" ]] && prod_extra+=(--app-host="$(strip_proto "$APP_HOST")")
+    node scripts/setup-env.mjs production "${prod_extra[@]}" $FORCE_FLAGS
   else
     echo "==> Merging .env from env.example (development)"
     node scripts/setup-env.mjs development ${extra[@]+"${extra[@]}"}

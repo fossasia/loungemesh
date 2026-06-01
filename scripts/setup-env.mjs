@@ -330,7 +330,7 @@ if (args.mode === 'production') {
       jitsiHost = stripProtocol(prior.get('PUBLIC_URL') || prior.get('VITE_JITSI_PUBLIC_URL') || '');
     }
     if (!publicIp) {
-      publicIp = (prior.get('DOCKER_HOST_ADDRESS') || '').trim();
+      publicIp = (prior.get('DOCKER_HOST_ADDRESS') || prior.get('JVB_ADVERTISE_IPS') || '').trim();
     }
   }
 
