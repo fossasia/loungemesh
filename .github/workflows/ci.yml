@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npm run docs:build
+
+  docker:
+    name: Docker Compose
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose config
+        run: |
+          cp env.example .env
+          docker compose config --quiet
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npx playwright test
+
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: [test-and-build, docker, e2e]
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' ||
+       github.ref == 'refs/heads/master' ||
+       github.ref == 'refs/heads/dev') &&
+      vars.DEPLOY_HOST != ''
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ vars.DEPLOY_PATH || '/opt/loungemesh' }}"
+            BRANCH="${{ github.ref_name }}"
+            cd "$APP_DIR"
+            echo "==> Deploying ${{ github.sha }} (${BRANCH})"
+            git fetch --depth=1 origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+            # --auto-ip detects the current server public IP and updates DOCKER_HOST_ADDRESS
+            # automatically, so deploys keep working even after an Elastic IP reassignment.
+            bash scripts/loungemesh.sh deploy --auto-ip

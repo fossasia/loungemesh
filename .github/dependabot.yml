@@ -1,0 +1,31 @@
+version: 2
+# The Node.js runtime version lives in the pinned `node:` tag in the Dockerfile,
+# which the docker ecosystem below keeps updated. Dependabot cannot update
+# `.nvmrc` (dependabot/dependabot-core#4808), so keep it in sync with the
+# Dockerfile manually when the docker bump lands.
+updates:
+  # Keep all npm deps (including minor/patch) up to date.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 20
+    versioning-strategy: "increase"
+
+  # Keep GitHub Actions versions up to date.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Keep Docker base images (Dockerfile + docker-compose.yml) up to date.
+  # Images must be hardcoded version tags — variable expansions are not tracked.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # Bump all four Jitsi services together so they stay on the same release.
+      jitsi:
+        patterns:
+          - "jitsi/*"

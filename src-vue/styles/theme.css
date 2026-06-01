@@ -1,0 +1,67 @@
+/* LoungeMesh theme — cool blue surfaces */
+:root {
+  --font-display: 'Space', system-ui, sans-serif;
+  --font-body: 'Space', system-ui, sans-serif;
+
+  --color-mono0: #000000;
+  --color-mono10: #1e2240;
+  --color-mono30: #3b4068;
+  /* Between mono30 and mono60 — menu link icons */
+  --color-mono40: #6970a0;
+  --color-mono60: #9ba3cc;
+  --color-mono80: #cdd2f0;
+  --color-mono95: #e6eaff;
+  --color-mono100: #ffffff;
+
+  --color-orange100: #e27022;
+  --color-blue100: #4f6ef7;
+  --color-red100: #e15d4c;
+  --color-red120: #f07969;
+
+  --color-text-default: #1e2240;
+  --color-text-light: #9ba3cc;
+  --color-text-warning: #e15d4c;
+  --color-text-primary: #4f6ef7;
+
+  /* Slightly richer blue background — clearly blue at all display profiles */
+  --color-bg-page: #e4eaff;
+  --color-bg-inset: #7a83b8;
+  --color-bg-card: #f5f7ff;
+
+  --btn-default-bg: #f5f7ff;
+  --btn-default-bg-hover: #e4eaff;
+  --btn-default-fg: #3b4068;
+
+  --btn-primary-bg: #4f6ef7;
+  --btn-primary-bg-hover: #e4eaff;
+  --btn-primary-fg: #ffffff;
+
+  --btn-warning-bg: #e15d4c;
+  --btn-warning-bg-hover: #f07969;
+  --btn-warning-fg: #ffffff;
+
+  --btn-active-bg: #4f6ef7;
+  --btn-active-fg: #ffffff;
+
+  --btn-highlight-bg: #f0c14b;
+  --btn-highlight-bg-hover: #f5d078;
+  --btn-highlight-fg: #1e2240;
+
+  --input-bg: #f5f7ff;
+  --input-fg: #cdd2f0;
+  --line-dark: #3b4068;
+  --line-default: #9ba3cc;
+  --line-light: #e4eaff;
+
+  --radius-sm: 5px;
+  --radius-round: 25px;
+
+  --fs-hero: 3rem;
+  --fs-h1: 1.5rem;
+  --fs-h2: 1.25rem;
+  --fs-body: 1rem;
+  --fs-small: 0.875rem;
+
+  --fw-medium: 500;
+  --fw-bold: 600;
+}
