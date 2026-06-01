@@ -85,6 +85,27 @@ describe('SessionPage', () => {
     wrapper.unmount();
   });
 
+  it('dismisses the host leave dialog on cancel', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('host');
+    features.setHost('host');
+    const { wrapper, router } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    const push = vi.spyOn(router, 'push');
+    await wrapper.find('.btn-leave-call').trigger('click');
+    expect(wrapper.find('.leaveCard').exists()).toBe(true);
+    await wrapper.find('.leaveCard .btn.cancel').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.leaveCard').exists()).toBe(false);
+    expect(push).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('shows mic state and leaves session', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();

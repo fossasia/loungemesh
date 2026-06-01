@@ -374,6 +374,37 @@ describe('LocalStoreLogic', () => {
     wrapper.unmount();
   });
 
+  it('refreshes remote audio when local mute changes while joined', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    const refreshSpy = vi.spyOn(getMediaEngineInstance(), 'refreshRemoteAudio');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    refreshSpy.mockClear();
+    local.mute = true;
+    await flushPromises();
+    expect(refreshSpy).toHaveBeenCalled();
+    refreshSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('skips remote audio refresh when mute changes before join', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    conference.isJoined = false;
+    const refreshSpy = vi.spyOn(getMediaEngineInstance(), 'refreshRemoteAudio');
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    refreshSpy.mockClear();
+    local.mute = true;
+    await flushPromises();
+    expect(refreshSpy).not.toHaveBeenCalled();
+    refreshSpy.mockRestore();
+    wrapper.unmount();
+  });
+
   it('keeps muted remote users silent even when overlapping', async () => {
     vi.stubGlobal(
       'Worker',

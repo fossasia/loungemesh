@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { playUiSound, resetUiSoundsForTests, type UiSoundId } from './uiSounds';
+import { playUiSound, playToneForTests, resetUiSoundsForTests, type UiSoundId } from './uiSounds';
 
 describe('playUiSound', () => {
   beforeEach(() => {
@@ -41,6 +41,11 @@ describe('playUiSound', () => {
     expect(AudioContextCtor).not.toHaveBeenCalled();
   });
 
+  it('no-ops when window is unavailable', () => {
+    vi.stubGlobal('window', undefined);
+    expect(() => playUiSound('tap')).not.toThrow();
+  });
+
   it('reuses a suspended AudioContext', () => {
     const resume = vi.fn();
     class MockCtx {
@@ -71,6 +76,28 @@ describe('playUiSound', () => {
       throw new Error('blocked');
     }));
     expect(() => playUiSound('tap')).not.toThrow();
+  });
+
+  it('uses default tone volume when volume is omitted', () => {
+    class MockCtx {
+      state = 'running';
+      currentTime = 0;
+      destination = {};
+      resume = vi.fn();
+      createGain = vi.fn(() => ({
+        connect: vi.fn(),
+        gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+      }));
+      createOscillator = vi.fn(() => ({
+        type: 'sine',
+        frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }));
+    }
+    vi.stubGlobal('AudioContext', MockCtx);
+    expect(() => playToneForTests({ freq: 440, duration: 0.05 })).not.toThrow();
   });
 
   it('recreates a closed AudioContext', async () => {

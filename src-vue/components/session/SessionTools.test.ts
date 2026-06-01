@@ -256,6 +256,20 @@ describe('SessionTools', () => {
     wrapper.unmount();
   });
 
+  it('ignores hand toggle when no participant id is available', async () => {
+    const local = useLocalStore();
+    local.setMyID('');
+    const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue(undefined);
+    const { wrapper } = await mountWithApp(SessionTools);
+    await wrapper.find('[aria-label="Raise hand"]').trigger('click');
+    expect(propSpy).not.toHaveBeenCalled();
+    expect(cmdSpy).not.toHaveBeenCalled();
+    expect(useSessionFeaturesStore().handRaised).toBe(false);
+    wrapper.unmount();
+  });
+
   it('raises hand without a conference user record', async () => {
     const local = useLocalStore();
     local.setMyID('solo');

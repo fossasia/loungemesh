@@ -26,6 +26,11 @@ export function resetUiSoundsForTests(): void {
   audioContext = undefined;
 }
 
+/** Test helper — exercises playTone defaults (e.g. volume). */
+export function playToneForTests(options: ToneOptions): void {
+  playTone(options);
+}
+
 function getAudioContext(): AudioContext | undefined {
   if (typeof window === 'undefined' || uiSoundsDisabled()) return undefined;
   unlockAudioContextConstructor();

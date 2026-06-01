@@ -93,6 +93,31 @@ describe('wireStoreSync', () => {
     expect(conference.users.u1.speaking).toBe(false);
   });
 
+  it('adds a participant when speaking changes for an unknown user', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    wireStoreSync(engine);
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
+      'participantSpeakingChanged',
+      'new-speaker',
+      true,
+    );
+    expect(conference.users['new-speaker']?.speaking).toBe(true);
+  });
+
+  it('ignores participant property updates when addUser leaves no record', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    wireStoreSync(engine);
+    vi.spyOn(conference, 'addUser').mockImplementation(() => {});
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
+      'participantPropertyChanged',
+      'missing',
+      { speaking: true },
+    );
+    expect(conference.users.missing).toBeUndefined();
+  });
+
   it('syncs speaking participant property', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
@@ -450,6 +475,21 @@ describe('wireStoreSync', () => {
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.USER_JOINED, 'other', {});
     expect(cmdSpy).not.toHaveBeenCalledWith('access', expect.any(String));
+  });
+
+  it('applies hand raise state when a user joins with handRaised property', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {
+      _properties: { handRaised: true },
+    });
+    expect(conference.users.guest.properties.handRaised).toBe(true);
   });
 
   it('rebroadcasts access when host sees a new participant', async () => {

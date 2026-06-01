@@ -201,6 +201,8 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('lobby', { value: 'bad' });
     handleSessionCommand('lobby', { value: JSON.stringify({ action: 'wait' }) });
     handleSessionCommand('react', { value: JSON.stringify({ emoji: '👍' }) });
+    handleSessionCommand('hand', { value: JSON.stringify({ id: 'u1' }) });
+    handleSessionCommand('hand', { value: JSON.stringify({ raised: true }) });
     handleSessionCommand('pos', { value: JSON.stringify({ id: 'u1' }) });
     handleSessionCommand('poll', { value: 'null' });
     handleSessionCommand('notes', { value: JSON.stringify({}) });

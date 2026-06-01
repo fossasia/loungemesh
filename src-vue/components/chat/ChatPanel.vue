@@ -139,7 +139,6 @@ function addEmoji(emoji: string) {
 }
 
 async function scrollChatIfOpen() {
-  if (!open.value) return;
   await nextTick();
   scrollChatToBottom(chatRoot.value);
 }

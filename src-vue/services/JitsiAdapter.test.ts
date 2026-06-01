@@ -796,6 +796,108 @@ describe('JitsiAdapter', () => {
     vi.unstubAllGlobals();
   });
 
+  it('refreshRemoteAudio skips local, muted, and non-audio participant tracks', async () => {
+    const createSource = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }));
+    class RunningCtx {
+      state = 'running';
+      currentTime = 0;
+      destination = {};
+      resume = vi.fn();
+      close = vi.fn();
+      createMediaStreamSource = createSource;
+      createGain = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        gain: { value: 1, setTargetAtTime: vi.fn() },
+      }));
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        frequencyBinCount: 256,
+        getByteFrequencyData: vi.fn(),
+      }));
+    }
+    vi.stubGlobal('AudioContext', RunningCtx);
+
+    mock.conference._remoteTracks.length = 0;
+    mock.conference.getParticipants.mockReturnValue([
+      {},
+      {
+        getTracks: () => [
+          { isLocal: () => true, getType: () => 'audio', isMuted: () => false },
+          { isLocal: () => false, getType: () => 'video', isMuted: () => false },
+          { isLocal: () => false, getType: () => 'audio', isMuted: () => true },
+          {
+            getType: () => 'audio',
+            getParticipantId: () => 'wired',
+            isLocal: () => false,
+            getOriginalStream: () => ({}),
+          },
+        ],
+      },
+    ]);
+
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    adapter.resumePlayback();
+    createSource.mockClear();
+    adapter.refreshRemoteAudio();
+    expect(createSource).toHaveBeenCalledTimes(1);
+    adapter.disconnect();
+    vi.unstubAllGlobals();
+  });
+
+  it('treats missing isMuted as unmuted when monitoring remote audio', async () => {
+    let rafCb: FrameRequestCallback | null = null;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      rafCb = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    class RunningCtx {
+      state = 'running';
+      currentTime = 0;
+      destination = { maxChannelCount: 2 };
+      resume = vi.fn();
+      close = vi.fn();
+      createMediaStreamSource = vi.fn(() => ({ connect: vi.fn(), disconnect: vi.fn() }));
+      createGain = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        gain: { value: 1, setTargetAtTime: vi.fn() },
+      }));
+      createAnalyser = vi.fn(() => ({
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        fftSize: 512,
+        smoothingTimeConstant: 0.65,
+        frequencyBinCount: 256,
+        getByteFrequencyData: (buf: Uint8Array) => buf.fill(80),
+      }));
+    }
+    vi.stubGlobal('AudioContext', RunningCtx);
+
+    const onSpeaking = vi.fn();
+    adapter.on('participantSpeakingChanged', onSpeaking);
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    adapter.resumePlayback();
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, {
+      getType: () => 'audio',
+      getParticipantId: () => 'no-muted-fn',
+      isLocal: () => false,
+      getOriginalStream: () => ({}),
+    });
+    rafCb?.(0);
+    expect(onSpeaking).toHaveBeenCalledWith('no-muted-fn', true);
+    adapter.disconnect();
+    vi.unstubAllGlobals();
+  });
+
   it('recreates a stored stub AudioContext on refresh', async () => {
     const {
       resetPreGestureAudioContextShimForTests,

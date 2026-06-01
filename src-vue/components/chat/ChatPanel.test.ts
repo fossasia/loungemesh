@@ -9,6 +9,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { createChatMessage } from '@/utils/chatMessage';
+import * as uiSounds from '@/utils/uiSounds';
 import ChatPanel from './ChatPanel.vue';
 
 function chatMsg(id: string, text: string, nr: number) {
@@ -483,6 +484,26 @@ describe('ChatPanel', () => {
     await wrapper.find('.close').trigger('click');
     await nextTick();
     expect(wrapper.find('.messages').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('ignores message shrinkage and own messages while the panel is closed', async () => {
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    soundSpy.mockClear();
+    conference.messages = [chatMsg('remote-1', 'a', 1), chatMsg('remote-2', 'b', 2)];
+    await flushPromises();
+    soundSpy.mockClear();
+    conference.messages = [chatMsg('remote-1', 'a', 1)];
+    await flushPromises();
+    conference.messages.push(chatMsg('local-1', 'mine', 2));
+    await flushPromises();
+    expect(soundSpy).not.toHaveBeenCalledWith('chatMessage');
+    soundSpy.mockRestore();
     wrapper.unmount();
   });
 

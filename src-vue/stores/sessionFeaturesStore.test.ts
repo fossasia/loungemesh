@@ -174,4 +174,26 @@ describe('sessionFeaturesStore', () => {
     features.togglePanel('whiteboard');
     expect(features.hasUnreadWhiteboard).toBe(false);
   });
+
+  it('marks notes seen when activity bumps while the notes panel is open', () => {
+    const features = useSessionFeaturesStore();
+    features.setRoomDefault('notes', true);
+    features.panel = 'notes';
+    features.notesActivitySeq = 5;
+    features.notesSeenSeq = 2;
+    features.bumpNotesActivity();
+    expect(features.notesSeenSeq).toBe(5);
+    expect(features.notesActivitySeq).toBe(5);
+  });
+
+  it('marks whiteboard seen when activity bumps while the whiteboard panel is open', () => {
+    const features = useSessionFeaturesStore();
+    features.setRoomDefault('whiteboard', true);
+    features.panel = 'whiteboard';
+    features.whiteboardActivitySeq = 3;
+    features.whiteboardSeenSeq = 1;
+    features.bumpWhiteboardActivity();
+    expect(features.whiteboardSeenSeq).toBe(3);
+    expect(features.whiteboardActivitySeq).toBe(3);
+  });
 });
