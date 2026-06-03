@@ -1,0 +1,40 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+/coverage-out
+
+# production
+/build
+/dist
+/docs-site/.vitepress/dist
+/docs-site/.vitepress/cache
+/docs-site/api
+/test-results
+/playwright-report
+
+# misc
+.DS_Store
+*.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cert
+
+.env
+.env.local
+.env.production
+.env.development
+.env.*
+!env.example
+docker/.env.jitsi
+.eslintcache
+app
+.env.app
+docker/jitsi-config

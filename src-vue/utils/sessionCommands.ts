@@ -1,0 +1,148 @@
+import { useConferenceStore } from '@/stores/conferenceStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useLocalStore } from '@/stores/localStore';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+import type { WhiteboardCommand } from '@/utils/whiteboardSync';
+import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+
+type CommandPayload = { value: string };
+
+function parse<T>(payload: CommandPayload): T | null {
+  try {
+    return JSON.parse(payload.value) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Apply a conference command from another participant. */
+export function handleSessionCommand(name: string, payload: CommandPayload): void {
+  const features = useSessionFeaturesStore();
+  const conference = useConferenceStore();
+  const local = useLocalStore();
+
+  switch (name) {
+    case 'pos': {
+      const pos = parse<{ id?: string; x?: number; y?: number }>(payload);
+      if (pos?.id != null && pos.x != null && pos.y != null) {
+        conference.updateUserPosition(pos.id, { x: pos.x, y: pos.y });
+      }
+      break;
+    }
+    case 'name': {
+      const data = parse<{ id?: string; name?: string }>(payload);
+      if (data?.id && data.name?.trim()) {
+        conference.updateUserDisplayName(data.id, data.name.trim());
+      }
+      break;
+    }
+    case 'host': {
+      const data = parse<{ hostId?: string }>(payload);
+      if (data?.hostId && !features.hostId && !features.pendingHostClaim) {
+        features.setHost(data.hostId);
+      }
+      break;
+    }
+    case 'lobby': {
+      const data = parse<{
+        action?: string;
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+      }>(payload);
+      if (!data) break;
+      if (data.enabled != null) features.lobbyEnabled = data.enabled;
+      if (data.action === 'wait' && data.id && data.name) {
+        features.addLobbyWaiter({ id: data.id, name: data.name });
+      }
+      if (data.action === 'approve' && data.id) {
+        features.approveLobby(data.id);
+        if (data.id === local.id) features.localLobbyPending = false;
+      }
+      break;
+    }
+    case 'react': {
+      const data = parse<{ id?: string; emoji?: string }>(payload);
+      if (data?.id && data.emoji) features.setReaction(data.id, data.emoji);
+      break;
+    }
+    case 'hand': {
+      const data = parse<{ id?: string; raised?: boolean }>(payload);
+      if (!data?.id || typeof data.raised !== 'boolean') break;
+      applyParticipantHandRaised(data.id, data.raised, { notify: true });
+      break;
+    }
+    case 'poll': {
+      features.applyPoll(parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload));
+      break;
+    }
+    case 'notes': {
+      const data = parse<{ text?: string }>(payload);
+      if (data?.text != null) {
+        features.sharedNotes = data.text;
+        features.bumpNotesActivity();
+      }
+      break;
+    }
+    case 'access': {
+      const data = parse<
+        import('@/utils/sessionAccess').AccessCommandPayload & {
+          notes?: boolean;
+          whiteboard?: boolean;
+        }
+      >(payload);
+      if (!data) break;
+      features.applyAccessUpdate(data);
+      break;
+    }
+    case 'chat': {
+      const data = parse<{
+        action?: string;
+        messageId?: string;
+        text?: string;
+        editedAt?: number;
+      }>(payload);
+      if (
+        data?.action === 'edit' &&
+        data.messageId &&
+        data.text != null &&
+        data.editedAt != null
+      ) {
+        conference.editChatMessage(data.messageId, data.text, data.editedAt);
+      }
+      break;
+    }
+    case 'mod': {
+      const data = parse<{ action?: string; id?: string }>(payload);
+      if (data?.action === 'kick' && data.id === local.id) {
+        conference.leaveConference();
+      }
+      if (data?.action === 'mute' && data.id) {
+        if (data.id === local.id && !local.mute) {
+          void local.toggleMute();
+        } else if (conference.users[data.id]) {
+          conference.patchUser(data.id, { mute: true });
+          const engine = getMediaEngineInstance();
+          engine.setParticipantVolume(data.id, 0);
+          engine.disconnectParticipantAudio?.(data.id);
+        }
+      }
+      break;
+    }
+    case 'wb': {
+      const data = parse<WhiteboardCommand>(payload);
+      if (!data) break;
+      if (data.action === 'clear') {
+        features.clearWhiteboard();
+        features.bumpWhiteboardActivity();
+      }
+      if (data.action === 'stroke') {
+        features.addWhiteboardStroke(data.stroke);
+        features.bumpWhiteboardActivity();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}

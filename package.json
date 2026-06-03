@@ -1,0 +1,49 @@
+{
+  "version": "0.7.0",
+  "name": "loungemesh",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "docs:api": "typedoc",
+    "typecheck": "vue-tsc --noEmit",
+    "docs:dev": "vitepress dev docs-site",
+    "docs:build": "npm run docs:api && vitepress build docs-site",
+    "docs:preview": "vitepress preview docs-site",
+    "setup": "bash scripts/loungemesh.sh dev",
+    "setup:prod": "node scripts/setup-env.mjs production",
+    "docker:up": "docker compose up -d --build",
+    "deploy": "bash scripts/loungemesh.sh deploy",
+    "fix:jvb": "bash scripts/loungemesh.sh fix-jvb"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/coverage-v8": "^4.1.7",
+    "@vue/test-utils": "^2.4.10",
+    "eslint": "^10.4.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.8.3",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vite-plugin-compression2": "^2.5.3",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.7",
+    "vue-tsc": "^3.3.3"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.16.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.35",
+    "vue-router": "^5.0.7"
+  }
+}
