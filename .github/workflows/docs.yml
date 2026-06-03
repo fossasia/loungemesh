@@ -34,7 +34,7 @@ jobs:
         if: ${{ vars.DOCS_CNAME != '' }}
         run: echo "${{ vars.DOCS_CNAME }}" > docs-site/.vitepress/dist/CNAME
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/.vitepress/dist
       - id: deployment
