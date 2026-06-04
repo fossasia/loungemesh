@@ -158,6 +158,26 @@ describe('wireStoreSync', () => {
     expect(conference.users.u1.properties.handRaised).toBe(true);
   });
 
+  it('does not store muted video on trackAdded', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u-muted');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, {
+      getParticipantId: () => 'u-muted',
+      getType: () => 'video',
+      isMuted: () => true,
+      isLocal: () => false,
+      videoType: 'camera',
+    } as JitsiTrack);
+    expect(conference.users['u-muted'].video).toBeUndefined();
+  });
+
   it('syncs remote video mute and removal', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();

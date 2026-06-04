@@ -106,6 +106,8 @@ export const useConferenceStore = defineStore('conference', {
       }
       if (kind === 'audio') {
         this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
+      } else if (track.isMuted?.()) {
+        this.clearUserTrack(id, 'video');
       } else {
         this.patchUser(id, {
           video: markRaw(track),

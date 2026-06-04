@@ -4,6 +4,7 @@ import {
   mergeWhiteboardStroke,
   type WhiteboardStroke,
 } from '@/utils/whiteboardSync';
+import { REACTION_DISPLAY_MS } from '@/constants/sessionEmojis';
 import {
   defaultUserGrants,
   type FeatureKey,
@@ -113,12 +114,13 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     setReaction(userId: string, emoji: string) {
       const at = Date.now();
-      this.userReactions[userId] = { emoji, at };
+      this.userReactions = { ...this.userReactions, [userId]: { emoji, at } };
       window.setTimeout(() => {
-        if (this.userReactions[userId]?.at === at) {
-          delete this.userReactions[userId];
-        }
-      }, 4000);
+        if (this.userReactions[userId]?.at !== at) return;
+        const next = { ...this.userReactions };
+        delete next[userId];
+        this.userReactions = next;
+      }, REACTION_DISPLAY_MS);
     },
     applyPoll(poll: ActivePoll | null) {
       if (!poll) {

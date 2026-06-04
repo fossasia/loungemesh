@@ -160,3 +160,6 @@ export const REACTION_EMOJIS = [
   '✨',
   '🚀',
 ] as const;
+
+/** How long a broadcast room reaction stays visible on participant tiles. */
+export const REACTION_DISPLAY_MS = 2500;

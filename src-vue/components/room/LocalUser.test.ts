@@ -91,7 +91,8 @@ describe('LocalUser', () => {
     local.cameraOff = true;
     local.video = undefined;
     const { wrapper } = await mountWithApp(LocalUser);
-    expect(wrapper.find('video.vid').isVisible()).toBe(false);
+    expect(wrapper.find('video.vid').exists()).toBe(false);
+    expect(wrapper.find('.videoContainer.avatarTile').exists()).toBe(true);
     expect(wrapper.find('.base.avatar').exists()).toBe(true);
     wrapper.unmount();
   });

@@ -32,7 +32,7 @@ describe('sessionFeaturesStore', () => {
     const features = useSessionFeaturesStore();
     features.setReaction('u1', '👍');
     expect(features.userReactions.u1?.emoji).toBe('👍');
-    vi.advanceTimersByTime(4000);
+    vi.advanceTimersByTime(2500);
     expect(features.userReactions.u1).toBeUndefined();
 
     const poll = {
@@ -73,7 +73,7 @@ describe('sessionFeaturesStore', () => {
     const features = useSessionFeaturesStore();
     features.setReaction('u1', '👍');
     features.userReactions.u1!.at = 999;
-    vi.advanceTimersByTime(4000);
+    vi.advanceTimersByTime(2500);
     expect(features.userReactions.u1?.emoji).toBe('👍');
   });
 

@@ -123,7 +123,11 @@ export function wireStoreSync(engine: MediaService): void {
     }
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
-    conferenceStore.setUserTrack(id, kind, track);
+    if (kind === 'video' && track.isMuted()) {
+      conferenceStore.clearUserTrack(id, 'video');
+    } else {
+      conferenceStore.setUserTrack(id, kind, track);
+    }
     if (kind === 'audio') {
       if (track.isMuted()) {
         engine.disconnectParticipantAudio?.(id);

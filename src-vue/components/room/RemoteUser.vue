@@ -65,7 +65,14 @@ const handUp = computed(
     :data-recording-name="nameLabel"
     :style="style"
   >
-    <div class="videoContainer" :class="{ desktop: isDesktop, speaking: speaking && showAvatar }">
+    <div
+      class="videoContainer"
+      :class="{
+        desktop: isDesktop,
+        avatarTile: showAvatar && !isDesktop,
+        speaking: speaking && showAvatar && !isDesktop,
+      }"
+    >
       <UserBackdrop
         v-if="showAvatar"
         :onStage="user.properties?.onStage === true || user.properties?.onStage === 'true'"
@@ -76,12 +83,11 @@ const handUp = computed(
       <template v-else-if="videoTrack">
         <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>
+      <span v-if="reaction" class="floatReact">{{ reaction }}</span>
+      <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
     </div>
     <RemoteAudio :id="id" :volume="user?.volume" />
     <MuteIndicator v-if="user.mute" />
-    <span v-if="reaction" class="floatReact">{{ reaction }}</span>
-    <!-- Prominent hand-raise badge floating above the video -->
-    <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
     <NameTag>
       {{ nameLabel }}
     </NameTag>
@@ -97,54 +103,16 @@ const handUp = computed(
   z-index: 1;
   box-sizing: border-box;
   border: 4px solid transparent;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  overflow: visible;
 }
-.videoContainer.speaking {
-  border-color: var(--color-blue100);
-  animation: speakPulse 1.8s ease-in-out infinite;
+/* Backdrop is position:absolute, so keep tile width without video (for overlay anchoring). */
+.videoContainer:not(.desktop) {
+  width: 200px;
 }
 .videoContainer.desktop {
   border-radius: var(--radius-sm);
 }
-
-@keyframes speakPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.3); }
-  50%       { box-shadow: 0 0 0 8px rgba(79, 110, 247, 0.08); }
-}
-.floatReact {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  font-size: 1.5rem;
-  z-index: 5;
-  pointer-events: none;
-}
-
-/* Floating hand-raise badge: prominent, above the video circle */
-.handBadge {
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 1.6rem;
-  line-height: 1;
-  z-index: 10;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
-  animation: handBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
-             handFloat 2.5s ease-in-out 0.45s infinite;
-}
-
-@keyframes handBounce {
-  from { opacity: 0; transform: translateX(-50%) scale(0.3) rotate(-25deg); }
-  to   { opacity: 1; transform: translateX(-50%) scale(1) rotate(0deg); }
-}
-
-@keyframes handFloat {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50%       { transform: translateX(-50%) translateY(-4px); }
-}
-
 /* Tile entrance: scale up from a small dot with a spring overshoot */
 .userContainer {
   animation: tileEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -155,3 +123,5 @@ const handUp = computed(
   to   { opacity: 1; transform: scale(1); }
 }
 </style>
+
+<style scoped src="./participantTileOverlays.css"></style>

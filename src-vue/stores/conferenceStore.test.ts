@@ -92,6 +92,17 @@ describe('conferenceStore', () => {
     expect(store.displayName).toBe('Alice');
   });
 
+  it('setUserTrack ignores muted camera video', () => {
+    const store = useConferenceStore();
+    store.addUser('u-muted-vid');
+    store.setUserTrack('u-muted-vid', 'video', {
+      getType: () => 'video',
+      isMuted: () => true,
+      videoType: 'camera',
+    } as never);
+    expect(store.users['u-muted-vid'].video).toBeUndefined();
+  });
+
   it('setUserTrack replaces user entry for reactivity', () => {
     const store = useConferenceStore();
     store.addUser('u6');
