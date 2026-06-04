@@ -242,9 +242,9 @@ describe('SessionTools', () => {
 
   it('raises hand using the engine user id when local id is unset', async () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('');
-    conference.addUser('engine-user');
     vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue('engine-user');
     const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
@@ -252,7 +252,8 @@ describe('SessionTools', () => {
     await wrapper.find('[aria-label="Raise hand"]').trigger('click');
     expect(propSpy).toHaveBeenCalledWith('handRaised', true);
     expect(cmdSpy).toHaveBeenCalledWith('hand', JSON.stringify({ id: 'engine-user', raised: true }));
-    expect(conference.users['engine-user'].properties.handRaised).toBe(true);
+    expect(features.handRaised).toBe(true);
+    expect(conference.users['engine-user']).toBeUndefined();
     wrapper.unmount();
   });
 

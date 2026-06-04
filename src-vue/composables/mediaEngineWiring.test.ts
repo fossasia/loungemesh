@@ -93,7 +93,7 @@ describe('wireStoreSync', () => {
     expect(conference.users.u1.speaking).toBe(false);
   });
 
-  it('adds a participant when speaking changes for an unknown user', () => {
+  it('ignores speaking changes for unknown users', () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
     wireStoreSync(engine);
@@ -102,20 +102,33 @@ describe('wireStoreSync', () => {
       'new-speaker',
       true,
     );
-    expect(conference.users['new-speaker']?.speaking).toBe(true);
+    expect(conference.users['new-speaker']).toBeUndefined();
   });
 
-  it('ignores participant property updates when addUser leaves no record', () => {
+  it('ignores participant property updates for unknown users', () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
     wireStoreSync(engine);
-    vi.spyOn(conference, 'addUser').mockImplementation(() => {});
     (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
       'participantPropertyChanged',
       'missing',
       { speaking: true },
     );
     expect(conference.users.missing).toBeUndefined();
+  });
+
+  it('syncs handRaised without creating unknown users', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    wireStoreSync(engine);
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
+      'participantPropertyChanged',
+      'stranger',
+      { handRaised: true },
+    );
+    expect(conference.users.stranger).toBeUndefined();
+    expect(features.handRaised).toBe(false);
   });
 
   it('syncs speaking participant property', async () => {

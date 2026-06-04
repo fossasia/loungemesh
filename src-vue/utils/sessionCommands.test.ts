@@ -5,8 +5,15 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { handleSessionCommand } from './sessionCommands';
 
+vi.mock('@/utils/uiSounds', () => ({
+  playUiSound: vi.fn(),
+}));
+
 describe('handleSessionCommand', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+  });
 
   it('updates position and session features', () => {
     const conference = useConferenceStore();
@@ -24,8 +31,22 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('react', { value: JSON.stringify({ id: 'u1', emoji: '👍' }) });
     expect(features.userReactions.u1?.emoji).toBe('👍');
 
+    conference.addUser('u2');
     handleSessionCommand('hand', { value: JSON.stringify({ id: 'u2', raised: true }) });
     expect(conference.users.u2.properties.handRaised).toBe(true);
+  });
+
+  it('plays hand raise sound only once per raise', async () => {
+    const { playUiSound } = await import('@/utils/uiSounds');
+    const conference = useConferenceStore();
+    conference.addUser('u2');
+    const payload = { value: JSON.stringify({ id: 'u2', raised: true }) };
+    handleSessionCommand('hand', payload);
+    handleSessionCommand('hand', payload);
+    handleSessionCommand('pos', { value: JSON.stringify({ id: 'u2', x: 3, y: 4 }) });
+    handleSessionCommand('hand', payload);
+    expect(playUiSound).toHaveBeenCalledTimes(1);
+    expect(playUiSound).toHaveBeenCalledWith('handRaise');
   });
 
   it('handles lobby, poll, notes, and moderator actions', () => {

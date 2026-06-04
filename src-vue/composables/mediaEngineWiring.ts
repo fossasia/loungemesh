@@ -173,26 +173,23 @@ export function wireStoreSync(engine: MediaService): void {
     conferenceStore.ingestChatMessage(id, text, nr);
   });
   engine.on('participantPropertyChanged', (id, properties) => {
-    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
-    const user = conferenceStore.users[id];
-    if (!user) return;
     const safe = sanitizeParticipantProperties(properties);
+    if ('handRaised' in safe) {
+      applyParticipantHandRaised(id, parseHandRaised(safe.handRaised));
+      delete safe.handRaised;
+    }
+    const user = conferenceStore.users[id];
+    if (!user || !Object.keys(safe).length) return;
     const patch: Partial<typeof user> = {
       properties: { ...user.properties, ...safe },
     };
     if ('speaking' in safe) {
       patch.speaking = safe.speaking === true || safe.speaking === 'true';
     }
-    if ('handRaised' in safe) {
-      patch.properties = {
-        ...patch.properties!,
-        handRaised: parseHandRaised(safe.handRaised),
-      };
-    }
     conferenceStore.patchUser(id, patch);
   });
   engine.on('participantSpeakingChanged', (id, speaking) => {
-    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
+    if (!conferenceStore.users[id]) return;
     conferenceStore.patchUser(id, { speaking });
   });
   engine.on('command', (name, payload) => {
