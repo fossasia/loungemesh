@@ -150,17 +150,20 @@ describe('localStore', () => {
     constraintsSpy.mockRestore();
   });
 
-  it('toggleMute soft-mutes the mic and unmutes without re-acquiring the device', async () => {
-    let muted = false;
+  it('toggleMute releases the mic on mute and re-acquires it on unmute', async () => {
     const existing = {
       getType: () => 'audio',
-      isMuted: vi.fn(() => muted),
-      unmute: vi.fn().mockImplementation(async () => {
-        muted = false;
-      }),
-      mute: vi.fn().mockImplementation(async () => {
-        muted = true;
-      }),
+      isMuted: vi.fn().mockReturnValue(false),
+      unmute: vi.fn().mockResolvedValue(undefined),
+      mute: vi.fn().mockResolvedValue(undefined),
+      dispose: vi.fn(),
+      getOriginalStream: () => ({ getTracks: () => [{ stop: vi.fn() }] }),
+    };
+    const fresh = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(false),
+      unmute: vi.fn().mockResolvedValue(undefined),
+      mute: vi.fn().mockResolvedValue(undefined),
       dispose: vi.fn(),
     };
     const engine = getMediaEngineInstance();
@@ -170,7 +173,8 @@ describe('localStore', () => {
       getLocalTracks: () => [],
       removeTrack,
     } as never);
-    const createSpy = vi.spyOn(engine, 'createLocalTracks');
+    const createSpy = vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([fresh as never]);
+    const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
     const refreshSpy = vi.spyOn(engine, 'refreshRemoteAudio');
 
     const store = useLocalStore();
@@ -180,17 +184,42 @@ describe('localStore', () => {
     await store.toggleMute();
     expect(existing.mute).toHaveBeenCalled();
     expect(store.mute).toBe(true);
-    expect(toRaw(store.audio)).toBe(existing);
-    expect(removeTrack).not.toHaveBeenCalled();
-    expect(existing.dispose).not.toHaveBeenCalled();
+    expect(store.audio).toBeUndefined();
+    expect(removeTrack).toHaveBeenCalledWith(existing);
+    expect(existing.dispose).toHaveBeenCalled();
     expect(refreshSpy).toHaveBeenCalled();
 
     await store.toggleMute();
-    expect(existing.unmute).toHaveBeenCalled();
     expect(store.mute).toBe(false);
-    expect(toRaw(store.audio)).toBe(existing);
-    expect(createSpy).not.toHaveBeenCalled();
+    expect(createSpy).toHaveBeenCalledWith(['audio']);
+    expect(addSpy).toHaveBeenCalledWith(fresh);
+    expect(toRaw(store.audio)).toBe(fresh);
     expect(refreshSpy).toHaveBeenCalled();
+  });
+
+  it('disableMic fully releases the mic', async () => {
+    const existing = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(false),
+      mute: vi.fn().mockResolvedValue(undefined),
+      dispose: vi.fn(),
+      getOriginalStream: () => ({ getTracks: () => [{ stop: vi.fn() }] }),
+    };
+    const engine = getMediaEngineInstance();
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [],
+      removeTrack,
+    } as never);
+    const store = useLocalStore();
+    store.audio = existing as never;
+    store.mute = false;
+    await store.disableMic();
+    expect(existing.mute).toHaveBeenCalled();
+    expect(store.mute).toBe(true);
+    expect(store.audio).toBeUndefined();
+    expect(removeTrack).toHaveBeenCalledWith(existing);
+    expect(existing.dispose).toHaveBeenCalled();
   });
 
   it('disableMic skips mute when the track is already muted', async () => {

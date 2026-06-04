@@ -265,9 +265,8 @@ export const useLocalStore = defineStore('local', {
     },
     async disableMic() {
       const engine = getMediaEngineInstance();
+      const conf = engine.getConference();
       const track = this.audio;
-      // Keep the capture device open and only mute the Jitsi track so unmute is
-      // instant (Chrome is slow to re-open getUserMedia after a full release).
       if (track && !track.isMuted?.()) {
         try {
           await track.mute();
@@ -277,6 +276,13 @@ export const useLocalStore = defineStore('local', {
       }
       this.mute = true;
       this.speaking = false;
+      // Release the device so the OS mic indicator turns off (soft-mute leaves capture open).
+      this.audio = undefined;
+      await nextTick();
+      await releaseLocalMediaTracks(
+        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]),
+        conf,
+      );
       unlockMediaPlaybackNow(engine);
       engine.refreshRemoteAudio?.();
     },
