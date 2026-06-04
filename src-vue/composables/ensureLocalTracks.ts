@@ -17,7 +17,15 @@ export async function ensureLocalTracks(
   if (!local.mute && !local.audio) devices.push('audio');
   if (!local.cameraOff && !local.video) devices.push('video');
   if (!devices.length) return existing;
-  const tracks = await engine.createLocalTracks(devices);
+  const tracks =
+    devices.includes('audio') && devices.includes('video')
+      ? (
+          await Promise.all([
+            engine.createLocalTracks(['audio']),
+            engine.createLocalTracks(['video']),
+          ])
+        ).flat()
+      : await engine.createLocalTracks(devices);
   unlockMediaPlaybackNow(engine);
   const merged = [...existing];
   const used = new Set<JitsiTrack>();

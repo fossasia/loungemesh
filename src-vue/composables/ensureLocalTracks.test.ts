@@ -6,16 +6,17 @@ import { useLocalStore } from '@/stores/localStore';
 describe('ensureLocalTracks', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('requests audio and video when missing', async () => {
+  it('requests audio and video in parallel when both are missing', async () => {
     const local = useLocalStore();
     const engine = {
-      createLocalTracks: vi.fn().mockResolvedValue([
-        { getType: () => 'audio' },
-        { getType: () => 'video', videoType: 'camera' },
-      ]),
+      createLocalTracks: vi.fn(async (devices: ('audio' | 'video')[]) => {
+        if (devices.includes('audio')) return [{ getType: () => 'audio' }];
+        return [{ getType: () => 'video', videoType: 'camera' }];
+      }),
     };
     const tracks = await ensureLocalTracks(local, engine as never);
-    expect(engine.createLocalTracks).toHaveBeenCalledWith(['audio', 'video']);
+    expect(engine.createLocalTracks).toHaveBeenCalledWith(['audio']);
+    expect(engine.createLocalTracks).toHaveBeenCalledWith(['video']);
     expect(tracks).toHaveLength(2);
     expect(local.audio).toBeDefined();
     expect(local.video).toBeDefined();

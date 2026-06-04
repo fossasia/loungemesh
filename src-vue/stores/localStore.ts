@@ -265,10 +265,9 @@ export const useLocalStore = defineStore('local', {
     },
     async disableMic() {
       const engine = getMediaEngineInstance();
-      const conf = engine.getConference();
       const track = this.audio;
-      // Signal mute to peers immediately so remote Web Audio graphs drop before
-      // removeTrack/dispose completes asynchronously.
+      // Keep the capture device open and only mute the Jitsi track so unmute is
+      // instant (Chrome is slow to re-open getUserMedia after a full release).
       if (track && !track.isMuted?.()) {
         try {
           await track.mute();
@@ -276,13 +275,8 @@ export const useLocalStore = defineStore('local', {
           /* track may already be gone */
         }
       }
-      // Flip UI state first, then fully release the device so the mic indicator
-      // turns off — we re-acquire a fresh track on the next unmute.
       this.mute = true;
-      this.audio = undefined;
       this.speaking = false;
-      await nextTick();
-      await releaseLocalMediaTracks(uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]), conf);
       unlockMediaPlaybackNow(engine);
       engine.refreshRemoteAudio?.();
     },
