@@ -25,6 +25,10 @@ import {
 } from './chatPanelActions';
 import { CHAT_EMOJIS } from './insertEmoji';
 import { chatPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
+import {
+  isChatNotificationSoundEnabled,
+  setChatNotificationSoundEnabled,
+} from '@/utils/chatNotificationSound';
 import { playUiSound } from '@/utils/uiSounds';
 
 const conference = useConferenceStore();
@@ -39,6 +43,7 @@ const chatError = ref('');
 const editingId = ref<string | null>(null);
 const editDraft = ref('');
 const historyOpen = ref<Record<string, boolean>>({});
+const chatSoundOn = ref(isChatNotificationSoundEnabled());
 
 const localUserId = computed(() => local.id || engine.getLocalUserId() || '');
 
@@ -138,6 +143,12 @@ function addEmoji(emoji: string) {
   addEmojiToInput(inputEl.value, emoji);
 }
 
+function toggleChatSound() {
+  chatSoundOn.value = !chatSoundOn.value;
+  setChatNotificationSoundEnabled(chatSoundOn.value);
+  playUiSound(chatSoundOn.value ? 'toggleOn' : 'toggleOff');
+}
+
 async function scrollChatIfOpen() {
   await nextTick();
   scrollChatToBottom(chatRoot.value);
@@ -159,7 +170,7 @@ function onIncomingMessages(nextCount: number, prevCount: number) {
     return;
   }
   const latest = conference.messages[nextCount - 1];
-  if (latest && latest.id !== localUserId.value) {
+  if (latest && latest.id !== localUserId.value && chatSoundOn.value) {
     playUiSound('chatMessage');
   }
 }
@@ -188,6 +199,19 @@ watch(
       }"
       :onClose="() => (open = false)"
     >
+      <template #afterTitle>
+        <button
+          type="button"
+          class="notifyToggle"
+          :title="chatSoundOn ? 'Mute message sounds' : 'Unmute message sounds'"
+          :aria-label="chatSoundOn ? 'Mute message sounds' : 'Unmute message sounds'"
+          :aria-pressed="chatSoundOn"
+          @click="toggleChatSound"
+        >
+          <AppIcon :name="chatSoundOn ? 'bell' : 'bell-off'" :size="18" />
+        </button>
+      </template>
+
       <div ref="chatRoot" class="messages">
         <p v-if="!conference.messages.length" class="empty">No messages yet.</p>
         <div
@@ -449,6 +473,27 @@ watch(
   min-height: 52px;
   background: #fff;
   border: 1px solid rgba(220, 222, 225, 1);
+}
+.notifyToggle {
+  border: none;
+  background: transparent;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: var(--color-mono30);
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notifyToggle:hover {
+  background: var(--btn-default-bg-hover);
+  color: var(--color-mono10);
+}
+.notifyToggle[aria-pressed='true'] {
+  color: var(--color-blue100);
 }
 .ta {
   flex: 1;

@@ -9,6 +9,9 @@ defineProps<{
 
 <template>
   <Card className="menuCard" :title="title" :onClose="onClose">
+    <template v-if="$slots.afterTitle" #afterTitle>
+      <slot name="afterTitle" />
+    </template>
     <slot />
   </Card>
 </template>

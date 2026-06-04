@@ -10,14 +10,20 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { createChatMessage } from '@/utils/chatMessage';
 import * as uiSounds from '@/utils/uiSounds';
+import { setChatNotificationSoundEnabled } from '@/utils/chatNotificationSound';
 import ChatPanel from './ChatPanel.vue';
+
+const CHAT_SOUND_KEY = 'loungemesh:chat-notification-sound';
 
 function chatMsg(id: string, text: string, nr: number) {
   return createChatMessage(id, text, nr);
 }
 
 describe('ChatPanel', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.removeItem(CHAT_SOUND_KEY);
+  });
 
   it('sends messages, parses links, and handles keyboard shortcuts', async () => {
     const { jitsi, conference } = await connectAndJoinTestConference();
@@ -524,5 +530,42 @@ describe('ChatPanel', () => {
     expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(false);
     wrapper.unmount();
     vi.doUnmock('@/utils/uiSounds');
+  });
+
+  it('skips incoming message sound when notifications are muted', async () => {
+    setChatNotificationSoundEnabled(false);
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    const { wrapper } = await mountWithApp(ChatPanel);
+    soundSpy.mockClear();
+    conference.messages = [{ id: 'remote-1', text: 'hello', nr: 1 }];
+    await flushPromises();
+    conference.messages.push({ id: 'remote-2', text: 'again', nr: 2 });
+    await flushPromises();
+    expect(soundSpy).not.toHaveBeenCalledWith('chatMessage');
+    soundSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('toggles notification sound from the chat input bar', async () => {
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const toggle = wrapper.find('.titleRow .notifyToggle');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-pressed')).toBe('false');
+    expect(localStorage.getItem(CHAT_SOUND_KEY)).toBe('0');
+    expect(soundSpy).toHaveBeenCalledWith('toggleOff');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    expect(localStorage.getItem(CHAT_SOUND_KEY)).toBe('1');
+    soundSpy.mockRestore();
+    wrapper.unmount();
   });
 });

@@ -9,7 +9,10 @@ defineProps<{
 <template>
   <div class="box" :class="className || ''">
     <div class="header">
-      <span class="title">{{ title }}</span>
+      <div class="titleRow">
+        <span class="title">{{ title }}</span>
+        <slot name="afterTitle" />
+      </div>
       <button type="button" class="close" @click="onClose?.()">
         <span class="x">×</span>
         <span class="sr">Close</span>
@@ -38,6 +41,13 @@ defineProps<{
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
 }
 .content {
   flex: 1;

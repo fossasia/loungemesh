@@ -3,6 +3,8 @@ import { computed, type Component } from 'vue';
 import {
   ArrowRight,
   BarChart3,
+  Bell,
+  BellOff,
   Circle,
   EyeOff,
   FileText,
@@ -36,6 +38,8 @@ const props = withDefaults(
 export type IconName =
   | 'arrow-right'
   | 'bar-chart'
+  | 'bell'
+  | 'bell-off'
   | 'chat'
   | 'close'
   | 'eye-off'
@@ -59,6 +63,8 @@ export type IconName =
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
   'bar-chart': BarChart3,
+  bell: Bell,
+  'bell-off': BellOff,
   chat: MessageSquare,
   close: X,
   'eye-off': EyeOff,
