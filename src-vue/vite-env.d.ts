@@ -6,6 +6,20 @@ declare module '*.vue' {
   export default component;
 }
 
+declare module 'emoji-mart-vue-fast/data/all.json' {
+  const data: Record<string, unknown>;
+  export default data;
+}
+
+declare module 'emoji-mart-vue-fast/css/emoji-mart.css';
+
+declare module 'emoji-mart-vue-fast/src' {
+  export class EmojiIndex {
+    constructor(data: Record<string, unknown>);
+  }
+  export const Picker: import('vue').DefineComponent<Record<string, unknown>, object, unknown>;
+}
+
 interface ImportMetaEnv {
   /**
    * Browser-reachable Jitsi web URL (e.g. http://localhost:8000) when using docker-jitsi-meet.

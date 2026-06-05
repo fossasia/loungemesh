@@ -20,5 +20,3 @@ export function insertEmojiAtCaret(textarea: HTMLTextAreaElement, emoji: string)
   textarea.selectionEnd = pos;
   textarea.focus();
 }
-
-export { CHAT_EMOJIS } from '@/constants/sessionEmojis';

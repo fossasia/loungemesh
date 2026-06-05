@@ -17,6 +17,14 @@ describe('insertEmojiAtCaret', () => {
     expect(readCaret(el)).toEqual({ start: 3, end: 3 });
   });
 
+  it('readCaret falls back when only selectionEnd is invalid', () => {
+    const el = document.createElement('textarea');
+    el.value = 'abc';
+    el.selectionStart = 1;
+    Object.defineProperty(el, 'selectionEnd', { get: () => Number.NaN, configurable: true });
+    expect(readCaret(el)).toEqual({ start: 1, end: 1 });
+  });
+
   it('inserts emoji at selection', () => {
     const el = document.createElement('textarea');
     el.value = 'hi ';

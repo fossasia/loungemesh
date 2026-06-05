@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -23,7 +23,9 @@ import {
   handleChatKeydown,
   scrollChatToBottom,
 } from './chatPanelActions';
-import { CHAT_EMOJIS } from './insertEmoji';
+import { loadEmojiPickerPanel } from '@/components/ui/loadEmojiPickerPanel';
+
+const EmojiPickerPanel = defineAsyncComponent(loadEmojiPickerPanel);
 import { chatPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
 import {
   isChatNotificationSoundEnabled,
@@ -44,6 +46,7 @@ const editingId = ref<string | null>(null);
 const editDraft = ref('');
 const historyOpen = ref<Record<string, boolean>>({});
 const chatSoundOn = ref(isChatNotificationSoundEnabled());
+const emojiPickerOpen = ref(false);
 
 const localUserId = computed(() => local.id || engine.getLocalUserId() || '');
 
@@ -139,8 +142,9 @@ function onKeydown(e: KeyboardEvent) {
   handleChatKeydown(e, el, sendMessage);
 }
 
-function addEmoji(emoji: string) {
+function onEmojiPick(emoji: string) {
   addEmojiToInput(inputEl.value, emoji);
+  emojiPickerOpen.value = false;
 }
 
 function toggleChatSound() {
@@ -289,22 +293,23 @@ watch(
         </div>
       </div>
 
-      <div class="emojiRow">
-        <button
-          v-for="emoji in CHAT_EMOJIS"
-          :key="emoji"
-          type="button"
-          class="emojiBtn"
-          :title="`Insert ${emoji}`"
-          @click="addEmoji(emoji)"
-        >
-          {{ emoji }}
-        </button>
+      <div v-if="emojiPickerOpen" class="emojiPickerWrap" @pointerdown.stop>
+        <EmojiPickerPanel @select="onEmojiPick" />
       </div>
 
       <p v-if="chatError" class="chatErr" role="alert">{{ chatError }}</p>
 
       <div class="input">
+        <button
+          type="button"
+          class="emojiToggle"
+          title="Insert emoji"
+          aria-label="Insert emoji"
+          :aria-expanded="emojiPickerOpen"
+          @click="emojiPickerOpen = !emojiPickerOpen"
+        >
+          <AppIcon name="smile" :size="20" />
+        </button>
         <textarea
           ref="inputEl"
           id="chatInput"
@@ -437,27 +442,36 @@ watch(
   color: var(--color-mono30);
   font-weight: 500;
 }
-.emojiRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.emojiPickerWrap {
+  width: 100%;
+  min-width: 0;
   margin-bottom: 10px;
-  max-height: 120px;
-  overflow-y: auto;
-  padding: 4px 2px;
   flex-shrink: 0;
+  overflow: visible;
+  box-sizing: border-box;
 }
-.emojiBtn {
+.emojiToggle {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 4px;
   border: none;
-  background: var(--color-mono95);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 1.2rem;
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   cursor: pointer;
-  line-height: 1;
-  min-width: 36px;
+  color: var(--color-mono30);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.emojiBtn:hover {
+.emojiToggle:hover {
+  background: var(--btn-default-bg-hover);
+  color: var(--color-mono10);
+}
+.emojiToggle[aria-expanded='true'] {
+  color: var(--color-blue100);
   background: var(--btn-default-bg-hover);
 }
 .chatErr {

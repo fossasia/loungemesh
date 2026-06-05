@@ -7,6 +7,17 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import SessionTools from './SessionTools.vue';
 
+const emojiPickerStub = {
+  template:
+    '<button type="button" class="emojiPickStub" @click="$emit(\'select\', \'👍\')">pick</button>',
+};
+
+function mountSessionTools() {
+  return mountWithApp(SessionTools, {
+    global: { stubs: { EmojiPickerPanel: emojiPickerStub } },
+  });
+}
+
 describe('SessionTools', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
@@ -25,9 +36,9 @@ describe('SessionTools', () => {
     const local = useLocalStore();
     local.setMyID('local-1');
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionTools);
+    const { wrapper } = await mountSessionTools();
     await wrapper.find('[aria-label="Reactions"]').trigger('click');
-    await wrapper.find('.reactionsPop .emojiBtn').trigger('click');
+    await wrapper.find('.emojiPickStub').trigger('click');
     expect(cmdSpy).toHaveBeenCalledWith('react', expect.any(String));
     expect(features.panel).toBe('');
     wrapper.unmount();
@@ -125,9 +136,9 @@ describe('SessionTools', () => {
     local.setMyID('');
     vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue('engine-user');
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionTools);
+    const { wrapper } = await mountSessionTools();
     await wrapper.find('[aria-label="Reactions"]').trigger('click');
-    await wrapper.find('.reactionsPop .emojiBtn').trigger('click');
+    await wrapper.find('.emojiPickStub').trigger('click');
     expect(cmdSpy).toHaveBeenCalledWith('react', expect.stringContaining('"id":"engine-user"'));
     wrapper.unmount();
   });
@@ -138,9 +149,9 @@ describe('SessionTools', () => {
     local.setMyID('');
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue(undefined);
-    const { wrapper } = await mountWithApp(SessionTools);
+    const { wrapper } = await mountSessionTools();
     await wrapper.find('[aria-label="Reactions"]').trigger('click');
-    await wrapper.find('.reactionsPop .emojiBtn').trigger('click');
+    await wrapper.find('.emojiPickStub').trigger('click');
     expect(cmdSpy).not.toHaveBeenCalled();
     expect(features.panel).toBe('reactions');
     wrapper.unmount();

@@ -216,12 +216,41 @@ describe('ChatPanel', () => {
   it('inserts emoji from the picker', async () => {
     const conference = useConferenceStore();
     conference.conferenceObject = {} as never;
-    const { wrapper } = await mountWithApp(ChatPanel);
+    const { wrapper } = await mountWithApp(ChatPanel, {
+      global: {
+        stubs: {
+          EmojiPickerPanel: {
+            template:
+              '<button type="button" class="emojiPickStub" @click="$emit(\'select\', \'😀\')">pick</button>',
+          },
+        },
+      },
+    });
     await wrapper.find('button.ibtn').trigger('click');
     const textarea = wrapper.find('textarea');
     await textarea.setValue('hi ');
-    await wrapper.find('.emojiBtn').trigger('click');
+    await wrapper.find('.emojiToggle').trigger('click');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(true);
+    await wrapper.find('.emojiPickerWrap').trigger('pointerdown');
+    await wrapper.find('.emojiPickStub').trigger('click');
     expect((textarea.element as HTMLTextAreaElement).value).toContain('😀');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('toggles the emoji picker without inserting', async () => {
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const toggle = wrapper.find('.emojiToggle');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(true);
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(false);
     wrapper.unmount();
   });
 

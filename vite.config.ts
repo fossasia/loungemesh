@@ -43,6 +43,9 @@ export default defineConfig({
           ) {
             return 'vendor-vue';
           }
+          if (id.includes('node_modules/emoji-mart-vue-fast')) {
+            return 'vendor-emoji';
+          }
         },
       },
     },

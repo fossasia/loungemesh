@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useSessionPollControls } from '@/composables/useSessionPollControls';
 import PollPanel from '@/components/session/PollPanel.vue';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
-import { REACTION_EMOJIS } from '@/constants/sessionEmojis';
+import { loadEmojiPickerPanel } from '@/components/ui/loadEmojiPickerPanel';
+
+const EmojiPickerPanel = defineAsyncComponent(loadEmojiPickerPanel);
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { sendSessionReaction } from '@/utils/sessionReactions';
@@ -62,18 +65,7 @@ function openPanel(name: 'notes' | 'whiteboard') {
       </IconButton>
       <div v-if="features.panel === 'reactions'" class="toolPop reactionsPop" @pointerdown.stop>
         <p class="popTitle">Pick a reaction</p>
-        <div class="emojiGrid">
-          <button
-            v-for="emoji in REACTION_EMOJIS"
-            :key="emoji"
-            type="button"
-            class="emojiBtn"
-            :title="`React with ${emoji}`"
-            @click="sendReaction(emoji)"
-          >
-            {{ emoji }}
-          </button>
-        </div>
+        <EmojiPickerPanel layout="popover" @select="sendReaction" />
       </div>
     </div>
     <IconButton
@@ -141,8 +133,8 @@ function openPanel(name: 'notes' | 'whiteboard') {
 .toolPop {
   position: absolute;
   left: 50%;
-  bottom: 100%;
-  transform: translate(-50%, -12px);
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
   z-index: 10002;
   padding: 12px;
   border-radius: var(--radius-sm);
@@ -151,8 +143,13 @@ function openPanel(name: 'notes' | 'whiteboard') {
   pointer-events: auto;
 }
 .reactionsPop {
-  min-width: 220px;
-  max-width: min(320px, calc(100vw - 32px));
+  width: min(352px, calc(100vw - 24px));
+  padding: 10px 12px 12px;
+  overflow: visible;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .pollPop {
   width: min(360px, calc(100vw - 32px));
@@ -170,28 +167,11 @@ function openPanel(name: 'notes' | 'whiteboard') {
   text-align: center;
 }
 .popTitle {
-  margin: 0 0 8px;
+  margin: 0;
+  flex-shrink: 0;
   font-size: var(--fs-small);
   font-weight: var(--fw-medium);
   color: var(--color-mono30);
   text-align: center;
-}
-.emojiGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  justify-items: center;
-}
-.emojiBtn {
-  font-size: 1.35rem;
-  border: none;
-  background: var(--color-mono95);
-  border-radius: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
-  line-height: 1;
-}
-.emojiBtn:hover {
-  background: var(--btn-default-bg-hover);
 }
 </style>

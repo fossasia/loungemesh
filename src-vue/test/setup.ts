@@ -93,13 +93,19 @@ class MockResizeObserver {
     (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver = this;
   }
   /** Trigger a resize notification (tests only). */
-  trigger() {
-    this.cb([], this as unknown as ResizeObserver);
+  trigger(width = 0) {
+    const entries =
+      width > 0
+        ? [{ contentRect: { width, height: 0 } } as ResizeObserverEntry]
+        : [];
+    this.cb(entries, this as unknown as ResizeObserver);
   }
 }
 // @ts-expect-error test shim
 globalThis.ResizeObserver = MockResizeObserver;
 
-export function triggerLastResizeObserver() {
-  (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver?.trigger();
+export function triggerLastResizeObserver(width?: number) {
+  (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver?.trigger(
+    width,
+  );
 }
