@@ -74,6 +74,37 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
+  it('shows speaking highlight on camera video when unmuted', async () => {
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    local.video = makeTrack('video');
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    local.speaking = true;
+    local.mute = false;
+    const { wrapper } = await mountWithApp(LocalUser);
+    await flushPromises();
+    expect(wrapper.find('video.vid.speaking').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('uses desktop and camera video classes', async () => {
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    local.video = makeTrack('video');
+    local.videoType = 'desktop';
+    local.cameraOff = false;
+    const desktop = await mountWithApp(LocalUser);
+    expect(desktop.wrapper.find('video.desktopVid').exists()).toBe(true);
+    desktop.wrapper.unmount();
+
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    const camera = await mountWithApp(LocalUser);
+    expect(camera.wrapper.find('video.vid').exists()).toBe(true);
+    camera.wrapper.unmount();
+  });
+
   it('shows speaking highlight and share placeholder', async () => {
     const local = useLocalStore();
     local.speaking = true;

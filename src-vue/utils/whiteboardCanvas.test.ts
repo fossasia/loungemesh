@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  WHITEBOARD_LOGICAL_SIZE,
   clientToCanvasPoint,
   drawStrokeOnContext,
+  ensureWhiteboardCanvasSize,
   renderWhiteboard,
 } from './whiteboardCanvas';
 
@@ -10,17 +12,25 @@ describe('whiteboardCanvas', () => {
     expect(clientToCanvasPoint(null, 1, 2)).toBeNull();
   });
 
-  it('maps client coordinates into canvas space', () => {
+  it('maps client coordinates into logical canvas space', () => {
     const canvas = document.createElement('canvas');
-    canvas.width = 300;
-    canvas.height = 200;
+    ensureWhiteboardCanvasSize(canvas);
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
       left: 10,
       top: 20,
-      width: 150,
-      height: 100,
+      width: 640,
+      height: 360,
     } as DOMRect);
-    expect(clientToCanvasPoint(canvas, 25, 40)).toEqual({ x: 30, y: 40 });
+    expect(clientToCanvasPoint(canvas, 330, 200)).toEqual({ x: 640, y: 360 });
+  });
+
+  it('keeps a fixed bitmap size so CSS scaling preserves content', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 300;
+    ensureWhiteboardCanvasSize(canvas);
+    expect(canvas.width).toBe(WHITEBOARD_LOGICAL_SIZE.width);
+    expect(canvas.height).toBe(WHITEBOARD_LOGICAL_SIZE.height);
   });
 
   it('skips short strokes and renders board state', () => {

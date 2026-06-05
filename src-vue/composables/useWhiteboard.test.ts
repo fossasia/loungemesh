@@ -78,6 +78,45 @@ describe('useWhiteboard', () => {
     wrapper.unmount();
   });
 
+  it('uses the selected pen color and width when publishing strokes', async () => {
+    let api!: ReturnType<typeof useWhiteboard>;
+    const PenHarness = defineComponent({
+      setup() {
+        api = useWhiteboard(() => true, () => true);
+        return () =>
+          h('div', { style: { width: '400px', height: '300px' } }, [
+            h('canvas', {
+              ref: (el) => api.bindCanvas(el as HTMLCanvasElement | null),
+              onPointerdown: api.onCanvasDown,
+              onPointermove: api.onCanvasMove,
+              onPointerup: api.onCanvasUp,
+            }),
+          ]);
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx() as never);
+    const { wrapper } = await mountWithApp(PenHarness);
+    await flushPromises();
+    api.penColor.value = '#dc2626';
+    api.penWidth.value = 8;
+    const canvas = wrapper.find('canvas').element as HTMLCanvasElement;
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 5, clientY: 5, pointerId: 1, bubbles: true }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 20, clientY: 20, pointerId: 1, bubbles: true }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent('pointerup', { clientX: 20, clientY: 20, pointerId: 1, bubbles: true }),
+    );
+    const features = useSessionFeaturesStore();
+    expect(features.whiteboardStrokes[0]?.color).toBe('#dc2626');
+    expect(features.whiteboardStrokes[0]?.width).toBe(8);
+    wrapper.unmount();
+  });
+
   it('publishes multi-point strokes and skips single-point strokes', async () => {
     const local = useLocalStore();
     local.setMyID('me');
@@ -219,6 +258,29 @@ describe('useWhiteboard', () => {
     canvas.dispatchEvent(
       new PointerEvent('pointermove', { clientX: 4, clientY: 4, pointerId: 2, bubbles: true }),
     );
+    wrapper.unmount();
+  });
+
+  it('skips resize when the canvas ref is missing', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx() as never);
+    const features = useSessionFeaturesStore();
+    const Bare = defineComponent({
+      setup() {
+        useWhiteboard(() => true, () => true);
+        return () => h('div');
+      },
+    });
+    const { wrapper } = await mountWithApp(Bare);
+    features.addWhiteboardStroke({
+      id: 'orphan',
+      color: '#000',
+      width: 2,
+      points: [
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ],
+    });
+    await nextTick();
     wrapper.unmount();
   });
 

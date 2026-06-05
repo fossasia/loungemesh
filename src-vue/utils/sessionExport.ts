@@ -43,9 +43,7 @@ export function renderWhiteboardToCanvas(
   height = 720,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  renderWhiteboard(canvas, strokes);
+  renderWhiteboard(canvas, strokes, null, { width, height });
   return canvas;
 }
 

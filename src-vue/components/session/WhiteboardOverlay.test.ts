@@ -32,7 +32,7 @@ describe('WhiteboardOverlay', () => {
     };
   }
 
-  it('stops overlay pointer and wheel propagation', async () => {
+  it('stops overlay pointer and shell wheel propagation', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'whiteboard';
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
@@ -41,7 +41,79 @@ describe('WhiteboardOverlay', () => {
     });
     await flushPromises();
     await wrapper.find('.wbOverlay').trigger('pointerdown');
-    await wrapper.find('.wbOverlay').trigger('wheel');
+    await wrapper.find('.wbShell').trigger('wheel');
+    wrapper.unmount();
+  });
+
+  it('exposes a resize handle and scales the panel', async () => {
+    const features = useSessionFeaturesStore();
+    features.panel = 'whiteboard';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
+    const { wrapper } = await mountWithApp(WhiteboardOverlay, {
+      props: { onClose: () => {} },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const shell = wrapper.find('.wbShell').element as HTMLElement;
+    Object.defineProperty(shell, 'clientWidth', { value: 1000, configurable: true });
+    Object.defineProperty(shell, 'clientHeight', { value: 800, configurable: true });
+    const handle = wrapper.find('.wbResize').element as HTMLElement;
+    handle.setPointerCapture = vi.fn();
+    handle.releasePointerCapture = vi.fn();
+    handle.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, clientX: 200, clientY: 160, bubbles: true }),
+    );
+    handle.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }),
+    );
+    await flushPromises();
+    const overlay = wrapper.find('.wbOverlay').element as HTMLElement;
+    expect(overlay.style.width).toBe('800px');
+    expect(overlay.style.height).toBe('640px');
+    expect(overlay.style.left).toBe('100px');
+    wrapper.unmount();
+  });
+
+  it('drags the panel from the title bar when scaled down', async () => {
+    const features = useSessionFeaturesStore();
+    features.panel = 'whiteboard';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
+    const { wrapper } = await mountWithApp(WhiteboardOverlay, {
+      props: { onClose: () => {} },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const shell = wrapper.find('.wbShell').element as HTMLElement;
+    Object.defineProperty(shell, 'clientWidth', { value: 1000, configurable: true });
+    Object.defineProperty(shell, 'clientHeight', { value: 800, configurable: true });
+    const handle = wrapper.find('.wbResize').element as HTMLElement;
+    handle.setPointerCapture = vi.fn();
+    handle.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, clientX: 200, clientY: 160, bubbles: true }),
+    );
+    handle.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }),
+    );
+    await flushPromises();
+    expect(wrapper.find('.wbChrome').classes()).toContain('draggable');
+    const chrome = wrapper.find('.wbChrome').element as HTMLElement;
+    chrome.setPointerCapture = vi.fn();
+    chrome.dispatchEvent(
+      new PointerEvent('pointerdown', { button: 0, clientX: 0, clientY: 0, bubbles: true }),
+    );
+    chrome.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 60, clientY: -30, bubbles: true }),
+    );
+    await flushPromises();
+    const overlay = wrapper.find('.wbOverlay').element as HTMLElement;
+    expect(overlay.style.left).toBe('160px');
+    expect(overlay.style.top).toBe('50px');
+    chrome.releasePointerCapture = vi.fn();
+    chrome.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    chrome.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true }));
+    handle.releasePointerCapture = vi.fn();
+    handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    handle.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true }));
     wrapper.unmount();
   });
 
@@ -106,6 +178,40 @@ describe('WhiteboardOverlay', () => {
     await flushPromises();
     expect(wrapper.find('.wbCanvas').classes()).toContain('readonly');
     expect(wrapper.find('.wbClear').exists()).toBe(false);
+    expect(wrapper.find('.wbFloatingTools').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows pen tools and publishes the selected pen settings', async () => {
+    const features = useSessionFeaturesStore();
+    features.panel = 'whiteboard';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(WhiteboardOverlay, {
+      props: { onClose: () => {} },
+    });
+    await flushPromises();
+    expect(wrapper.find('.wbFloatingTools').exists()).toBe(true);
+    await wrapper.find('.wbColorTrigger').trigger('click');
+    await wrapper.find('button.wbPreset[title="Red"]').trigger('click');
+    await wrapper.find('.wbPenTrigger').trigger('click');
+    await wrapper.findAll('.wbPenOption')[2].trigger('click');
+    const canvas = wrapper.find('.wbCanvas').element as HTMLCanvasElement;
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 10, clientY: 10, pointerId: 1, bubbles: true }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 30, clientY: 30, pointerId: 1, bubbles: true }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent('pointerup', { clientX: 30, clientY: 30, pointerId: 1, bubbles: true }),
+    );
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'wb',
+      expect.stringMatching(/"color":"#dc2626".*"width":8/),
+    );
     wrapper.unmount();
   });
 

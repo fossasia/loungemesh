@@ -26,6 +26,10 @@ export const whiteboardChrome = {
   right: 56,
 };
 
+/** Smallest whiteboard panel as a fraction of the available chrome bounds. */
+export const whiteboardMinScale = 0.35;
+export const whiteboardMaxScale = 1;
+
 export type RoomBounds = {
   origin: PanVec;
   size: PanVec;

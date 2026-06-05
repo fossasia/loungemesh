@@ -62,6 +62,7 @@ describe('useMediaEngine', () => {
       getParticipantId: () => 'u3',
       getType: () => 'video',
       videoType: 'desktop',
+      isMuted: () => false,
       isLocal: () => false,
     } as JitsiTrack);
     jitsi.conference._fire(ev.conference.TRACK_ADDED, {
@@ -110,6 +111,7 @@ describe('useMediaEngine', () => {
       getParticipantId: () => 'cam',
       getType: () => 'video',
       videoType: 'camera',
+      isMuted: () => false,
       isLocal: () => false,
     } as JitsiTrack);
 
