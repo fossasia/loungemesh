@@ -9,6 +9,19 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import SessionFeaturePanels from './SessionFeaturePanels.vue';
 
+const notesEditorStub = {
+  name: 'NotesEditor',
+  props: ['modelValue', 'readonly'],
+  emits: ['update:modelValue', 'blur'],
+  template: `<textarea class="notesTa" :value="modelValue" :readonly="readonly" @input="$emit('update:modelValue', $event.target.value)" @blur="$emit('blur')" />`,
+};
+
+async function mountPanels() {
+  return mountWithApp(SessionFeaturePanels, {
+    global: { stubs: { NotesEditor: notesEditorStub } },
+  });
+}
+
 describe('SessionFeaturePanels', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -21,7 +34,7 @@ describe('SessionFeaturePanels', () => {
     local.setMyID('me');
     features.setHost('me');
     features.panel = 'notes';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await flushPromises();
     const ta = wrapper.find('.notesTa');
     await ta.setValue('shared text');
@@ -37,7 +50,7 @@ describe('SessionFeaturePanels', () => {
     features.setHost('me');
     features.panel = 'notes';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await flushPromises();
     const ta = wrapper.find('.notesTa');
     await ta.setValue('blur published');
@@ -54,7 +67,7 @@ describe('SessionFeaturePanels', () => {
     local.setMyID('me');
     features.setHost('me');
     features.panel = 'notes';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     const ta = wrapper.find('.notesTa');
     await ta.setValue('first');
     await ta.setValue('second');
@@ -71,7 +84,7 @@ describe('SessionFeaturePanels', () => {
     features.sharedNotes = 'same';
     features.panel = 'notes';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await flushPromises();
     await wrapper.find('.notesTa').setValue('same');
     vi.advanceTimersByTime(500);
@@ -87,7 +100,7 @@ describe('SessionFeaturePanels', () => {
     features.sharedNotes = 'base';
     features.panel = 'notes';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await flushPromises();
     await wrapper.find('.notesTa').setValue('edited');
     features.sharedNotes = 'external';
@@ -106,7 +119,7 @@ describe('SessionFeaturePanels', () => {
     conference.addUser('peer', { _displayName: 'Peer' } as never);
     features.panel = 'moderator';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await flushPromises();
     features.lobbyWaiting = [{ id: 'w1', name: 'Waiter' }];
     const checkboxes = wrapper.findAll('input[type="checkbox"]');
@@ -129,7 +142,7 @@ describe('SessionFeaturePanels', () => {
   it('hides menu card when whiteboard panel is active', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'whiteboard';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     expect(wrapper.find('.featureCard').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -138,7 +151,7 @@ describe('SessionFeaturePanels', () => {
     const features = useSessionFeaturesStore();
     features.panel = 'notes';
     features.sharedNotes = 'local';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     features.sharedNotes = 'remote';
     await nextTick();
     await flushPromises();
@@ -154,7 +167,7 @@ describe('SessionFeaturePanels', () => {
     features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
     features.panel = 'notes';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     const ta = wrapper.find('.notesTa').element as HTMLTextAreaElement;
     ta.value = 'blocked';
     await wrapper.find('.notesTa').trigger('input');
@@ -167,7 +180,7 @@ describe('SessionFeaturePanels', () => {
     const features = useSessionFeaturesStore();
     features.panel = 'notes';
     features.sharedNotes = 'initial';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await wrapper.find('.notesTa').setValue('typing');
     features.sharedNotes = 'remote overwrite';
     await flushPromises();
@@ -183,7 +196,7 @@ describe('SessionFeaturePanels', () => {
     features.panel = 'notes';
     features.sharedNotes = 'latest shared';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await wrapper.find('.notesTa').trigger('focus');
     vi.advanceTimersByTime(500);
     expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.any(String));
@@ -194,7 +207,7 @@ describe('SessionFeaturePanels', () => {
     const features = useSessionFeaturesStore();
     features.panel = 'notes';
     features.sharedNotes = 'before';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await wrapper.find('.notesTa').trigger('focus');
     features.sharedNotes = 'after';
     await flushPromises();
@@ -210,7 +223,7 @@ describe('SessionFeaturePanels', () => {
     features.panel = 'notes';
     features.sharedNotes = 'original';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await wrapper.find('.notesTa').setValue('original tweak');
     features.sharedNotes = 'remote update';
     await wrapper.find('.notesTa').trigger('blur');
@@ -227,7 +240,7 @@ describe('SessionFeaturePanels', () => {
     features.setHost('host');
     features.panel = 'moderator';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     const checkboxes = wrapper.findAll('input[type="checkbox"]');
     await checkboxes[0].setValue(true);
     await checkboxes[1].setValue(true);
@@ -248,7 +261,7 @@ describe('SessionFeaturePanels', () => {
     local.setMyID('host');
     features.setHost('host');
     features.panel = 'moderator';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     expect(wrapper.text()).toContain('Per participant');
     expect(wrapper.find('.lobbyBlock').exists()).toBe(false);
     wrapper.unmount();
@@ -257,7 +270,7 @@ describe('SessionFeaturePanels', () => {
   it('syncs notes draft when remote notes change', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'poll';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     features.sharedNotes = 'updated remotely';
     await flushPromises();
     features.panel = 'notes';
@@ -271,7 +284,7 @@ describe('SessionFeaturePanels', () => {
   it('uses an empty title for unknown panels', async () => {
     const features = useSessionFeaturesStore();
     (features as { panel: string }).panel = 'unknown';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     expect(wrapper.find('.title').text()).toBe('');
     wrapper.unmount();
   });
@@ -279,7 +292,7 @@ describe('SessionFeaturePanels', () => {
   it('closes from the panel header', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'moderator';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     await wrapper.find('.close').trigger('click');
     expect(features.panel).toBe('');
     wrapper.unmount();
@@ -288,7 +301,7 @@ describe('SessionFeaturePanels', () => {
   it('hides menu card for reactions and poll panels', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'reactions';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     expect(wrapper.find('.featureCard').exists()).toBe(false);
     features.panel = 'poll';
     await flushPromises();
@@ -304,7 +317,7 @@ describe('SessionFeaturePanels', () => {
     features.setHost('host');
     conference.addUser('plain-id');
     features.panel = 'moderator';
-    const { wrapper } = await mountWithApp(SessionFeaturePanels);
+    const { wrapper } = await mountPanels();
     expect(wrapper.text()).toContain('plain-id');
     wrapper.unmount();
   });

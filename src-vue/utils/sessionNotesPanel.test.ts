@@ -12,7 +12,7 @@ const layout = {
   right: '16px',
   bottom: '88px',
   height: '480px',
-  notesWidth: '560px',
+  notesWidth: '640px',
 };
 
 describe('sessionNotesPanel', () => {
@@ -27,7 +27,7 @@ describe('sessionNotesPanel', () => {
     expect(featureCardStyleForPanel('notes', layout)).toEqual({
       right: '16px',
       bottom: '88px',
-      width: '560px',
+      width: '640px',
       height: '480px',
       maxHeight: '480px',
     });

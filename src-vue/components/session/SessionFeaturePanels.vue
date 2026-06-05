@@ -4,6 +4,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import MenuCard from '@/components/common/MenuCard.vue';
+import NotesEditor from '@/components/session/NotesEditor.vue';
 import { notesPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
 import { kickParticipant, muteParticipant } from '@/utils/sessionModeration';
 import type { FeatureKey } from '@/types/userGrants';
@@ -273,12 +274,11 @@ const featureCardStyle = computed(() => {
     </div>
 
     <div v-else-if="features.panel === 'notes'" class="body notesBody">
-      <textarea
+      <NotesEditor
         v-model="notesDraft"
-        class="notesTa"
-        placeholder="Collaborative notes — visible to everyone in the call"
+        class="notesEditorWrap"
         :readonly="!features.canUseNotes"
-        @input="onNotesInput"
+        @update:model-value="onNotesInput"
         @blur="onNotesBlur"
       />
       <p class="hint">Edits sync in real time for everyone in the call.</p>
@@ -434,16 +434,11 @@ const featureCardStyle = computed(() => {
   flex: 1;
   min-height: 0;
 }
-.notesTa {
+.notesEditorWrap {
   flex: 1;
+  min-width: 0;
   min-height: 0;
-  resize: none;
-  width: 100%;
-  box-sizing: border-box;
-  font-family: var(--font-body);
-  border: 1px solid var(--line-dark);
-  border-radius: var(--radius-sm);
-  padding: 8px;
+  display: flex;
 }
 .hint {
   font-size: var(--fs-small);

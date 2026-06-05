@@ -6,4 +6,4 @@ export const sessionPanelLayout = {
 } as const;
 
 export const chatPanelWidth = 'min(400px, calc(100vw - 32px))';
-export const notesPanelWidth = 'min(560px, calc(100vw - 32px))';
+export const notesPanelWidth = 'min(640px, calc(100vw - 32px))';

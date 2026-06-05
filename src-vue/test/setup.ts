@@ -79,6 +79,10 @@ Object.defineProperty(window, 'innerHeight', { value: 720, writable: true, confi
 HTMLElement.prototype.setPointerCapture = vi.fn();
 HTMLElement.prototype.releasePointerCapture = vi.fn();
 
+if (!document.elementFromPoint) {
+  document.elementFromPoint = () => null;
+}
+
 class MockResizeObserver {
   private readonly cb: ResizeObserverCallback;
   observe = vi.fn();
