@@ -4,6 +4,8 @@ import { useLocalStore } from '@/stores/localStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+import { pollActivityChanged } from '@/utils/sessionPoll';
+import { playUiSound } from '@/utils/uiSounds';
 
 type CommandPayload = { value: string };
 
@@ -73,7 +75,19 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       break;
     }
     case 'poll': {
-      features.applyPoll(parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload));
+      if (payload.value === 'null') {
+        features.applyPoll(null);
+        break;
+      }
+      const data = parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload);
+      if (!data) break;
+      const prev = features.activePoll;
+      const panelClosed = features.panel !== 'poll';
+      features.applyPoll(data);
+      if (pollActivityChanged(prev, features.activePoll)) {
+        features.bumpPollActivity();
+        if (panelClosed) playUiSound('chatMessage');
+      }
       break;
     }
     case 'notes': {

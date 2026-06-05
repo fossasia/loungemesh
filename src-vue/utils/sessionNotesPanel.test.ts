@@ -13,13 +13,14 @@ const layout = {
   bottom: '88px',
   height: '480px',
   notesWidth: '640px',
+  pollWidth: '400px',
 };
 
 describe('sessionNotesPanel', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('styles notes and moderator panels differently', () => {
+  it('styles notes, poll, and moderator panels differently', () => {
     expect(featureCardStyleForPanel('moderator', layout)).toEqual({
       right: '16px',
       bottom: '88px',
@@ -29,6 +30,12 @@ describe('sessionNotesPanel', () => {
       bottom: '88px',
       width: '640px',
       height: '480px',
+      maxHeight: '480px',
+    });
+    expect(featureCardStyleForPanel('poll', layout)).toEqual({
+      right: '16px',
+      bottom: '88px',
+      width: '400px',
       maxHeight: '480px',
     });
   });

@@ -16,9 +16,10 @@ import {
   mergeGrants,
   type AccessCommandPayload,
 } from '@/utils/sessionAccess';
+import { mergePolls } from '@/utils/sessionPoll';
 
 export type LobbyEntry = { id: string; name: string };
-export type PollOption = { id: string; label: string; votes: number };
+export type PollOption = { id: string; label: string; votes: number; voters?: string[] };
 export type ActivePoll = {
   id: string;
   question: string;
@@ -49,6 +50,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     notesSeenSeq: 0,
     whiteboardActivitySeq: 0,
     whiteboardSeenSeq: 0,
+    pollActivitySeq: 0,
+    pollSeenSeq: 0,
   }),
   getters: {
     hasUnreadNotes(): boolean {
@@ -56,6 +59,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     hasUnreadWhiteboard(): boolean {
       return this.whiteboardActivitySeq > this.whiteboardSeenSeq;
+    },
+    hasUnreadPoll(): boolean {
+      return this.pollActivitySeq > this.pollSeenSeq;
     },
     isHost(): boolean {
       const local = useLocalStore();
@@ -128,8 +134,19 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         this.myPollVote = '';
         return;
       }
-      if (this.activePoll?.id !== poll.id) this.myPollVote = '';
-      this.activePoll = poll;
+      const pollIdChanged = this.activePoll?.id !== poll.id;
+      this.activePoll = mergePolls(poll, this.activePoll);
+      if (pollIdChanged) this.myPollVote = '';
+      this.syncMyPollVoteFromPoll();
+    },
+    syncMyPollVoteFromPoll() {
+      const local = useLocalStore();
+      const voterId = local.id;
+      if (!voterId || !this.activePoll) return;
+      const tracksVoters = this.activePoll.options.some((o) => (o.voters?.length ?? 0) > 0);
+      if (!tracksVoters) return;
+      const voted = this.activePoll.options.find((o) => o.voters?.includes(voterId));
+      this.myPollVote = voted?.id ?? '';
     },
     addWhiteboardStroke(stroke: WhiteboardStroke) {
       this.whiteboardStrokes = mergeWhiteboardStroke(this.whiteboardStrokes, stroke);
@@ -177,6 +194,16 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     markWhiteboardSeen() {
       this.whiteboardSeenSeq = this.whiteboardActivitySeq;
     },
+    bumpPollActivity() {
+      if (this.panel === 'poll') {
+        this.markPollSeen();
+        return;
+      }
+      this.pollActivitySeq += 1;
+    },
+    markPollSeen() {
+      this.pollSeenSeq = this.pollActivitySeq;
+    },
     togglePanel(name: typeof this.panel) {
       if (name === 'notes' && !this.canUseNotes) return;
       if (name === 'whiteboard' && !this.canUseWhiteboard) return;
@@ -184,6 +211,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.panel = opening ? name : '';
       if (opening && name === 'notes') this.markNotesSeen();
       if (opening && name === 'whiteboard') this.markWhiteboardSeen();
+      if (opening && name === 'poll') this.markPollSeen();
     },
     resetHostForJoin() {
       this.hostId = '';
@@ -201,6 +229,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.notesSeenSeq = 0;
       this.whiteboardActivitySeq = 0;
       this.whiteboardSeenSeq = 0;
+      this.pollActivitySeq = 0;
+      this.pollSeenSeq = 0;
     },
   },
 });

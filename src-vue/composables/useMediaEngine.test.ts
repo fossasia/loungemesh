@@ -276,6 +276,15 @@ describe('useMediaEngine', () => {
     expect(api.engineError.value).toBeUndefined();
   });
 
+  it('records conferenceError when the room is not joined', () => {
+    const engine = getMediaEngineInstance();
+    const api = useMediaEngine();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    engine.emit('conferenceError', 'failed early');
+    expect(api.joined.value).toBe(false);
+    expect(api.engineError.value).toBe('failed early');
+  });
+
   it('ignores conferenceError events while the room is still joined', async () => {
     const engine = getMediaEngineInstance();
     const api = useMediaEngine();

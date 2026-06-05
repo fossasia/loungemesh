@@ -17,10 +17,10 @@ describe('useSessionPollControls', () => {
     features.setHost('host');
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const chatSpy = vi.spyOn(conference, 'sendTextMessage').mockReturnValue(true);
-    const { pollQuestion, pollOptions, createPoll, vote, closePoll } = useSessionPollControls();
+    const { pollQuestion, pollOptionDrafts, createPoll, vote, closePoll } = useSessionPollControls();
 
     pollQuestion.value = 'Lunch?';
-    pollOptions.value = 'Yes\nNo';
+    pollOptionDrafts.value = ['Yes', 'No'];
     createPoll();
     expect(features.activePoll?.question).toBe('Lunch?');
     expect(cmdSpy).toHaveBeenCalledWith('poll', expect.any(String));
@@ -32,6 +32,29 @@ describe('useSessionPollControls', () => {
     expect(features.activePoll).toBeNull();
     expect(chatSpy).toHaveBeenCalledWith(expect.stringContaining('Poll results: Lunch?'));
     expect(cmdSpy).toHaveBeenCalledWith('poll', JSON.stringify(null));
+  });
+
+  it('skips duplicate votes and lets the host vote without poll grant', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.activePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [
+        { id: 'a', label: 'A', votes: 0, voters: [] },
+        { id: 'b', label: 'B', votes: 0, voters: [] },
+      ],
+      open: true,
+    };
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { vote } = useSessionPollControls();
+    vote('a');
+    expect(features.myPollVote).toBe('a');
+    vote('b');
+    expect(cmdSpy).toHaveBeenCalledTimes(1);
   });
 
   it('ignores votes without poll access', () => {
@@ -46,6 +69,54 @@ describe('useSessionPollControls', () => {
       options: [{ id: 'a', label: 'A', votes: 0 }],
       open: true,
     };
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { vote } = useSessionPollControls();
+    vote('a');
+    expect(features.myPollVote).toBe('');
+    expect(cmdSpy).not.toHaveBeenCalledWith('poll', expect.any(String));
+  });
+
+  it('manages option drafts and guards invalid actions', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const {
+      pollOptionDrafts,
+      addPollOption,
+      removePollOption,
+      createPoll,
+      togglePollPanel,
+    } = useSessionPollControls();
+
+    addPollOption();
+    expect(pollOptionDrafts.value).toHaveLength(3);
+    removePollOption(2);
+    expect(pollOptionDrafts.value).toHaveLength(2);
+    removePollOption(0);
+    expect(pollOptionDrafts.value).toHaveLength(2);
+
+    createPoll();
+    expect(cmdSpy).not.toHaveBeenCalledWith('poll', expect.any(String));
+
+    togglePollPanel();
+    expect(features.panel).toBe('poll');
+  });
+
+  it('skips voting when no participant id is available', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('');
+    features.setHost('host');
+    features.setRoomDefault('poll', true);
+    features.activePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 0, voters: [] }],
+      open: true,
+    };
+    vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue(undefined);
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { vote } = useSessionPollControls();
     vote('a');

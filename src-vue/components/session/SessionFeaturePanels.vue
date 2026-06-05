@@ -283,6 +283,7 @@ const featureCardStyle = computed(() => {
       />
       <p class="hint">Edits sync in real time for everyone in the call.</p>
     </div>
+
   </MenuCard>
 </template>
 

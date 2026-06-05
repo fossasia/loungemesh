@@ -160,6 +160,123 @@ describe('sessionFeaturesStore', () => {
     expect(features.lobbyWaiting).toHaveLength(0);
   });
 
+  it('tracks unread poll activity', () => {
+    const features = useSessionFeaturesStore();
+    features.bumpPollActivity();
+    expect(features.hasUnreadPoll).toBe(true);
+    features.togglePanel('poll');
+    expect(features.hasUnreadPoll).toBe(false);
+  });
+
+  it('marks poll seen when activity bumps while the poll panel is open', () => {
+    const features = useSessionFeaturesStore();
+    features.panel = 'poll';
+    features.pollActivitySeq = 4;
+    features.pollSeenSeq = 1;
+    features.bumpPollActivity();
+    expect(features.pollSeenSeq).toBe(4);
+    expect(features.pollActivitySeq).toBe(4);
+  });
+
+  it('no-ops syncMyPollVoteFromPoll when no poll is active', () => {
+    const features = useSessionFeaturesStore();
+    features.myPollVote = 'a';
+    features.activePoll = null;
+    features.syncMyPollVoteFromPoll();
+    expect(features.myPollVote).toBe('a');
+  });
+
+  it('does not sync myPollVote without a local participant id', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('');
+    features.activePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 1, voters: ['guest'] }],
+      open: true,
+    };
+    features.myPollVote = 'a';
+    features.syncMyPollVoteFromPoll();
+    expect(features.myPollVote).toBe('a');
+  });
+
+  it('syncs ballots when voter lists are present on other options', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+    features.activePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [
+        { id: 'a', label: 'A', votes: 1 },
+        { id: 'b', label: 'B', votes: 1, voters: ['other'] },
+      ],
+      open: true,
+    };
+    features.myPollVote = 'a';
+    features.syncMyPollVoteFromPoll();
+    expect(features.myPollVote).toBe('');
+  });
+
+  it('does not sync myPollVote without voter tracking or a matching ballot', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    features.activePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 1 }],
+      open: true,
+    };
+    features.myPollVote = 'a';
+    features.syncMyPollVoteFromPoll();
+    expect(features.myPollVote).toBe('a');
+
+    local.setMyID('guest');
+    features.activePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 1, voters: ['other'] }],
+      open: true,
+    };
+    features.myPollVote = 'a';
+    features.syncMyPollVoteFromPoll();
+    expect(features.myPollVote).toBe('');
+  });
+
+  it('merges poll votes and syncs the local ballot', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('voter');
+    const poll = {
+      id: 'p1',
+      question: 'Q',
+      options: [
+        { id: 'a', label: 'A', votes: 0, voters: [] as string[] },
+        { id: 'b', label: 'B', votes: 0, voters: [] as string[] },
+      ],
+      open: true,
+    };
+    features.applyPoll(poll);
+    features.applyPoll({
+      ...poll,
+      options: [
+        { id: 'a', label: 'A', votes: 1, voters: ['other'] },
+        { id: 'b', label: 'B', votes: 0, voters: [] },
+      ],
+    });
+    expect(features.activePoll?.options.find((o) => o.id === 'a')?.votes).toBe(1);
+    features.applyPoll({
+      ...poll,
+      options: [
+        { id: 'a', label: 'A', votes: 1, voters: ['other'] },
+        { id: 'b', label: 'B', votes: 1, voters: ['voter'] },
+      ],
+    });
+    expect(features.activePoll?.options.find((o) => o.id === 'b')?.votes).toBe(1);
+    expect(features.myPollVote).toBe('b');
+  });
+
   it('tracks unread notes and whiteboard activity', () => {
     const features = useSessionFeaturesStore();
     features.setRoomDefault('notes', true);

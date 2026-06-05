@@ -49,7 +49,8 @@ describe('handleSessionCommand', () => {
     expect(playUiSound).toHaveBeenCalledWith('handRaise');
   });
 
-  it('handles lobby, poll, notes, and moderator actions', () => {
+  it('handles lobby, poll, notes, and moderator actions', async () => {
+    const { playUiSound } = await import('@/utils/uiSounds');
     const features = useSessionFeaturesStore();
     const conference = useConferenceStore();
     const local = useLocalStore();
@@ -75,8 +76,31 @@ describe('handleSessionCommand', () => {
       ],
       open: true,
     };
+    vi.mocked(playUiSound).mockClear();
     handleSessionCommand('poll', { value: JSON.stringify(poll) });
     expect(features.activePoll?.question).toBe('Q?');
+    expect(features.hasUnreadPoll).toBe(true);
+    expect(playUiSound).toHaveBeenCalledWith('chatMessage');
+
+    features.panel = 'poll';
+    features.pollSeenSeq = features.pollActivitySeq;
+    vi.mocked(playUiSound).mockClear();
+    handleSessionCommand('poll', {
+      value: JSON.stringify({
+        ...poll,
+        options: [{ id: 'a', label: 'Yes', votes: 1, voters: ['other'] }],
+      }),
+    });
+    expect(playUiSound).not.toHaveBeenCalled();
+    expect(features.hasUnreadPoll).toBe(false);
+
+    handleSessionCommand('poll', { value: 'not-json' });
+    const bumps = features.pollActivitySeq;
+    handleSessionCommand('poll', { value: JSON.stringify(poll) });
+    expect(features.pollActivitySeq).toBe(bumps);
+
+    handleSessionCommand('poll', { value: 'null' });
+    expect(features.activePoll).toBeNull();
 
     handleSessionCommand('notes', { value: JSON.stringify({ text: 'hello' }) });
     expect(features.sharedNotes).toBe('hello');

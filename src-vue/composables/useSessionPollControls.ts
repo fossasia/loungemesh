@@ -1,12 +1,18 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
-import { applyVote, canVote, pollResultsSenderId, publishPollResultsToChat } from '@/utils/sessionPoll';
+import {
+  applyVote,
+  canCreatePoll,
+  canVote,
+  pollResultsSenderId,
+  publishPollResultsToChat,
+} from '@/utils/sessionPoll';
 import { playUiSound } from '@/utils/uiSounds';
 
-/** Poll create / vote / close actions shared by the footer poll popover. */
+/** Poll create / vote / close actions shared by the poll panel. */
 export function useSessionPollControls() {
   const features = useSessionFeaturesStore();
   const conference = useConferenceStore();
@@ -14,15 +20,25 @@ export function useSessionPollControls() {
   const { engine } = useMediaEngine();
 
   const pollQuestion = ref('');
-  const pollOptions = ref('Yes\nNo');
+  const pollOptionDrafts = ref(['Yes', 'No']);
+
+  const createReady = computed(() => canCreatePoll(pollQuestion.value, pollOptionDrafts.value));
+
+  function addPollOption() {
+    pollOptionDrafts.value.push('');
+  }
+
+  function removePollOption(index: number) {
+    if (pollOptionDrafts.value.length <= 2) return;
+    pollOptionDrafts.value.splice(index, 1);
+  }
 
   function createPoll() {
-    const opts = pollOptions.value
-      .split('\n')
+    const opts = pollOptionDrafts.value
       .map((l) => l.trim())
       .filter(Boolean)
-      .map((label, i) => ({ id: `o${i}`, label, votes: 0 }));
-    if (!pollQuestion.value.trim() || opts.length < 2) return;
+      .map((label, i) => ({ id: `o${i}`, label, votes: 0, voters: [] as string[] }));
+    if (!canCreatePoll(pollQuestion.value, pollOptionDrafts.value)) return;
     const poll = {
       id: `p${Date.now()}`,
       question: pollQuestion.value.trim(),
@@ -37,8 +53,10 @@ export function useSessionPollControls() {
   function vote(optionId: string) {
     if (!features.canUsePoll && !features.isHost) return;
     if (!canVote(features.myPollVote, features.activePoll)) return;
+    const voterId = pollResultsSenderId(local.id, engine.getLocalUserId());
+    if (!voterId) return;
     features.myPollVote = optionId;
-    const poll = applyVote(features.activePoll!, optionId);
+    const poll = applyVote(features.activePoll!, optionId, voterId);
     features.applyPoll(poll);
     engine.sendCommand('poll', JSON.stringify(poll));
     playUiSound('success');
@@ -61,7 +79,10 @@ export function useSessionPollControls() {
 
   return {
     pollQuestion,
-    pollOptions,
+    pollOptionDrafts,
+    createReady,
+    addPollOption,
+    removePollOption,
     createPoll,
     vote,
     closePoll,

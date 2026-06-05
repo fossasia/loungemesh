@@ -3,9 +3,10 @@ export type PanelLayoutStyle = {
   bottom: string;
   height: string;
   notesWidth: string;
+  pollWidth?: string;
 };
 
-/** Fixed panel position; notes panel also sets width and height. */
+/** Fixed panel position; notes and poll panels also set width and height. */
 export function featureCardStyleForPanel(
   panel: string,
   layout: PanelLayoutStyle,
@@ -16,6 +17,13 @@ export function featureCardStyleForPanel(
       ...base,
       width: layout.notesWidth,
       height: layout.height,
+      maxHeight: layout.height,
+    };
+  }
+  if (panel === 'poll') {
+    return {
+      ...base,
+      width: layout.pollWidth,
       maxHeight: layout.height,
     };
   }
