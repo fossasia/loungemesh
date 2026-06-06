@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useLocalStore } from '@/stores/localStore';
+import { encodeNotesForWire } from '@/utils/notesSync';
 import { useSessionFeaturesStore } from './sessionFeaturesStore';
 
 describe('sessionFeaturesStore', () => {
@@ -312,5 +313,134 @@ describe('sessionFeaturesStore', () => {
     features.bumpWhiteboardActivity();
     expect(features.whiteboardSeenSeq).toBe(3);
     expect(features.whiteboardActivitySeq).toBe(3);
+  });
+
+  it('applies notes template only for host when notes are empty', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.setNotesTemplate('# Agenda');
+    expect(features.applyNotesTemplateIfNeeded()).toBe(true);
+    expect(features.sharedNotes).toBe('# Agenda');
+    expect(features.applyNotesTemplateIfNeeded()).toBe(false);
+
+    features.sharedNotes = '';
+    local.setMyID('guest');
+    features.setHost('host');
+    expect(features.applyNotesTemplateIfNeeded()).toBe(false);
+  });
+
+  it('persists and clears host room settings', () => {
+    const features = useSessionFeaturesStore();
+    features.hostSettingsSessionId = 'room-1';
+    features.setGridBackgroundUrl('data:test');
+    features.setNotesTemplate('# Notes');
+    expect(localStorage.getItem('loungemesh:host-room:room-1')).toContain('data:test');
+
+    features.clearGridBackground();
+    features.clearNotesTemplate();
+    expect(features.gridBackgroundUrl).toBe('');
+    expect(features.notesTemplate).toBe('');
+  });
+
+  it('records session id without loading settings when not claiming host', () => {
+    const features = useSessionFeaturesStore();
+    localStorage.setItem(
+      'loungemesh:host-room:room-2',
+      JSON.stringify({ gridBackgroundUrl: 'data:hidden' }),
+    );
+    features.loadPersistedHostSettings('room-2');
+    expect(features.hostSettingsSessionId).toBe('room-2');
+    expect(features.gridBackgroundUrl).toBe('');
+  });
+
+  it('skips loading persisted settings for empty session ids', () => {
+    const features = useSessionFeaturesStore();
+    features.hostSettingsSessionId = 'keep';
+    features.loadPersistedHostSettings('');
+    expect(features.hostSettingsSessionId).toBe('keep');
+  });
+
+  it('loads persisted host settings when claiming host', () => {
+    localStorage.setItem(
+      'loungemesh:host-room:room-1',
+      JSON.stringify({ gridBackgroundUrl: 'data:test', notesTemplate: '# T' }),
+    );
+    const features = useSessionFeaturesStore();
+    features.resetHostForJoin();
+    features.loadPersistedHostSettings('room-1');
+    expect(features.gridBackgroundUrl).toBe('data:test');
+    expect(features.notesTemplate).toBe('# T');
+  });
+
+  it('reassembles chunked shared notes with markdown', () => {
+    const features = useSessionFeaturesStore();
+    const encoded = encodeNotesForWire('# Title\n\n- item & <tag>');
+    features.applyNotesCommand({ action: 'begin', total: 1 });
+    features.applyNotesCommand({ action: 'chunk', index: 0, data: encoded });
+    expect(features.sharedNotes).toBe('# Title\n\n- item & <tag>');
+    features.applyNotesCommand({ action: 'clear' });
+    expect(features.sharedNotes).toBe('');
+  });
+
+  it('ignores orphan notes chunks and missing chunk indices', () => {
+    const features = useSessionFeaturesStore();
+    features.applyNotesCommand({ action: 'chunk', index: 0, data: encodeNotesForWire('orphan') });
+    expect(features.sharedNotes).toBe('');
+
+    features.applyNotesCommand({ action: 'begin', total: 2 });
+    features.applyNotesCommand({ action: 'chunk', index: 0, data: encodeNotesForWire('a') });
+    features.applyNotesCommand({ action: 'chunk', index: 2, data: encodeNotesForWire('c') });
+    expect(features.sharedNotes).toBe('a');
+  });
+
+  it('reassembles chunked room background commands', () => {
+    const features = useSessionFeaturesStore();
+    features.applyRoomBackgroundCommand({ action: 'begin', total: 2 });
+    features.applyRoomBackgroundCommand({
+      action: 'chunk',
+      index: 0,
+      data: 'data:image/jpeg;base64,',
+    });
+    expect(features.gridBackgroundUrl).toBe('');
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 1, data: 'abc' });
+    expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
+    features.applyRoomBackgroundCommand({ action: 'clear' });
+    expect(features.gridBackgroundUrl).toBe('');
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'orphan' });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    features.applyRoomBackgroundCommand({ action: 'begin', total: 2 });
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'a' });
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 2, data: 'c' });
+    expect(features.gridBackgroundUrl).toBe('a');
+  });
+
+  it('loads partial persisted host settings and skips missing entries', () => {
+    const features = useSessionFeaturesStore();
+    features.resetHostForJoin();
+    features.loadPersistedHostSettings('missing-room');
+    expect(features.gridBackgroundUrl).toBe('');
+    expect(features.notesTemplate).toBe('');
+
+    localStorage.setItem(
+      'loungemesh:host-room:notes-only',
+      JSON.stringify({ notesTemplate: '# Notes only' }),
+    );
+    features.resetHostForJoin();
+    features.loadPersistedHostSettings('notes-only');
+    expect(features.notesTemplate).toBe('# Notes only');
+    expect(features.gridBackgroundUrl).toBe('');
+
+    localStorage.setItem(
+      'loungemesh:host-room:bg-only',
+      JSON.stringify({ gridBackgroundUrl: 'data:bg-only' }),
+    );
+    features.resetHostForJoin();
+    features.notesTemplate = '';
+    features.loadPersistedHostSettings('bg-only');
+    expect(features.gridBackgroundUrl).toBe('data:bg-only');
+    expect(features.notesTemplate).toBe('');
   });
 });

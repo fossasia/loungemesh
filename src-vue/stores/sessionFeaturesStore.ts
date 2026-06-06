@@ -17,6 +17,13 @@ import {
   type AccessCommandPayload,
 } from '@/utils/sessionAccess';
 import { mergePolls } from '@/utils/sessionPoll';
+import {
+  loadPersistedHostRoomSettings,
+  persistHostRoomSettings,
+} from '@/utils/hostRoomSettings';
+import type { NotesCommand } from '@/utils/notesSync';
+import { decodeNotesFromWire } from '@/utils/notesSync';
+import type { RoomBackgroundCommand } from '@/utils/roomBackgroundSync';
 
 export type LobbyEntry = { id: string; name: string };
 export type PollOption = { id: string; label: string; votes: number; voters?: string[] };
@@ -41,6 +48,11 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     activePoll: null as ActivePoll | null,
     myPollVote: '',
     sharedNotes: '',
+    gridBackgroundUrl: '',
+    notesTemplate: '',
+    hostSettingsSessionId: '',
+    roomBgAssembly: null as { total: number; parts: Record<number, string> } | null,
+    notesAssembly: null as { total: number; parts: Record<number, string> } | null,
     whiteboardStrokes: [] as WhiteboardStroke[],
     roomDefaults: defaultUserGrants(),
     userGrants: {} as Record<string, Partial<UserGrants>>,
@@ -154,6 +166,86 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     clearWhiteboard() {
       this.whiteboardStrokes = [];
     },
+    loadPersistedHostSettings(sessionId: string) {
+      if (!sessionId) return;
+      this.hostSettingsSessionId = sessionId;
+      if (!this.pendingHostClaim) return;
+      const saved = loadPersistedHostRoomSettings(sessionId);
+      if (!saved) return;
+      if (saved.gridBackgroundUrl) this.gridBackgroundUrl = saved.gridBackgroundUrl;
+      if (saved.notesTemplate) this.notesTemplate = saved.notesTemplate;
+    },
+    persistHostSettings() {
+      const sessionId = this.hostSettingsSessionId;
+      if (!sessionId) return;
+      persistHostRoomSettings(sessionId, {
+        gridBackgroundUrl: this.gridBackgroundUrl,
+        notesTemplate: this.notesTemplate,
+      });
+    },
+    setGridBackgroundUrl(url: string) {
+      this.gridBackgroundUrl = url;
+      this.persistHostSettings();
+    },
+    clearGridBackground() {
+      this.gridBackgroundUrl = '';
+      this.roomBgAssembly = null;
+      this.persistHostSettings();
+    },
+    applyNotesCommand(command: NotesCommand) {
+      if (command.action === 'clear') {
+        this.sharedNotes = '';
+        this.notesAssembly = null;
+        this.bumpNotesActivity();
+        return;
+      }
+      if (command.action === 'begin') {
+        this.notesAssembly = { total: command.total, parts: {} };
+        return;
+      }
+      if (!this.notesAssembly) return;
+      this.notesAssembly.parts[command.index] = command.data;
+      if (Object.keys(this.notesAssembly.parts).length !== this.notesAssembly.total) return;
+      const encoded = Array.from({ length: this.notesAssembly.total }, (_, index) => {
+        return this.notesAssembly?.parts[index] ?? '';
+      }).join('');
+      this.sharedNotes = decodeNotesFromWire(encoded);
+      this.notesAssembly = null;
+      this.bumpNotesActivity();
+    },
+    applyRoomBackgroundCommand(command: RoomBackgroundCommand) {
+      if (command.action === 'clear') {
+        this.gridBackgroundUrl = '';
+        this.roomBgAssembly = null;
+        return;
+      }
+      if (command.action === 'begin') {
+        this.roomBgAssembly = { total: command.total, parts: {} };
+        return;
+      }
+      if (!this.roomBgAssembly) return;
+      this.roomBgAssembly.parts[command.index] = command.data;
+      if (Object.keys(this.roomBgAssembly.parts).length !== this.roomBgAssembly.total) return;
+      const url = Array.from({ length: this.roomBgAssembly.total }, (_, index) => {
+        return this.roomBgAssembly?.parts[index] ?? '';
+      }).join('');
+      this.gridBackgroundUrl = url;
+      this.roomBgAssembly = null;
+    },
+    setNotesTemplate(text: string) {
+      this.notesTemplate = text;
+      this.persistHostSettings();
+    },
+    clearNotesTemplate() {
+      this.notesTemplate = '';
+      this.persistHostSettings();
+    },
+    /** Pre-fill shared notes from the host template when the session is still blank. */
+    applyNotesTemplateIfNeeded(): boolean {
+      if (!this.isHost || !this.notesTemplate.trim() || this.sharedNotes.trim()) return false;
+      this.sharedNotes = this.notesTemplate;
+      return true;
+    },
     setRoomDefault(key: FeatureKey, value: boolean) {
       this.roomDefaults = { ...this.roomDefaults, [key]: value };
     },
@@ -225,6 +317,11 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.pendingHostClaim = false;
       this.roomDefaults = defaultUserGrants();
       this.userGrants = {};
+      this.gridBackgroundUrl = '';
+      this.notesTemplate = '';
+      this.hostSettingsSessionId = '';
+      this.roomBgAssembly = null;
+      this.notesAssembly = null;
       this.notesActivitySeq = 0;
       this.notesSeenSeq = 0;
       this.whiteboardActivitySeq = 0;
