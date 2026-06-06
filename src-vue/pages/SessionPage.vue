@@ -107,7 +107,7 @@ async function doLeave() {
   <JitsiConnection />
   <LocalStoreLogic />
   <LobbyOverlay />
-  <PanWrapper>
+  <PanWrapper :event-identifier="identifier">
     <Room :identifier="identifier">
       <RemoteUsers />
       <LocalUser />
