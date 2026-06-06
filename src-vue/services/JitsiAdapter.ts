@@ -10,6 +10,7 @@ import type {
   MediaServiceEventMap,
 } from './MediaService';
 import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
+import { decodeXmppCommandValue, encodeXmppCommandValue } from '@/utils/xmppCommandWire';
 import { mediaDebug, mediaDebugTrack, isMediaDebugEnabled } from '@/utils/mediaDebug';
 import {
   installBenignJitsiConsoleFilter,
@@ -143,6 +144,7 @@ export class JitsiAdapter implements MediaService {
     connection.addEventListener(jsMeet.events.connection.CONNECTION_FAILED, () => {
       this.connected = false;
       const detail = connection.xmpp?.lastErrorMsg;
+      this.leaveRoom();
       this.emit(
         'connectionFailed',
         detail && String(detail).trim().length ? String(detail) : 'connection_failed',
@@ -151,6 +153,8 @@ export class JitsiAdapter implements MediaService {
     });
     connection.addEventListener(jsMeet.events.connection.CONNECTION_DISCONNECTED, () => {
       this.connected = false;
+      this.leaveRoom();
+      this.connection = undefined;
       this.emit('disconnected');
     });
 
@@ -282,6 +286,7 @@ export class JitsiAdapter implements MediaService {
       'hand',
       'poll',
       'notes',
+      'room',
       'mod',
       'wb',
       'access',
@@ -289,7 +294,7 @@ export class JitsiAdapter implements MediaService {
     ] as const;
     for (const cmd of sessionCommands) {
       conference.addCommandListener(cmd, (payload: { value: string }) => {
-        this.emit('command', cmd, payload);
+        this.emit('command', cmd, { value: decodeXmppCommandValue(payload.value) });
       });
     }
 
@@ -402,7 +407,7 @@ export class JitsiAdapter implements MediaService {
   }
 
   sendCommand(name: string, value: string): void {
-    this.conference?.sendCommand(name, { value });
+    this.conference?.sendCommand(name, { value: encodeXmppCommandValue(value) });
   }
 
   getLocalUserId(): string | undefined {

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { JitsiAdapter } from './JitsiAdapter';
 import { installJitsiMock, makeRemoteAudioTrack } from '@/test/jitsiMock';
+import {
+  decodeXmppCommandValue,
+  encodeXmppCommandValue,
+  XMPP_COMMAND_WIRE_PREFIX,
+} from '@/utils/xmppCommandWire';
 
 describe('JitsiAdapter', () => {
   let mock: ReturnType<typeof installJitsiMock>;
@@ -390,6 +395,32 @@ describe('JitsiAdapter', () => {
     expect(adapter.getLocalUserId()).toBe('local-1');
     expect(adapter.getConference()).toBe(mock.conference);
     expect(adapter.sendTextMessage('hello')).toBe(true);
+  });
+
+  it('encodes session commands for safe XMPP transport', async () => {
+    const onCommand = vi.fn();
+    adapter.on('command', onCommand);
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'Alice', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+
+    const payload = JSON.stringify({
+      action: 'chunk',
+      index: 0,
+      data: 'data:image/jpeg;base64,abc',
+    });
+    adapter.sendCommand('room', payload);
+    const sent = vi.mocked(mock.conference.sendCommand).mock.calls.at(-1)?.[1]?.value;
+    expect(sent?.startsWith(XMPP_COMMAND_WIRE_PREFIX)).toBe(true);
+    expect(decodeXmppCommandValue(sent!)).toBe(payload);
+
+    mock.conference._handlers.get('cmd:room')?.({
+      value: encodeXmppCommandValue(JSON.stringify({ action: 'clear' })),
+    });
+    expect(onCommand).toHaveBeenCalledWith('room', {
+      value: JSON.stringify({ action: 'clear' }),
+    });
   });
 
   it('returns false when sending chat without a conference', async () => {
