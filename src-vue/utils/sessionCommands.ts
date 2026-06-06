@@ -91,10 +91,35 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       break;
     }
     case 'notes': {
-      const data = parse<{ text?: string }>(payload);
-      if (data?.text != null) {
+      const data = parse<
+        import('@/utils/notesSync').NotesCommand & { text?: string }
+      >(payload);
+      if (!data) break;
+      if ('action' in data && data.action) {
+        features.applyNotesCommand(data);
+        break;
+      }
+      if (data.text != null) {
         features.sharedNotes = data.text;
         features.bumpNotesActivity();
+      }
+      break;
+    }
+    case 'room': {
+      const data = parse<
+        import('@/utils/roomBackgroundSync').RoomBackgroundCommand & {
+          gridBackgroundUrl?: string | null;
+        }
+      >(payload);
+      if (!data) break;
+      if ('action' in data && data.action) {
+        features.applyRoomBackgroundCommand(data);
+        break;
+      }
+      if (data.gridBackgroundUrl === null || data.gridBackgroundUrl === '') {
+        features.gridBackgroundUrl = '';
+      } else if (typeof data.gridBackgroundUrl === 'string') {
+        features.gridBackgroundUrl = data.gridBackgroundUrl;
       }
       break;
     }

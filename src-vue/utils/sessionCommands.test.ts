@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { encodeNotesForWire } from './notesSync';
 import { handleSessionCommand } from './sessionCommands';
 
 vi.mock('@/utils/uiSounds', () => ({
@@ -47,6 +48,35 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('hand', payload);
     expect(playUiSound).toHaveBeenCalledTimes(1);
     expect(playUiSound).toHaveBeenCalledWith('handRaise');
+  });
+
+  it('applies room background commands', () => {
+    const features = useSessionFeaturesStore();
+    handleSessionCommand('room', {
+      value: JSON.stringify({ gridBackgroundUrl: 'data:image/jpeg;base64,abc' }),
+    });
+    expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
+
+    handleSessionCommand('room', { value: JSON.stringify({ action: 'begin', total: 2 }) });
+    handleSessionCommand('room', {
+      value: JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,' }),
+    });
+    handleSessionCommand('room', {
+      value: JSON.stringify({ action: 'chunk', index: 1, data: 'abc' }),
+    });
+    expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
+
+    handleSessionCommand('room', { value: JSON.stringify({ action: 'clear' }) });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    handleSessionCommand('room', { value: JSON.stringify({ gridBackgroundUrl: null }) });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    handleSessionCommand('room', { value: 'not-json' });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    handleSessionCommand('room', { value: JSON.stringify({ gridBackgroundUrl: 123 }) });
+    expect(features.gridBackgroundUrl).toBe('');
   });
 
   it('handles lobby, poll, notes, and moderator actions', async () => {
@@ -104,6 +134,19 @@ describe('handleSessionCommand', () => {
 
     handleSessionCommand('notes', { value: JSON.stringify({ text: 'hello' }) });
     expect(features.sharedNotes).toBe('hello');
+
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'begin', total: 1 }) });
+    handleSessionCommand('notes', {
+      value: JSON.stringify({
+        action: 'chunk',
+        index: 0,
+        data: encodeNotesForWire('# Markdown & <xml>'),
+      }),
+    });
+    expect(features.sharedNotes).toBe('# Markdown & <xml>');
+
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'clear' }) });
+    expect(features.sharedNotes).toBe('');
     expect(features.hasUnreadNotes).toBe(true);
 
     handleSessionCommand('wb', {
@@ -261,10 +304,14 @@ describe('handleSessionCommand', () => {
 
   it('ignores invalid payloads', () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
     conference.addUser('u1');
     const before = { ...conference.users.u1.pos };
     handleSessionCommand('pos', { value: 'not-json' });
     expect(conference.users.u1.pos).toEqual(before);
+    features.sharedNotes = 'unchanged';
+    handleSessionCommand('notes', { value: 'not-json' });
+    expect(features.sharedNotes).toBe('unchanged');
   });
 
   it('ignores name commands with blank or missing names', () => {
