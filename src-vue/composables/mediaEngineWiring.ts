@@ -15,6 +15,8 @@ import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
 import { normalizeSessionError } from '@/services/sessionErrorCodes';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
+import { broadcastSharedNotes } from '@/utils/notesSync';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -55,11 +57,19 @@ export function wireStoreSync(engine: MediaService): void {
         features.approveLobby(id);
         engine.sendCommand('host', JSON.stringify({ hostId: id }));
         engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
+        if (features.applyNotesTemplateIfNeeded()) {
+          broadcastSharedNotes(engine, features.sharedNotes);
+        }
+        broadcastHostRoomSettings(engine, features);
       } else if (!features.hostId) {
         features.setHost(id);
         features.approveLobby(id);
         engine.sendCommand('host', JSON.stringify({ hostId: id }));
         engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
+        if (features.applyNotesTemplateIfNeeded()) {
+          broadcastSharedNotes(engine, features.sharedNotes);
+        }
+        broadcastHostRoomSettings(engine, features);
       } else if (features.lobbyEnabled && !features.lobbyApproved[id]) {
         features.localLobbyPending = true;
         engine.sendCommand(
@@ -103,8 +113,9 @@ export function wireStoreSync(engine: MediaService): void {
         JSON.stringify(grantsPayloadForSync(features.roomDefaults, id, features.userGrants)),
       );
       if (features.sharedNotes) {
-        engine.sendCommand('notes', JSON.stringify({ text: features.sharedNotes }));
+        broadcastSharedNotes(engine, features.sharedNotes);
       }
+      broadcastHostRoomSettings(engine, features);
     }
     scheduleReceiverRefresh();
   });

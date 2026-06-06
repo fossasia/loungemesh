@@ -548,6 +548,76 @@ describe('wireStoreSync', () => {
     expect(cmdSpy).toHaveBeenCalledWith('access', expect.stringContaining('"notes":true'));
   });
 
+  it('applies notes template and room background when claiming host', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.resetHostForJoin();
+    features.hostSettingsSessionId = 'room';
+    features.notesTemplate = '# Agenda';
+    features.gridBackgroundUrl = 'data:image/jpeg;base64,wall';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('host');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(features.sharedNotes).toBe('# Agenda');
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,wall' }),
+    );
+  });
+
+  it('applies host template when the first participant becomes host', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.notesTemplate = '# Kickoff';
+    features.gridBackgroundUrl = 'data:image/jpeg;base64,grid';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Solo', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('solo');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(features.sharedNotes).toBe('# Kickoff');
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,grid' }),
+    );
+  });
+
+  it('rebroadcasts room background when host sees a new participant', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    local.setMyID('host');
+    features.setHost('host');
+    features.gridBackgroundUrl = 'data:image/jpeg;base64,wall';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,wall' }),
+    );
+  });
+
   it('rebroadcasts shared notes when host sees a new participant', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
@@ -563,10 +633,7 @@ describe('wireStoreSync', () => {
     await engine.joinRoom('room', 'Host', {});
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
-    expect(cmdSpy).toHaveBeenCalledWith(
-      'notes',
-      JSON.stringify({ text: 'room notes' }),
-    );
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
   });
 
   it('sends lobby wait when joining with lobby enabled', async () => {
