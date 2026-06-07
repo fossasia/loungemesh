@@ -46,7 +46,8 @@ describe('localStore', () => {
       { getType: () => 'video', videoType: 'desktop' } as never,
     ]);
     expect(store.audio).toBeTruthy();
-    expect(store.videoType).toBe('desktop');
+    expect(store.screenshare).toBeTruthy();
+    expect(store.videoType).toBe('camera');
   });
 
   it('setLocalTracks disposes camera tracks while camera is off', () => {

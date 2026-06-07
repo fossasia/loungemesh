@@ -20,6 +20,7 @@ export type RemoteUser = {
   pos: Vector2;
   audio?: JitsiTrack;
   video?: JitsiTrack;
+  screenshare?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   properties: Record<string, unknown>;
   /** Plain display-name snapshot — never store a Jitsi participant object. */
@@ -107,12 +108,22 @@ export const useConferenceStore = defineStore('conference', {
       if (kind === 'audio') {
         this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
       } else if (track.isMuted?.()) {
-        this.clearUserTrack(id, 'video');
+        if (track.videoType === 'desktop') {
+          this.clearUserTrack(id, 'screenshare');
+        } else {
+          this.clearUserTrack(id, 'video');
+        }
       } else {
-        this.patchUser(id, {
-          video: markRaw(track),
-          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
-        });
+        if (track.videoType === 'desktop') {
+          this.patchUser(id, {
+            screenshare: markRaw(track),
+          });
+        } else {
+          this.patchUser(id, {
+            video: markRaw(track),
+            videoType: 'camera',
+          });
+        }
         mediaDebug('conferenceStore', 'setUserTrack:video', {
           id,
           muted: track.isMuted?.(),
@@ -121,10 +132,13 @@ export const useConferenceStore = defineStore('conference', {
         });
       }
     },
-    clearUserTrack(id: string, kind: 'audio' | 'video') {
+    clearUserTrack(id: string, kind: 'audio' | 'video' | 'screenshare') {
       if (!this.users[id]) return;
       if (kind === 'audio') {
         this.patchUser(id, { audio: undefined, mute: false });
+      } else if (kind === 'screenshare') {
+        this.patchUser(id, { screenshare: undefined });
+        mediaDebug('conferenceStore', 'clearUserTrack:screenshare', { id, usersEpoch: this.usersEpoch });
       } else {
         this.patchUser(id, { video: undefined, videoType: undefined });
         mediaDebug('conferenceStore', 'clearUserTrack:video', { id, usersEpoch: this.usersEpoch });

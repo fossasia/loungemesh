@@ -652,4 +652,118 @@ describe('wireStoreSync', () => {
     expect(features.localLobbyPending).toBe(true);
     expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('wait'));
   });
+
+  it('clears remote screenshare track on trackAdded if muted', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u-muted-screen');
+    conference.users['u-muted-screen'].screenshare = { getType: () => 'video' } as never;
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'video',
+      isMuted: () => true,
+      isLocal: () => false,
+      videoType: 'desktop',
+    } as JitsiTrack);
+    expect(conference.users['u-muted-screen'].screenshare).toBeUndefined();
+  });
+
+  it('clears remote screenshare track on trackMuteChanged if muted', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u-muted-screen');
+    const track = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'video',
+      isMuted: () => false,
+      isLocal: () => false,
+      videoType: 'desktop',
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, track);
+    expect(conference.users['u-muted-screen'].screenshare).toBeDefined();
+
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, {
+      ...track,
+      isMuted: () => true,
+    } as JitsiTrack);
+    expect(conference.users['u-muted-screen'].screenshare).toBeUndefined();
+  });
+
+  it('clears remote screenshare track on trackRemoved', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u-muted-screen');
+    const track = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'video',
+      isMuted: () => false,
+      isLocal: () => false,
+      videoType: 'desktop',
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, track);
+    expect(conference.users['u-muted-screen'].screenshare).toBeDefined();
+
+    jitsi.conference._fire(ev.conference.TRACK_REMOVED, track);
+    expect(conference.users['u-muted-screen'].screenshare).toBeUndefined();
+  });
+
+  it('patches a known user property that is neither handRaised nor speaking', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: 'u1',
+      _properties: { onStage: true },
+    });
+    expect(conference.users.u1.properties.onStage).toBe(true);
+  });
+
+  it('handles trackRemoved for audio when disconnectParticipantAudio is absent', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    conference.addUser('u1');
+    // Simulate engine without disconnectParticipantAudio
+    const saved = (engine as { disconnectParticipantAudio?: unknown }).disconnectParticipantAudio;
+    delete (engine as { disconnectParticipantAudio?: unknown }).disconnectParticipantAudio;
+    const audioTrack = {
+      getParticipantId: () => 'u1',
+      getType: () => 'audio',
+      isLocal: () => false,
+    } as JitsiTrack;
+    expect(() => {
+      jitsi.conference._fire(ev.conference.TRACK_REMOVED, audioTrack);
+    }).not.toThrow();
+    (engine as { disconnectParticipantAudio?: unknown }).disconnectParticipantAudio = saved;
+  });
 });
+

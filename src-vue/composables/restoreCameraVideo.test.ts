@@ -106,4 +106,21 @@ describe('restoreCameraVideo', () => {
     expect(local.video).toBeUndefined();
     expect(local.videoType).toBe('camera');
   });
+
+  it('replaces desktop with camera when no audio track exists', async () => {
+    const engine = getMediaEngineInstance();
+    const desktop = makeTrack('desktop');
+    const camera = makeTrack('video');
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalVideoTrack: () => desktop,
+    } as never);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([camera]);
+    const replaceSpy = vi.spyOn(engine, 'replaceLocalTrack').mockResolvedValue(undefined);
+    const local = useLocalStore();
+    // audio is not set — covers the false branch of `if (local.audio)`
+    await restoreCameraVideo(engine, local);
+    expect(replaceSpy).toHaveBeenCalledWith(desktop, camera);
+    expect(local.video?.videoType).toBe('camera');
+  });
 });
+

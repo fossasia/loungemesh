@@ -597,4 +597,17 @@ describe('ChatPanel', () => {
     soundSpy.mockRestore();
     wrapper.unmount();
   });
+
+  it('covers useMediaEngine conferenceError branches', async () => {
+    const { getMediaEngineInstance } = await import('@/services/mediaEngineSingleton');
+    const { useMediaEngine } = await import('@/composables/useMediaEngine');
+    const engine = getMediaEngineInstance();
+    useMediaEngine();
+
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    engine.emit('conferenceError', 'err');
+
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    engine.emit('conferenceError', 'err');
+  });
 });

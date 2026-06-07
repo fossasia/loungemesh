@@ -135,7 +135,11 @@ export function wireStoreSync(engine: MediaService): void {
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     if (kind === 'video' && track.isMuted()) {
-      conferenceStore.clearUserTrack(id, 'video');
+      if (track.videoType === 'desktop') {
+        conferenceStore.clearUserTrack(id, 'screenshare');
+      } else {
+        conferenceStore.clearUserTrack(id, 'video');
+      }
     } else {
       conferenceStore.setUserTrack(id, kind, track);
     }
@@ -159,7 +163,11 @@ export function wireStoreSync(engine: MediaService): void {
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     if (kind === 'video') {
       if (track.isMuted()) {
-        conferenceStore.clearUserTrack(id, 'video');
+        if (track.videoType === 'desktop') {
+          conferenceStore.clearUserTrack(id, 'screenshare');
+        } else {
+          conferenceStore.clearUserTrack(id, 'video');
+        }
       } else {
         conferenceStore.setUserTrack(id, kind, track);
       }
@@ -180,7 +188,15 @@ export function wireStoreSync(engine: MediaService): void {
     mediaDebugTrack('wiring', 'trackRemoved', track, { resolvedParticipantId: id, kind });
     if (!id) return;
     if (kind === 'audio') engine.disconnectParticipantAudio?.(id);
-    conferenceStore.clearUserTrack(id, kind);
+    if (kind === 'video') {
+      if (track.videoType === 'desktop') {
+        conferenceStore.clearUserTrack(id, 'screenshare');
+      } else {
+        conferenceStore.clearUserTrack(id, 'video');
+      }
+    } else {
+      conferenceStore.clearUserTrack(id, kind);
+    }
     if (kind === 'video') emitMediaStateSnapshot('trackRemoved');
     scheduleReceiverRefresh();
   });

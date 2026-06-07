@@ -68,6 +68,7 @@ export type LocalState = {
   roomBounds: RoomBounds;
   audio?: JitsiTrack;
   video?: JitsiTrack;
+  screenshare?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   onStage: boolean;
   stageVisible: boolean;
@@ -91,6 +92,7 @@ export const useLocalStore = defineStore('local', {
     roomBounds,
     audio: undefined,
     video: undefined,
+    screenshare: undefined,
     videoType: 'camera',
     onStage: false,
     stageVisible: true,
@@ -127,7 +129,7 @@ export const useLocalStore = defineStore('local', {
       const existing = Object.values(conference.users).map((u) => u.pos);
       this.setLocalPosition(spreadInitialUserPosition(existing));
       const centerNow = () => {
-        if (window.innerWidth < 200 || window.innerHeight < 200) return;
+        if (typeof window === 'undefined' || window.innerWidth < 200 || window.innerHeight < 200) return;
         const pan = initialPanCenterOnUser(this.pos, defaultScale);
         this.setPanZoom({ pan, scale: defaultScale });
         this.calculateUsersOnScreen();
@@ -144,16 +146,19 @@ export const useLocalStore = defineStore('local', {
     },
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
-      const videoTrack = tracks.find((t) => t.getType?.() === 'video');
+      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType !== 'desktop');
+      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType === 'desktop');
       if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
-        const isDesktop = videoTrack.videoType === 'desktop';
-        if (this.cameraOff && !isDesktop) {
+        if (this.cameraOff) {
           disposeJitsiTrack(videoTrack);
         } else {
           this.video = markRaw(videoTrack);
-          this.videoType = isDesktop ? 'desktop' : 'camera';
+          this.videoType = 'camera';
         }
+      }
+      if (desktopTrack) {
+        this.screenshare = markRaw(desktopTrack);
       }
     },
     setOnStage(v: boolean) {
@@ -339,9 +344,10 @@ export const useLocalStore = defineStore('local', {
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();
-      await releaseLocalMediaTracks([this.audio, this.video], engine.getConference());
+      await releaseLocalMediaTracks([this.audio, this.video, this.screenshare], engine.getConference());
       this.audio = undefined;
       this.video = undefined;
+      this.screenshare = undefined;
       this.videoType = 'camera';
       this.speaking = false;
       this.cameraOff = true;

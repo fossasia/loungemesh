@@ -141,6 +141,34 @@ describe('conferenceStore', () => {
     expect(store.users.u7.video).toBeUndefined();
   });
 
+  it('setUserTrack and clearUserTrack handle screenshare desktop tracks separately', () => {
+    const store = useConferenceStore();
+    store.addUser('u-screen');
+    const track = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop',
+    } as never;
+    store.setUserTrack('u-screen', 'video', track);
+    expect(store.users['u-screen'].screenshare).toBe(track);
+    expect(store.users['u-screen'].video).toBeUndefined();
+
+    store.clearUserTrack('u-screen', 'screenshare');
+    expect(store.users['u-screen'].screenshare).toBeUndefined();
+  });
+
+  it('setUserTrack handles muted screenshare by clearing screenshare', () => {
+    const store = useConferenceStore();
+    store.addUser('u-screen-mute');
+    store.users['u-screen-mute'].screenshare = { getType: () => 'video' } as never;
+    store.setUserTrack('u-screen-mute', 'video', {
+      getType: () => 'video',
+      isMuted: () => true,
+      videoType: 'desktop',
+    } as never);
+    expect(store.users['u-screen-mute'].screenshare).toBeUndefined();
+  });
+
   it('clearUserTrack removes audio and unmutes the user', () => {
     const store = useConferenceStore();
     store.addUser('u8');
