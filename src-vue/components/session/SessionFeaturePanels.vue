@@ -14,6 +14,8 @@ import {
   nextNotesDraft,
   shouldPublishNotesDraft,
 } from '@/utils/sessionNotesPanel';
+import { broadcastSharedNotes } from '@/utils/notesSync';
+import HostRoomSettingsSection from '@/components/session/HostRoomSettingsSection.vue';
 
 const panelHeight = sessionPanelLayout.height;
 const panelBottom = sessionPanelLayout.bottom;
@@ -90,7 +92,7 @@ const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: dispos
     if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
     if (features.sharedNotes !== notesEditBase.value) return;
     features.sharedNotes = text;
-    engine.sendCommand('notes', JSON.stringify({ text }));
+    broadcastSharedNotes(engine, text);
     notesDirty.value = false;
     notesEditBase.value = text;
   },
@@ -199,6 +201,8 @@ const featureCardStyle = computed(() => {
     :onClose="() => (features.panel = '')"
   >
     <div v-if="features.panel === 'moderator'" class="body modBody">
+      <HostRoomSettingsSection v-if="features.isHost" />
+
       <section class="section">
         <h3 class="sectionTitle">Room defaults</h3>
         <p class="sectionHint">New participants start with these permissions unless overridden below.</p>

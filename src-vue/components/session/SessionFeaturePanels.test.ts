@@ -57,7 +57,7 @@ describe('SessionFeaturePanels', () => {
     await ta.trigger('blur');
     vi.advanceTimersByTime(500);
     expect(features.sharedNotes).toBe('blur published');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ text: 'blur published' }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
     wrapper.unmount();
   });
 
