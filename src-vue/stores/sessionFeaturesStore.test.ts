@@ -331,6 +331,30 @@ describe('sessionFeaturesStore', () => {
     expect(features.applyNotesTemplateIfNeeded()).toBe(false);
   });
 
+  it('resets shared notes to the host template on demand', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.setNotesTemplate('# Agenda');
+    features.sharedNotes = 'edited notes';
+    const before = features.notesActivitySeq;
+    expect(features.resetSharedNotesToTemplate()).toBe(true);
+    expect(features.sharedNotes).toBe('# Agenda');
+    expect(features.notesActivitySeq).toBeGreaterThan(before);
+
+    local.setMyID('guest');
+    features.setHost('host');
+    features.sharedNotes = 'guest edit';
+    expect(features.resetSharedNotesToTemplate()).toBe(false);
+    expect(features.sharedNotes).toBe('guest edit');
+
+    local.setMyID('host');
+    features.setHost('host');
+    features.clearNotesTemplate();
+    expect(features.resetSharedNotesToTemplate()).toBe(false);
+  });
+
   it('persists and clears host room settings', () => {
     const features = useSessionFeaturesStore();
     features.hostSettingsSessionId = 'room-1';

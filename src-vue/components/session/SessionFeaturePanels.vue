@@ -98,6 +98,19 @@ const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: dispos
   },
 );
 
+const canResetNotesToTemplate = computed(
+  () => features.isHost && !!features.notesTemplate.trim(),
+);
+
+function resetNotesToTemplate() {
+  cancelNotes();
+  features.resetSharedNotesToTemplate();
+  notesDraft.value = features.sharedNotes;
+  notesEditBase.value = features.sharedNotes;
+  notesDirty.value = false;
+  broadcastSharedNotes(engine, features.sharedNotes);
+}
+
 function syncLobby() {
   engine.sendCommand('lobby', JSON.stringify({ enabled: features.lobbyEnabled }));
 }
@@ -200,6 +213,11 @@ const featureCardStyle = computed(() => {
     :style="featureCardStyle"
     :onClose="() => (features.panel = '')"
   >
+    <template v-if="features.panel === 'notes' && canResetNotesToTemplate" #afterTitle>
+      <button type="button" class="notesResetBtn" @click="resetNotesToTemplate">
+        Reset to template
+      </button>
+    </template>
     <div v-if="features.panel === 'moderator'" class="body modBody">
       <HostRoomSettingsSection v-if="features.isHost" />
 
@@ -302,6 +320,55 @@ const featureCardStyle = computed(() => {
 .featureCard.modCard,
 .featureCard.notesCard {
   max-height: min(720px, calc(100vh - 100px));
+}
+.notesCard :deep(.header) {
+  align-items: center;
+  gap: 6px;
+}
+.notesCard :deep(.titleRow) {
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+.notesCard :deep(.close) {
+  transform: none;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
+  background: var(--btn-default-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.notesCard :deep(.close:hover) {
+  background: var(--btn-default-bg-hover);
+  border-color: var(--line-default);
+}
+.notesCard :deep(.x) {
+  font-size: 18px;
+  line-height: 1;
+}
+.notesResetBtn {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
+  padding: 4px 10px;
+  min-height: 28px;
+  box-sizing: border-box;
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+  background: var(--btn-default-bg);
+  color: var(--color-text-default);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notesResetBtn:hover {
+  background: var(--btn-default-bg-hover);
+  border-color: var(--line-default);
 }
 .body {
   flex: 1;

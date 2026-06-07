@@ -246,6 +246,13 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.sharedNotes = this.notesTemplate;
       return true;
     },
+    /** Replace shared notes with the host template (host only). */
+    resetSharedNotesToTemplate(): boolean {
+      if (!this.isHost || !this.notesTemplate.trim()) return false;
+      this.sharedNotes = this.notesTemplate;
+      this.bumpNotesActivity();
+      return true;
+    },
     setRoomDefault(key: FeatureKey, value: boolean) {
       this.roomDefaults = { ...this.roomDefaults, [key]: value };
     },

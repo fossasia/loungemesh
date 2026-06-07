@@ -267,6 +267,60 @@ describe('SessionFeaturePanels', () => {
     wrapper.unmount();
   });
 
+  it('shows reset to template for host when a template is loaded', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.setNotesTemplate('# Agenda');
+    features.sharedNotes = 'edited';
+    features.panel = 'notes';
+    const { wrapper } = await mountPanels();
+    expect(wrapper.find('.notesResetBtn').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('hides reset to template without a host template', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.panel = 'notes';
+    const { wrapper } = await mountPanels();
+    expect(wrapper.find('.notesResetBtn').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('hides reset to template for non-host participants', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+    features.setHost('host');
+    features.setNotesTemplate('# Agenda');
+    features.panel = 'notes';
+    const { wrapper } = await mountPanels();
+    expect(wrapper.find('.notesResetBtn').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('resets shared notes to the host template and broadcasts', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.setNotesTemplate('# Agenda');
+    features.sharedNotes = 'edited';
+    features.panel = 'notes';
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountPanels();
+    await flushPromises();
+    await wrapper.find('.notesResetBtn').trigger('click');
+    expect(features.sharedNotes).toBe('# Agenda');
+    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('# Agenda');
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    wrapper.unmount();
+  });
+
   it('syncs notes draft when remote notes change', async () => {
     const features = useSessionFeaturesStore();
     features.panel = 'poll';
