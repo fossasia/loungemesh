@@ -175,12 +175,16 @@ export const useConferenceStore = defineStore('conference', {
     editChatMessage(messageId: string, text: string, editedAt: number) {
       this.messages = applyChatEdit(this.messages, messageId, text, editedAt);
     },
-    leaveConference() {
+    /** Drop Jitsi join state without clearing session features (transient reconnect). */
+    clearJoinState() {
       this.conferenceObject = undefined;
       this.isJoined = false;
       this.isJoining = false;
       this.users = {};
       this.usersEpoch += 1;
+    },
+    leaveConference() {
+      this.clearJoinState();
       this.messages = [];
       this.error = undefined;
       useSessionFeaturesStore().resetForLeave();

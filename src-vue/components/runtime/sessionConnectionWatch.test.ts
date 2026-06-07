@@ -34,13 +34,21 @@ function makeDeps(overrides: Partial<Parameters<typeof handleSessionConnectionWa
       conferenceStore.isJoined = false;
       conferenceStore.conferenceObject = undefined;
     }),
+    clearJoinState: vi.fn(() => {
+      conferenceStore.isJoined = false;
+      conferenceStore.isJoining = false;
+      conferenceStore.conferenceObject = undefined;
+    }),
   };
   const deps = {
     connect: vi.fn().mockResolvedValue(undefined),
     joinRoom: vi.fn().mockResolvedValue(undefined),
     leaveRoom: vi.fn(),
     conferenceStore,
-    engine: { getConference: vi.fn(() => ({ id: 'conf' })) } as never,
+    engine: {
+      getConference: vi.fn(() => ({ id: 'conf' })),
+      isJoined: vi.fn(() => false),
+    } as never,
     conferenceOptions: {},
     ...overrides,
   };
@@ -79,18 +87,38 @@ describe('handleSessionConnectionWatch', () => {
     const joined = makeDeps();
     joined.conferenceStore.isJoined = true;
     joined.conferenceStore.conferenceName = 'room-a';
+    vi.mocked(joined.deps.engine.isJoined).mockReturnValue(true);
     await handleSessionConnectionWatch('room-a', true, joined.deps);
     expect(joined.deps.joinRoom).not.toHaveBeenCalled();
+
+    const stale = makeDeps();
+    stale.conferenceStore.isJoined = true;
+    stale.conferenceStore.conferenceName = 'room-a';
+    vi.mocked(stale.deps.engine.isJoined).mockReturnValue(false);
+    await runWatch('room-a', true, stale.deps);
+    expect(stale.deps.leaveRoom).not.toHaveBeenCalled();
+    expect(stale.deps.joinRoom).toHaveBeenCalledWith('room-a', 'Alice', {});
+  });
+
+  it('clears stale join state before reconnecting', async () => {
+    const { deps, conferenceStore } = makeDeps();
+    conferenceStore.isJoined = true;
+    conferenceStore.isJoining = true;
+    await handleSessionConnectionWatch('room-a', false, deps);
+    expect(deps.conferenceStore.clearJoinState).toHaveBeenCalled();
+    expect(deps.connect).toHaveBeenCalled();
+    expect(deps.joinRoom).not.toHaveBeenCalled();
   });
 
   it('switches rooms and joins when connected', async () => {
     const resetSessionForJoin = vi.fn();
+    const engine = {
+      getConference: vi.fn(() => ({ id: 'conf' })),
+      isJoined: vi.fn(() => true),
+    };
     const { deps, conferenceStore } = makeDeps({
       resetSessionForJoin,
-      engine: {
-        getConference: vi.fn(() => ({ id: 'conf' })),
-        isJoined: vi.fn(() => true),
-      } as never,
+      engine: engine as never,
     });
     conferenceStore.isJoined = true;
     conferenceStore.conferenceName = 'room-a';
@@ -103,7 +131,10 @@ describe('handleSessionConnectionWatch', () => {
 
   it('does not set the conference object when the engine has none after join', async () => {
     const { deps, conferenceStore } = makeDeps({
-      engine: { getConference: vi.fn(() => undefined) } as never,
+      engine: {
+        getConference: vi.fn(() => undefined),
+        isJoined: vi.fn(() => false),
+      } as never,
     });
     await runWatch('room-b', true, deps);
     expect(deps.joinRoom).toHaveBeenCalled();
