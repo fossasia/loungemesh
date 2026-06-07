@@ -103,7 +103,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   object-fit: cover;
   background: #0f172a;
-  border: 4px solid var(--color-mono60);
+  border: 7px solid var(--line-dark);
   box-sizing: border-box;
   transition: border-color 0.2s ease;
 }
@@ -113,7 +113,7 @@ onBeforeUnmount(() => {
 }
 
 @keyframes speakPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.3); }
-  50%       { box-shadow: 0 0 0 8px rgba(79, 110, 247, 0.08); }
+  0%, 100% { box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.65); }
+  50%       { box-shadow: 0 0 0 14px rgba(79, 110, 247, 0.28); }
 }
 </style>
