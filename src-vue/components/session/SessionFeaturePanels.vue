@@ -224,14 +224,16 @@ const featureCardStyle = computed(() => {
       <section class="section">
         <h3 class="sectionTitle">Room defaults</h3>
         <p class="sectionHint">New participants start with these permissions unless overridden below.</p>
-        <div class="grantGrid grantGridHead">
-          <span />
-          <span v-for="key in (Object.keys(featureLabels) as FeatureKey[])" :key="key">{{
-            featureLabels[key]
-          }}</span>
-        </div>
-        <div class="grantGrid">
-          <span class="grantLabel">Everyone</span>
+        <div class="grantTable" role="presentation">
+          <span class="grantCorner" aria-hidden="true" />
+          <span
+            v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+            :key="`head-${key}`"
+            class="grantColHead"
+          >
+            {{ featureLabels[key] }}
+          </span>
+          <span class="grantRowLabel">Everyone</span>
           <label
             v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
             :key="`room-${key}`"
@@ -263,6 +265,16 @@ const featureCardStyle = computed(() => {
       <section class="section">
         <h3 class="sectionTitle">Per participant</h3>
         <p class="sectionHint">Override access for individuals. Host always has full access.</p>
+        <div class="grantTable grantTableHead" role="presentation">
+          <span class="grantCorner" aria-hidden="true" />
+          <span
+            v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+            :key="`participant-head-${key}`"
+            class="grantColHead"
+          >
+            {{ featureLabels[key] }}
+          </span>
+        </div>
         <div
           v-for="uid in participantIds"
           :key="uid"
@@ -277,7 +289,8 @@ const featureCardStyle = computed(() => {
               <button type="button" class="pill warn" @click="kickUser(uid)">Remove</button>
             </div>
           </div>
-          <div v-if="uid !== features.hostId" class="grantGrid grantGridCompact">
+          <div v-if="uid !== features.hostId" class="grantTable" role="presentation">
+            <span class="grantCorner" aria-hidden="true" />
             <label
               v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
               :key="`${uid}-${key}`"
@@ -288,7 +301,6 @@ const featureCardStyle = computed(() => {
                 :checked="features.grantsForUser(uid)[key]"
                 @change="onUserGrantChange(uid, key, $event)"
               />
-              <span class="grantMini">{{ featureLabels[key] }}</span>
             </label>
           </div>
         </div>
@@ -397,38 +409,36 @@ const featureCardStyle = computed(() => {
   font-size: var(--fs-small);
   color: var(--color-mono30);
 }
-.grantGrid {
+.grantTable {
   display: grid;
-  grid-template-columns: 1fr repeat(4, 36px);
-  gap: 6px 8px;
+  grid-template-columns: minmax(72px, auto) repeat(4, minmax(52px, 1fr));
+  gap: 8px 10px;
   align-items: center;
 }
-.grantGridHead {
+.grantCorner {
+  justify-self: start;
+}
+.grantColHead {
   font-size: var(--fs-small);
   font-weight: var(--fw-medium);
   color: var(--color-mono30);
   text-align: center;
 }
-.grantGridHead span:first-child {
-  text-align: left;
-}
-.grantLabel {
+.grantRowLabel {
+  justify-self: start;
   font-size: var(--fs-small);
   font-weight: var(--fw-medium);
 }
 .grantCheck {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 2px;
   cursor: pointer;
 }
-.grantMini {
-  font-size: 0.7rem;
-  color: var(--color-mono30);
+.grantTableHead {
+  margin-bottom: 8px;
 }
-.grantGridCompact {
-  grid-template-columns: repeat(4, 1fr);
+.participantCard .grantTable {
   margin-top: 8px;
 }
 .lobbyToggle {
