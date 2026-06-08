@@ -8,6 +8,12 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import SessionPage from './SessionPage.vue';
 
+vi.mock('@/components/screenshare/SharedScreens.vue', () => ({
+  default: {
+    template: '<div class="shared-screens-mock" />',
+  },
+}));
+
 /** Stub async SessionPage children so imports do not finish after test teardown. */
 const sessionStubs = {
   LocalStoreLogic: { template: '<div />' },
@@ -166,7 +172,7 @@ describe('SessionPage', () => {
     await flushPromises();
   });
 
-  it('shows the record button for hosts when recording is supported', async () => {
+  it('shows recording controls in the footer and leave export for hosts', async () => {
     const local = useLocalStore();
     local.setMyID('host');
     useSessionFeaturesStore().setHost('host');
@@ -184,12 +190,20 @@ describe('SessionPage', () => {
     });
     await flushPromises();
     expect(wrapper.find('[aria-label="Record session"]').exists()).toBe(true);
+    expect(wrapper.find('.qualityPicker').exists()).toBe(true);
+    await wrapper.find('.btn-leave-call').trigger('click');
+    await flushPromises();
+    const recordingExport = wrapper
+      .findAll('.leaveCard .export')
+      .find((btn) => btn.text().includes('Recording'));
+    expect(recordingExport?.find('.ext').text()).toBe('.mp4');
     wrapper.unmount();
 
     (globalThis as { MediaRecorder?: unknown }).MediaRecorder = savedRecorder;
     if (savedCapture) HTMLCanvasElement.prototype.captureStream = savedCapture;
     else delete (HTMLCanvasElement.prototype as { captureStream?: unknown }).captureStream;
   });
+
 
   it('handles missing route id param', async () => {
     const { createRouter, createMemoryHistory } = await import('vue-router');

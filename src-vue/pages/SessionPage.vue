@@ -14,6 +14,7 @@ import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
 import StageButton from '@/components/stage/StageButton.vue';
+import SharedScreens from '@/components/screenshare/SharedScreens.vue';
 
 const ChatPanel = defineAsyncComponent(() => import('@/components/chat/ChatPanel.vue'));
 const StagePanel = defineAsyncComponent(() => import('@/components/stage/StagePanel.vue'));
@@ -74,6 +75,7 @@ const { exportNotes, exportWhiteboard, exportRecording } = useSessionExport(() =
 
 const recorder = useSessionRecorder(makeRecorderSources(local, conf));
 const recording = useSessionRecording(recorder, exportRecording);
+const selectedQuality = ref<'720p' | '480p'>('720p');
 
 const showLeaveDialog = ref(false);
 
@@ -113,6 +115,7 @@ async function doLeave() {
       <LocalUser />
     </Room>
   </PanWrapper>
+  <SharedScreens />
   <SessionFeaturePanels />
   <WhiteboardOverlay
     v-if="features.panel === 'whiteboard'"
@@ -146,7 +149,8 @@ async function doLeave() {
     <SessionRecordButton
       v-if="features.isHost && recorder.isSupported"
       :is-recording="recorder.isRecording.value"
-      @toggle="recording.toggleRecording"
+      v-model:quality="selectedQuality"
+      @toggle="recording.toggleRecording(selectedQuality)"
     />
     <button type="button" class="btn-leave-call" title="Leave call" @click="requestLeave">Leave Call</button>
     <template #right>
@@ -168,12 +172,13 @@ async function doLeave() {
     :is-recording="recorder.isRecording.value"
     :recording-supported="recorder.isSupported"
     :has-recording="recording.hasRecording.value"
+    v-model:quality="selectedQuality"
     @cancel="showLeaveDialog = false"
     @leave="doLeave"
     @export-notes="exportNotes"
     @export-whiteboard="exportWhiteboard"
     @export-recording="recording.downloadRecording"
-    @toggle-recording="recording.toggleRecording"
+    @toggle-recording="recording.toggleRecording(selectedQuality)"
   />
   </div>
 </template>
