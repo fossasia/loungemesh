@@ -5,13 +5,18 @@ import {
   BarChart3,
   Bell,
   BellOff,
+  ChevronDown,
+  ChevronUp,
   Circle,
+  Eye,
   EyeOff,
   FileText,
   Hand,
+  Maximize2,
   MessageSquare,
   Mic,
   MicOff,
+  Minimize2,
   Minus,
   MonitorUp,
   MoreVertical,
@@ -41,10 +46,15 @@ export type IconName =
   | 'bell'
   | 'bell-off'
   | 'chat'
+  | 'chevron-down'
+  | 'chevron-up'
   | 'close'
+  | 'eye'
   | 'eye-off'
   | 'file-text'
   | 'hand'
+  | 'maximize'
+  | 'minimize'
   | 'mic'
   | 'mic-off'
   | 'minus'
@@ -66,10 +76,15 @@ const registry: Record<IconName, Component> = {
   bell: Bell,
   'bell-off': BellOff,
   chat: MessageSquare,
+  'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
   close: X,
+  eye: Eye,
   'eye-off': EyeOff,
   'file-text': FileText,
   hand: Hand,
+  maximize: Maximize2,
+  minimize: Minimize2,
   mic: Mic,
   'mic-off': MicOff,
   minus: Minus,

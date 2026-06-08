@@ -33,10 +33,10 @@
 
 .handBadge {
   position: absolute;
-  top: -22px;
+  top: -28px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 2.75rem;
+  font-size: 3.75rem;
   line-height: 1;
   z-index: 10;
   pointer-events: none;

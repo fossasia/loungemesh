@@ -6,7 +6,6 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import RemoteVideo from './RemoteVideo.vue';
 import RemoteAudio from './RemoteAudio.vue';
-import DesktopVideo from './DesktopVideo.vue';
 import NameTag from './overlays/NameTag.vue';
 import UserBackdrop from './overlays/UserBackdrop.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
@@ -40,7 +39,6 @@ const style = computed(() => {
 const nameLabel = computed(
   () => props.displayName ?? user.value?.user?._displayName ?? 'Friendly Sphere',
 );
-const isDesktop = computed(() => user.value?.video?.videoType === 'desktop');
 const videoTrack = computed(() => conference.users[props.id]?.video);
 const videoTrackKey = computed(() => {
   const t = videoTrack.value as { getTrackLabel?: () => string } | undefined;
@@ -68,19 +66,15 @@ const handUp = computed(
     <div
       class="videoContainer"
       :class="{
-        desktop: isDesktop,
-        avatarTile: showAvatar && !isDesktop,
-        speaking: speaking && showAvatar && !isDesktop,
+        avatarTile: showAvatar,
+        speaking: speaking && showAvatar,
       }"
     >
       <UserBackdrop
         v-if="showAvatar"
         :onStage="user.properties?.onStage === true || user.properties?.onStage === 'true'"
       />
-      <template v-if="isDesktop && videoTrack">
-        <DesktopVideo :id="id" :track="videoTrack" />
-      </template>
-      <template v-else-if="videoTrack">
+      <template v-if="videoTrack">
         <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>
       <span v-if="reaction" class="floatReact">{{ reaction }}</span>

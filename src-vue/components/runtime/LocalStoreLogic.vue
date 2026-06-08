@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue';
+import { onMounted, onUnmounted, toRaw, watch } from 'vue';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
@@ -103,9 +103,20 @@ async function addLocalTracksToConference() {
   publishingLocalTracks = true;
   try {
     const alreadyPublished = conf.getLocalTracks?.() ?? [];
-    for (const track of [localStore.audio, localStore.video]) {
+    for (const track of [localStore.audio, localStore.video, localStore.screenshare]) {
       if (!track) continue;
-      if (alreadyPublished.some((existing) => existing === track || existing.getType() === track.getType())) {
+      if (
+        alreadyPublished.some((existing) => {
+          if (toRaw(existing) === toRaw(track)) return true;
+          if (existing.getType() === track.getType()) {
+            if (track.getType() === 'video') {
+              return existing.videoType === track.videoType;
+            }
+            return true;
+          }
+          return false;
+        })
+      ) {
         continue;
       }
       try {
@@ -172,7 +183,7 @@ watch(
 );
 
 watch(
-  () => [conferenceStore.isJoined, localStore.audio, localStore.video] as const,
+  () => [conferenceStore.isJoined, localStore.audio, localStore.video, localStore.screenshare] as const,
   () => {
     void addLocalTracksToConference();
   },

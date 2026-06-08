@@ -16,7 +16,7 @@ describe('LocalUser', () => {
     local.setMyID('local-1');
     local.video = makeTrack('video');
     local.audio = makeTrack('audio');
-    local.videoType = 'desktop';
+    local.videoType = 'camera';
     local.mute = true;
 
     const { wrapper } = await mountWithApp(LocalUser);
@@ -88,33 +88,15 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
-  it('uses desktop and camera video classes', async () => {
+  it('uses camera video class', async () => {
     const local = useLocalStore();
     local.setMyID('local-1');
     local.video = makeTrack('video');
-    local.videoType = 'desktop';
-    local.cameraOff = false;
-    const desktop = await mountWithApp(LocalUser);
-    expect(desktop.wrapper.find('video.desktopVid').exists()).toBe(true);
-    desktop.wrapper.unmount();
-
     local.videoType = 'camera';
     local.cameraOff = false;
     const camera = await mountWithApp(LocalUser);
     expect(camera.wrapper.find('video.vid').exists()).toBe(true);
     camera.wrapper.unmount();
-  });
-
-  it('shows speaking highlight and share placeholder', async () => {
-    const local = useLocalStore();
-    local.speaking = true;
-    local.mute = false;
-    local.videoType = 'desktop';
-    local.video = undefined;
-    const { wrapper } = await mountWithApp(LocalUser);
-    expect(wrapper.find('video.speaking').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Starting screen share');
-    wrapper.unmount();
   });
 
   it('shows avatar backdrop when camera is off', async () => {
@@ -277,8 +259,8 @@ describe('LocalUser', () => {
     local.setMyID('local-1');
     local.scale = 0;
     local.pan = { x: 0, y: 0 };
-    local.videoType = 'desktop';
-    local.video = makeTrack('desktop');
+    local.videoType = 'camera';
+    local.video = makeTrack('video');
 
     const { wrapper } = await mountWithApp(LocalUser, { props: { draggable: false } });
     const tile = wrapper.find('.dragSurface').element;

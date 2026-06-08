@@ -2,9 +2,8 @@
 import { onUnmounted, ref, watch } from 'vue';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useLocalStore } from '@/stores/localStore';
-import { restoreCameraVideo } from '@/composables/restoreCameraVideo';
 import { bindScreenshareEndWatch } from '@/utils/screenshareDesktopWatch';
-import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
+import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
 
@@ -15,33 +14,28 @@ let stopEndedWatch: (() => void) | undefined;
 
 function bindDesktopEndWatch() {
   stopEndedWatch?.();
-  stopEndedWatch = bindScreenshareEndWatch(local.video, () => {
+  stopEndedWatch = bindScreenshareEndWatch(local.screenshare, () => {
     void finishShare();
   });
 }
 
 async function finishShare() {
   sharing.value = false;
-  await restoreCameraVideo(engine, local);
+  const track = local.screenshare;
+  if (track) {
+    local.screenshare = undefined;
+    await releaseLocalMediaTracks([track], engine.getConference());
+  }
 }
 
 async function startShare() {
   const conf = engine.getConference()!;
-  const oldTrack = conf.getLocalVideoTrack?.();
   const tracks = await engine.createLocalTracks(['desktop']);
   const newTrack = tracks.find((t) => t.getType?.() === 'video') ?? tracks[0];
   if (!newTrack || newTrack.videoType !== 'desktop') return;
 
-  if (oldTrack) {
-    await engine.replaceLocalTrack(oldTrack, newTrack);
-    disposeJitsiTrack(oldTrack);
-  } else {
-    await engine.addLocalTrack(newTrack);
-  }
-  const list = [];
-  if (local.audio) list.push(local.audio);
-  list.push(newTrack);
-  local.setLocalTracks(list);
+  await engine.addLocalTrack(newTrack);
+  local.screenshare = newTrack;
   sharing.value = true;
   bindDesktopEndWatch();
 }
@@ -53,8 +47,7 @@ async function stopShare() {
 async function toggleShare() {
   const conf = engine.getConference();
   if (!conf) return;
-  const oldTrack = conf.getLocalVideoTrack?.();
-  if (oldTrack?.videoType === 'desktop' || sharing.value) {
+  if (local.screenshare || sharing.value) {
     await stopShare();
     return;
   }
@@ -66,10 +59,10 @@ async function toggleShare() {
 }
 
 watch(
-  () => local.video?.videoType,
-  (type) => {
-    sharing.value = type === 'desktop';
-    if (type === 'desktop') bindDesktopEndWatch();
+  () => local.screenshare,
+  (track) => {
+    sharing.value = !!track;
+    if (track) bindDesktopEndWatch();
     else stopEndedWatch?.();
   },
   { immediate: true },
@@ -77,7 +70,7 @@ watch(
 
 onUnmounted(() => {
   stopEndedWatch?.();
-  if (sharing.value || local.videoType === 'desktop') {
+  if (sharing.value || local.screenshare) {
     void finishShare();
   }
 });

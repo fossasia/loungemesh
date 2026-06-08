@@ -44,7 +44,6 @@ const style = computed(() => {
 });
 
 const userId = computed(() => local.id || 'localUser');
-const isDesktop = computed(() => local.videoType === 'desktop');
 const hasVideo = computed(() => !!local.video);
 const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
 const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
@@ -107,7 +106,7 @@ function detach() {
 }
 
 watch(
-  () => [local.video, local.videoType, local.cameraOff, showCameraVideo.value],
+  () => [local.video, local.cameraOff, showCameraVideo.value],
   async () => {
     await nextTick();
     attach();
@@ -161,7 +160,6 @@ defineExpose({ attach, videoEl });
   <div
     :id="userId"
     class="local userContainer"
-    :class="{ desktop: isDesktop }"
     :data-recording-participant="userId"
     :data-recording-name="conference.displayName"
     :style="style"
@@ -169,7 +167,6 @@ defineExpose({ attach, videoEl });
     <div
       ref="dragSurface"
       class="dragSurface"
-      :class="{ desktop: isDesktop }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -179,9 +176,8 @@ defineExpose({ attach, videoEl });
       <div
         class="videoContainer"
         :class="{
-          desktop: isDesktop,
-          avatarTile: !showCameraVideo && !isDesktop,
-          speaking: local.speaking && !local.mute && !showCameraVideo && !isDesktop,
+          avatarTile: !showCameraVideo,
+          speaking: local.speaking && !local.mute && !showCameraVideo,
         }"
       >
         <UserBackdrop v-if="!showCameraVideo" :onStage="local.onStage" />
@@ -196,11 +192,10 @@ defineExpose({ attach, videoEl });
           playsinline
           muted
           :class="[
-            isDesktop ? 'desktopVid' : 'vid',
+            'vid',
             { speaking: local.speaking && !local.mute && showCameraVideo },
           ]"
         />
-        <div v-if="isDesktop && !hasVideo" class="sharePlaceholder">Starting screen share…</div>
       </div>
       <audio ref="audioEl" autoplay muted />
     </div>
@@ -225,20 +220,12 @@ defineExpose({ attach, videoEl });
   pointer-events: auto;
 }
 .videoContainer {
-  width: auto;
+  width: 200px;
   height: 200px;
   border-radius: 100px;
   position: relative;
   z-index: 1;
   overflow: visible;
-}
-.videoContainer:not(.desktop) {
-  width: 200px;
-}
-.videoContainer.desktop {
-  border-radius: var(--radius-sm);
-  min-width: 280px;
-  max-width: 360px;
 }
 .vid {
   position: relative;
@@ -251,19 +238,7 @@ defineExpose({ attach, videoEl });
   border: 7px solid var(--line-dark);
   display: block;
 }
-.desktopVid {
-  width: 100%;
-  min-width: 280px;
-  max-width: 360px;
-  height: 200px;
-  display: block;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-  background: #0f172a;
-  border: 7px solid var(--line-dark);
-}
-.vid.speaking,
-.desktopVid.speaking {
+.vid.speaking {
   border-color: var(--color-blue100);
   animation: speakPulse 1.8s ease-in-out infinite;
 }
@@ -271,17 +246,6 @@ defineExpose({ attach, videoEl });
 @keyframes speakPulse {
   0%, 100% { box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.65); }
   50%       { box-shadow: 0 0 0 14px rgba(79, 110, 247, 0.28); }
-}
-.sharePlaceholder {
-  width: 280px;
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0f172a;
-  color: var(--color-mono30);
-  font-size: var(--fs-small);
-  border-radius: var(--radius-sm);
 }
 .local {
   display: flex;

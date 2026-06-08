@@ -66,16 +66,6 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
-  it('renders desktop share layout', async () => {
-    const conference = useConferenceStore();
-    conference.addUser('u1', { _displayName: 'Bob' } as never);
-    conference.users.u1.pos = { x: 0, y: 0 };
-    conference.users.u1.video = makeTrack('desktop');
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u1' } });
-    expect(wrapper.find('.desktopVideo').exists()).toBe(true);
-    wrapper.unmount();
-  });
-
   it('treats onStage string property as presenting', async () => {
     const conference = useConferenceStore();
     conference.addUser('u3', { _displayName: 'Sam' } as never);

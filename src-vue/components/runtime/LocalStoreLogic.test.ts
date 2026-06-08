@@ -264,6 +264,7 @@ describe('LocalStoreLogic', () => {
     const local = useLocalStore();
     const addSpy = vi.spyOn(getMediaEngineInstance(), 'addLocalTrack').mockResolvedValue(undefined);
     const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
     local.audio = makeTrack('audio');
     local.video = makeTrack('video');
     await flushPromises();
@@ -315,6 +316,27 @@ describe('LocalStoreLogic', () => {
     await flushPromises();
     expect(addSpy).toHaveBeenCalledWith(local.video);
     expect(addSpy).not.toHaveBeenCalledWith(local.audio);
+    addSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('skips publishing a track that is referentially identical', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+    const publishedAudio = makeTrack('audio');
+    const publishedVideo = makeTrack('video');
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [publishedAudio, publishedVideo],
+    } as never);
+    const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+    local.audio = publishedAudio;
+    local.video = publishedVideo;
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    expect(addSpy).not.toHaveBeenCalled();
     addSpy.mockRestore();
     wrapper.unmount();
   });
@@ -427,6 +449,33 @@ describe('LocalStoreLogic', () => {
     await flushPromises();
     expect(volSpy).toHaveBeenCalledWith('u1', 0);
     volSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('handles video and screenshare deduplication based on videoType', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+
+    const publishedCamera = makeTrack('video'); // videoType === 'camera'
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [publishedCamera],
+    } as never);
+
+    const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    local.video = makeTrack('video'); // videoType === 'camera', should be skipped (matches publishedCamera)
+    local.screenshare = makeTrack('desktop'); // videoType === 'desktop', should be added (differs from publishedCamera)
+
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+
+    expect(addSpy).toHaveBeenCalledWith(local.screenshare);
+    expect(addSpy).not.toHaveBeenCalledWith(local.video);
+
+    addSpy.mockRestore();
     wrapper.unmount();
   });
 });
