@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  blobMimeToExtension,
   canvasToPngBlob,
   downloadBlob,
   exportFileName,
@@ -23,7 +24,31 @@ describe('exportFileName', () => {
   it('builds a timestamped name per kind', () => {
     expect(exportFileName('notes', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.md');
     expect(exportFileName('whiteboard', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.png');
-    expect(exportFileName('recording', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.webm');
+    expect(exportFileName('recording', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.mp4');
+  });
+  it('uses extensionOverride when provided', () => {
+    expect(exportFileName('recording', 'Daily', now, 'mp4')).toBe('loungemesh-daily-20260531-2310.mp4');
+    expect(exportFileName('recording', 'Daily', now, 'webm')).toBe('loungemesh-daily-20260531-2310.webm');
+  });
+});
+
+describe('blobMimeToExtension', () => {
+  it('maps video/mp4 to mp4', () => {
+    expect(blobMimeToExtension('video/mp4')).toBe('mp4');
+    expect(blobMimeToExtension('video/mp4;codecs=h264,aac')).toBe('mp4');
+  });
+  it('maps video/webm to webm', () => {
+    expect(blobMimeToExtension('video/webm')).toBe('webm');
+    expect(blobMimeToExtension('video/webm;codecs=vp9,opus')).toBe('webm');
+  });
+  it('maps video/ogg to ogv', () => {
+    expect(blobMimeToExtension('video/ogg')).toBe('ogv');
+  });
+  it('falls back to extracting the subtype for unknown types', () => {
+    expect(blobMimeToExtension('video/x-matroska')).toBe('x-matroska');
+  });
+  it('falls back to webm for a type with no slash', () => {
+    expect(blobMimeToExtension('unknown')).toBe('webm');
   });
 });
 

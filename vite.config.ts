@@ -16,6 +16,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src-vue', import.meta.url)),
     },
   },
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
   server: {
     port: 5173,
     // lib-jitsi-meet is not bundled; proxy /libs/ to the jitsi-web container so

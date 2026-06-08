@@ -3,6 +3,10 @@ import { ref } from 'vue';
 import { useSessionRecording } from './useSessionRecording';
 import type { SessionRecorder } from './useSessionRecorder';
 
+vi.mock('@/utils/recordingToMp4', () => ({
+  ensureRecordingMp4: vi.fn(async (blob: Blob) => blob),
+}));
+
 function fakeRecorder(recording = false, stopBlob: Blob | null = null) {
   const recorder: SessionRecorder = {
     isSupported: true,
@@ -24,6 +28,13 @@ describe('useSessionRecording', () => {
     expect(rec.start).toHaveBeenCalled();
     expect(rec.stop).not.toHaveBeenCalled();
     expect(controls.hasRecording.value).toBe(false);
+  });
+
+  it('starts the recorder with a specified quality', async () => {
+    const rec = fakeRecorder(false);
+    const controls = useSessionRecording(rec, vi.fn());
+    await controls.toggleRecording('480p');
+    expect(rec.start).toHaveBeenCalledWith('480p');
   });
 
   it('stops and stores the blob when recording', async () => {
@@ -55,6 +66,14 @@ describe('useSessionRecording', () => {
 
   it('downloadRecording does nothing without a recording', async () => {
     const rec = fakeRecorder(false, null);
+    const exportFn = vi.fn();
+    const controls = useSessionRecording(rec, exportFn);
+    await controls.downloadRecording();
+    expect(exportFn).not.toHaveBeenCalled();
+  });
+
+  it('downloadRecording does nothing for an empty blob', async () => {
+    const rec = fakeRecorder(false, new Blob());
     const exportFn = vi.fn();
     const controls = useSessionRecording(rec, exportFn);
     await controls.downloadRecording();
