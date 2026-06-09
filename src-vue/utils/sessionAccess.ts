@@ -24,7 +24,6 @@ export function effectiveGrants(
     notes: !!base.notes,
     whiteboard: !!base.whiteboard,
     poll: !!base.poll,
-    stage: !!base.stage,
   };
 }
 
@@ -38,7 +37,6 @@ export function mergeGrants(current: UserGrants, patch: Partial<UserGrants>): Us
     notes: patch.notes ?? current.notes,
     whiteboard: patch.whiteboard ?? current.whiteboard,
     poll: patch.poll ?? current.poll,
-    stage: patch.stage ?? current.stage,
   };
 }
 
