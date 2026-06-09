@@ -8,6 +8,7 @@ import { spreadInitialUserPosition } from '@/constants/pan';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
 import { applyChatEdit, createChatMessage } from '@/utils/chatMessage';
+import { decodeChatWireText } from '@/utils/chatWireFormat';
 import { displayNameFromParticipant } from '@/utils/jitsiParticipant';
 
 export type Vector2 = { x: number; y: number };
@@ -171,23 +172,41 @@ export const useConferenceStore = defineStore('conference', {
       this.messages = [...this.messages, msg];
     },
     ingestChatMessage(id: string, text: string, nr: number) {
-      if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === text)) {
+      const { messageId: wireId, text: displayText } = decodeChatWireText(text);
+      if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === displayText)) {
         return;
       }
       const pending = this.messages.findIndex(
-        (m) => m.id === id && m.text === text && m.nr < 0,
+        (m) => m.id === id && m.text === displayText && m.nr < 0,
       );
       if (pending >= 0) {
         const next = [...this.messages];
         const prev = next[pending];
-        next[pending] = { ...prev, id, text, nr };
+        next[pending] = {
+          ...prev,
+          id,
+          text: displayText,
+          nr,
+          messageId: wireId ?? prev.messageId,
+        };
         this.messages = next;
         return;
       }
-      this.messages = [...this.messages, createChatMessage(id, text, nr)];
+      this.messages = [...this.messages, createChatMessage(id, displayText, nr, wireId)];
     },
-    editChatMessage(messageId: string, text: string, editedAt: number) {
-      this.messages = applyChatEdit(this.messages, messageId, text, editedAt);
+    editChatMessage(
+      messageId: string,
+      text: string,
+      editedAt: number,
+      nr?: number,
+      authorId?: string,
+    ) {
+      this.messages = applyChatEdit(
+        this.messages,
+        { messageId, nr, authorId },
+        text,
+        editedAt,
+      );
     },
     /** Drop Jitsi join state without clearing session features (transient reconnect). */
     clearJoinState() {

@@ -235,6 +235,18 @@ describe('conferenceStore', () => {
     expect(store.messages).toHaveLength(2);
   });
 
+  it('ingests wire-encoded chat ids for remote clients', async () => {
+    const store = useConferenceStore();
+    const { encodeChatWireText } = await import('@/utils/chatWireFormat');
+    store.ingestChatMessage('peer', encodeChatWireText('shared-id', 'hello'), 7);
+    expect(store.messages[0]).toMatchObject({
+      id: 'peer',
+      text: 'hello',
+      nr: 7,
+      messageId: 'shared-id',
+    });
+  });
+
   it('leaveConference resets state', () => {
     const store = useConferenceStore();
     store.addUser('u5');

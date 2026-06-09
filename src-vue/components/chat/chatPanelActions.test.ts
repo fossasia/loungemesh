@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { decodeChatWireText } from '@/utils/chatWireFormat';
 import {
   addEmojiToInput,
   commitChatEdit,
@@ -48,7 +49,11 @@ describe('chatPanelActions', () => {
     const result = commitChatSend('  hello  ', true, send, onSent);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.messageId).toBeTruthy();
-    expect(send).toHaveBeenCalledWith('hello');
+    const wire = send.mock.calls[0]?.[0] as string;
+    expect(decodeChatWireText(wire)).toEqual({
+      messageId: expect.any(String),
+      text: 'hello',
+    });
     expect(onSent).toHaveBeenCalledWith('hello', expect.any(String));
     expect(commitChatSend('   ', true, send, onSent)).toEqual({ ok: false, reason: 'empty' });
     expect(commitChatSend('hello', false, send, onSent)).toEqual({

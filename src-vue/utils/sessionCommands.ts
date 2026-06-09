@@ -1,3 +1,4 @@
+import { canApplyChatEdit } from '@/utils/chatMessage';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
@@ -140,14 +141,24 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
         messageId?: string;
         text?: string;
         editedAt?: number;
+        editorId?: string;
+        nr?: number;
       }>(payload);
       if (
         data?.action === 'edit' &&
         data.messageId &&
         data.text != null &&
-        data.editedAt != null
+        data.editedAt != null &&
+        data.editorId &&
+        canApplyChatEdit(conference.messages, data.messageId, data.editorId, data.nr)
       ) {
-        conference.editChatMessage(data.messageId, data.text, data.editedAt);
+        conference.editChatMessage(
+          data.messageId,
+          data.text,
+          data.editedAt,
+          data.nr,
+          data.editorId,
+        );
       }
       break;
     }
