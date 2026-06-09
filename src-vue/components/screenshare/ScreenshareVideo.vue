@@ -3,13 +3,18 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
 import { clearMediaElement } from '@/utils/clearMediaElement';
 
-const props = defineProps<{ track: JitsiTrack }>();
+const props = defineProps<{
+  track: JitsiTrack;
+  /** Fill the stage frame edge-to-edge (no letterboxing). */
+  fill?: boolean;
+}>();
 const videoEl = ref<HTMLVideoElement | null>(null);
 
-function attachTrack() {
-  if (videoEl.value && props.track) {
+function attachTrack(t: JitsiTrack) {
+  if (videoEl.value && t) {
+    clearMediaElement(videoEl.value);
     try {
-      props.track.attach(videoEl.value);
+      t.attach(videoEl.value);
       if (videoEl.value.paused) {
         const playPromise = videoEl.value.play();
         if (playPromise) {
@@ -34,7 +39,9 @@ function detachTrack(t: JitsiTrack) {
 }
 
 onMounted(() => {
-  void nextTick(attachTrack);
+  void nextTick(() => {
+    if (props.track) attachTrack(props.track);
+  });
 });
 
 watch(
@@ -46,17 +53,28 @@ watch(
       return;
     }
     await nextTick();
-    attachTrack();
+    attachTrack(newTrack);
   }
 );
 
+watch(videoEl, (node) => {
+  if (node && props.track) attachTrack(props.track);
+});
+
 onBeforeUnmount(() => {
-  detachTrack(props.track);
+  if (props.track) detachTrack(props.track);
 });
 </script>
 
 <template>
-  <video ref="videoEl" autoplay playsinline muted class="screenshareVideo" />
+  <video
+    ref="videoEl"
+    autoplay
+    playsinline
+    muted
+    class="screenshareVideo"
+    :class="{ fill }"
+  />
 </template>
 
 <style scoped>
@@ -68,5 +86,9 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-sm);
   border: 2px solid var(--line-dark);
   display: block;
+}
+.screenshareVideo.fill {
+  border: none;
+  border-radius: 0;
 }
 </style>
