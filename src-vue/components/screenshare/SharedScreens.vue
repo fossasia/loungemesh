@@ -11,7 +11,7 @@ const local = useLocalStore();
 
 const isCollapsed = ref(false);
 const poppedOutIds = ref<string[]>([]);
-const showLocalPreview = ref(true);
+const showLocalPreview = ref(false);
 
 const screenshares = computed(() => {
   // Access usersEpoch to reactivity trigger on remote user updates
@@ -134,19 +134,17 @@ const popIn = (id: string) => {
     </div>
   </Transition>
 
-  <Transition name="expanded-pop">
-    <template v-if="poppedOutScreenshares.length > 0">
-      <ExpandedScreenshare
-        v-for="(item, idx) in poppedOutScreenshares"
-        :key="item.id"
-        :id="item.id"
-        :name="item.name"
-        :track="item.track"
-        :index="idx"
-        @minimize="popIn(item.id)"
-      />
-    </template>
-  </Transition>
+  <TransitionGroup name="expanded-pop" tag="div" class="expandedPopHosts">
+    <ExpandedScreenshare
+      v-for="(item, idx) in poppedOutScreenshares"
+      :key="item.id"
+      :id="item.id"
+      :name="item.name"
+      :track="item.track"
+      :index="idx"
+      @minimize="popIn(item.id)"
+    />
+  </TransitionGroup>
 </template>
 
 <style scoped>

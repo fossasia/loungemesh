@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
@@ -66,6 +67,7 @@ describe('SharedScreens', () => {
   });
 
   it('toggles collapse state when header is clicked', async () => {
+    vi.useFakeTimers();
     const local = useLocalStore();
     local.screenshare = makeTrack('desktop');
     const { wrapper } = await mountWithApp(SharedScreens);
@@ -73,34 +75,37 @@ describe('SharedScreens', () => {
     expect(wrapper.find('.sharedScreensBox').classes()).not.toContain('collapsed');
     expect(wrapper.find('.boxContent').exists()).toBe(true);
 
-    // Click header to collapse
     await wrapper.find('.boxHeader').trigger('click');
+    await vi.runAllTimersAsync();
+    await flushPromises();
     expect(wrapper.find('.sharedScreensBox').classes()).toContain('collapsed');
     expect(wrapper.find('.boxContent').exists()).toBe(false);
 
-    // Click header to expand
     await wrapper.find('.boxHeader').trigger('click');
+    await vi.runAllTimersAsync();
+    await flushPromises();
     expect(wrapper.find('.sharedScreensBox').classes()).not.toContain('collapsed');
     expect(wrapper.find('.boxContent').exists()).toBe(true);
 
+    vi.useRealTimers();
     wrapper.unmount();
   });
 
   it('pops out a screenshare and minimizes it back', async () => {
+    vi.useFakeTimers();
     const conference = useConferenceStore();
     conference.addUser('u1', { _displayName: 'Bob' });
     conference.users.u1.screenshare = makeTrack('desktop');
 
     const { wrapper } = await mountWithApp(SharedScreens);
 
-    // Initially in sidebar
     expect(wrapper.find('.screenshareItem').exists()).toBe(true);
     expect(wrapper.findComponent(ExpandedScreenshare).exists()).toBe(false);
 
-    // Click expand button to pop out
     await wrapper.find('.expandButton').trigger('click');
+    await vi.runAllTimersAsync();
+    await flushPromises();
 
-    // Sidebar items should not contain it, but ExpandedScreenshare component should be rendered
     expect(wrapper.find('.screenshareItem').exists()).toBe(false);
     expect(wrapper.find('.emptyState').text()).toBe('All screens expanded');
     expect(wrapper.findComponent(ExpandedScreenshare).exists()).toBe(true);
@@ -133,10 +138,12 @@ describe('SharedScreens', () => {
     // Emit minimize from ExpandedScreenshare
     await expanded.vm.$emit('minimize');
 
-    // Should return to sidebar
+    await vi.runAllTimersAsync();
+    await flushPromises();
     expect(wrapper.find('.screenshareItem').exists()).toBe(true);
     expect(wrapper.findComponent(ExpandedScreenshare).exists()).toBe(false);
 
+    vi.useRealTimers();
     wrapper.unmount();
   });
 
@@ -174,21 +181,21 @@ describe('SharedScreens', () => {
 
     const { wrapper } = await mountWithApp(SharedScreens);
 
-    // Initially preview is shown (.videoContainer exists, eye-off icon in button)
-    expect(wrapper.find('.videoContainer').exists()).toBe(true);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Hide preview');
+    // Initially preview is collapsed (.videoContainer does not exist, eye icon in button)
+    expect(wrapper.find('.videoContainer').exists()).toBe(false);
+    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
     expect(wrapper.find('.sharingBadge').exists()).toBe(true);
     expect(wrapper.find('.sharingBadge').text()).toBe('Sharing');
 
-    // Click toggle to hide preview (collapses card)
-    await wrapper.find('.previewToggleButton').trigger('click');
-    expect(wrapper.find('.videoContainer').exists()).toBe(false);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
-
-    // Click toggle to show preview again
+    // Click toggle to show preview
     await wrapper.find('.previewToggleButton').trigger('click');
     expect(wrapper.find('.videoContainer').exists()).toBe(true);
     expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Hide preview');
+
+    // Click toggle to hide preview again
+    await wrapper.find('.previewToggleButton').trigger('click');
+    expect(wrapper.find('.videoContainer').exists()).toBe(false);
+    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
 
     wrapper.unmount();
   });
