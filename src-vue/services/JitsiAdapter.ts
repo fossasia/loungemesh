@@ -291,6 +291,7 @@ export class JitsiAdapter implements MediaService {
       'wb',
       'access',
       'chat',
+      'stage',
     ] as const;
     for (const cmd of sessionCommands) {
       conference.addCommandListener(cmd, (payload: { value: string }) => {

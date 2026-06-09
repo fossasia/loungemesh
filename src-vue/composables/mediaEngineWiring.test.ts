@@ -725,9 +725,10 @@ describe('wireStoreSync', () => {
     expect(conference.users['u-muted-screen'].screenshare).toBeUndefined();
   });
 
-  it('patches a known user property that is neither handRaised nor speaking', async () => {
+  it('patches onStage and syncs the stage occupant id', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
     wireStoreSync(engine);
@@ -740,6 +741,13 @@ describe('wireStoreSync', () => {
       _properties: { onStage: true },
     });
     expect(conference.users.u1.properties.onStage).toBe(true);
+    expect(features.stageOccupantId).toBe('u1');
+
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: 'u1',
+      _properties: { onStage: false },
+    });
+    expect(features.stageOccupantId).toBe('');
   });
 
   it('handles trackRemoved for audio when disconnectParticipantAudio is absent', async () => {

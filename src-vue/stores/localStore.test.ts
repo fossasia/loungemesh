@@ -3,6 +3,7 @@ import { toRaw } from 'vue';
 import { setActivePinia, createPinia } from 'pinia';
 import { useLocalStore } from './localStore';
 import { useConferenceStore } from './conferenceStore';
+import { useSessionFeaturesStore } from './sessionFeaturesStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 
 describe('localStore', () => {
@@ -124,9 +125,10 @@ describe('localStore', () => {
 
   it('calculateUsersOnScreen updates constraints from DOM', () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
     conference.addUser('u1');
-    conference.users.u1.properties = { onStage: 'true' };
     conference.users.u1.pos = { x: 100, y: 100 };
+    features.stageOccupantId = 'u1';
 
     const el = document.createElement('div');
     el.id = 'u1';
@@ -138,7 +140,6 @@ describe('localStore', () => {
 
     const store = useLocalStore();
     store.id = 'me';
-    store.onStage = true;
     store.calculateUsersOnScreen();
 
     expect(store.usersOnStage).toContain('u1');

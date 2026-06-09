@@ -35,6 +35,7 @@ import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { useConferenceStore } from './conferenceStore';
+import { useSessionFeaturesStore } from './sessionFeaturesStore';
 
 function uniqueTracks(tracks: Array<JitsiTrack | undefined>): JitsiTrack[] {
   return [...new Set(tracks.filter(Boolean) as JitsiTrack[])];
@@ -179,30 +180,21 @@ export const useLocalStore = defineStore('local', {
       const conference = engine.getConference();
       const users = useConferenceStore().users;
       const visibleUserIds: string[] = [];
-      const stageIds: string[] = [];
-
-      const onStageProp = (v: unknown) => v === true || v === 'true';
+      const features = useSessionFeaturesStore();
+      const stageOccupantId = features.stageOccupantId;
 
       document.querySelectorAll('.userContainer').forEach((el) => {
         const htmlEl = el as HTMLElement;
         const uid = htmlEl.id;
         if (!uid) return;
-        const user = users[uid];
-        if (user && onStageProp(user.properties?.onStage)) {
-          stageIds.push(uid);
-        }
         const rect = htmlEl.getBoundingClientRect();
         if (isOnScreen({ x: rect.x, y: rect.y }, rect.width, rect.height)) {
           visibleUserIds.push(uid);
         }
       });
 
-      if (this.onStage && this.id && !stageIds.includes(this.id)) {
-        stageIds.push(this.id);
-      }
-
       this.visibleUsers = [...new Set(visibleUserIds)];
-      this.usersOnStage = [...new Set(stageIds)];
+      this.usersOnStage = stageOccupantId ? [stageOccupantId] : [];
 
       mediaDebug('localStore', 'calculateUsersOnScreen', {
         visibleUserIds: this.visibleUsers,

@@ -421,6 +421,13 @@ describe('JitsiAdapter', () => {
     expect(onCommand).toHaveBeenCalledWith('room', {
       value: JSON.stringify({ action: 'clear' }),
     });
+
+    mock.conference._handlers.get('cmd:stage')?.({
+      value: encodeXmppCommandValue(JSON.stringify({ action: 'promote', id: 'guest' })),
+    });
+    expect(onCommand).toHaveBeenCalledWith('stage', {
+      value: JSON.stringify({ action: 'promote', id: 'guest' }),
+    });
   });
 
   it('returns false when sending chat without a conference', async () => {

@@ -7,6 +7,12 @@ import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
 import { pollActivityChanged } from '@/utils/sessionPoll';
 import { playUiSound } from '@/utils/uiSounds';
+import {
+  applyStageDemote,
+  applyStageLayout,
+  applyStagePromote,
+  type StageCommand,
+} from '@/utils/sessionStage';
 
 type CommandPayload = { value: string };
 
@@ -189,6 +195,23 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       if (data.action === 'stroke') {
         features.addWhiteboardStroke(data.stroke);
         features.bumpWhiteboardActivity();
+      }
+      break;
+    }
+    case 'stage': {
+      const data = parse<StageCommand>(payload);
+      if (!data?.action) break;
+      if (data.action === 'promote' && data.id) {
+        applyStagePromote(data.id);
+      }
+      if (data.action === 'demote' && data.id) {
+        applyStageDemote(data.id);
+      }
+      if (data.action === 'layout' && data.layout) {
+        applyStageLayout(data.layout);
+      }
+      if (data.action === 'settings' && data.stagePromotionEnabled != null) {
+        features.stagePromotionEnabled = data.stagePromotionEnabled;
       }
       break;
     }

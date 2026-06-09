@@ -17,6 +17,9 @@ import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
 import { broadcastSharedNotes } from '@/utils/notesSync';
+import { isOnStage } from '@/components/stage/isOnStage';
+import { defaultStageLayout } from '@/stores/sessionFeaturesStore';
+import { clearStageIfParticipantLeft } from '@/utils/sessionStage';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -120,6 +123,7 @@ export function wireStoreSync(engine: MediaService): void {
     scheduleReceiverRefresh();
   });
   engine.on('userLeft', (id) => {
+    clearStageIfParticipantLeft(id);
     conferenceStore.removeUser(id);
   });
   engine.on('displayNameChanged', (id, displayName) => {
@@ -208,6 +212,19 @@ export function wireStoreSync(engine: MediaService): void {
     if ('handRaised' in safe) {
       applyParticipantHandRaised(id, parseHandRaised(safe.handRaised));
       delete safe.handRaised;
+    }
+    if ('onStage' in safe) {
+      const features = useSessionFeaturesStore();
+      const local = useLocalStore();
+      const onStage = isOnStage(safe.onStage);
+      if (onStage && (!features.stageOccupantId || features.stageOccupantId === id)) {
+        features.stageOccupantId = id;
+        if (local.id === id) local.setOnStage(true);
+      } else if (!onStage && features.stageOccupantId === id) {
+        features.stageOccupantId = '';
+        features.stageLayout = defaultStageLayout();
+        if (local.id === id) local.setOnStage(false);
+      }
     }
     const user = conferenceStore.users[id];
     if (!user || !Object.keys(safe).length) return;
