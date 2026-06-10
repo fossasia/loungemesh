@@ -430,6 +430,28 @@ describe('JitsiAdapter', () => {
     });
   });
 
+  it('removes transient commands from presence stanzas', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'Alice', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+
+    const removeSpy = vi.spyOn(mock.conference, 'removeCommand');
+    
+    // stage is transient, should call removeCommand
+    adapter.sendCommand('stage', '{}');
+    expect(removeSpy).toHaveBeenCalledWith('stage');
+
+    // pos is not transient, should not call removeCommand
+    removeSpy.mockClear();
+    adapter.sendCommand('pos', '{}');
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    // Call removeCommand directly
+    adapter.removeCommand('react');
+    expect(removeSpy).toHaveBeenCalledWith('react');
+  });
+
   it('returns false when sending chat without a conference', async () => {
     expect(adapter.sendTextMessage('nope')).toBe(false);
   });
@@ -1451,5 +1473,60 @@ describe('JitsiAdapter', () => {
     expect(nextCtx).not.toBe(stubCtx);
     expect(isLoungeMeshStubAudioContext(nextCtx)).toBe(false);
     resetPreGestureAudioContextShimForTests();
+  });
+
+  it('guards duplicate addLocalTrack calls and handles proxies and track removal', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+
+    const track = {
+      getType: () => 'video',
+      isLocal: () => true,
+    } as any;
+
+    // Call addLocalTrack first time
+    await adapter.addLocalTrack(track);
+    expect(mock.conference.addTrack).toHaveBeenCalledTimes(1);
+
+    // Call addLocalTrack second time (with proxy representation)
+    const proxyTrack = new Proxy(track, {});
+    (proxyTrack as any).__v_raw = track;
+    await adapter.addLocalTrack(proxyTrack);
+    // Should NOT have called addTrack a second time
+    expect(mock.conference.addTrack).toHaveBeenCalledTimes(1);
+
+    // Now fire TRACK_REMOVED on the track
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_REMOVED, track);
+
+    // Calling addLocalTrack should be allowed again
+    await adapter.addLocalTrack(track);
+    expect(mock.conference.addTrack).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps addedLocalTracks set in sync during replaceLocalTrack', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+
+    const track1 = { getType: () => 'video', isLocal: () => true } as any;
+    const track2 = { getType: () => 'video', isLocal: () => true } as any;
+
+    await adapter.addLocalTrack(track1);
+    expect(mock.conference.addTrack).toHaveBeenCalledTimes(1);
+
+    // Replacing track1 with track2
+    await adapter.replaceLocalTrack(track1, track2);
+    expect(mock.conference.replaceTrack).toHaveBeenCalledWith(track1, track2);
+
+    // Trying to add track1 again should work since it was replaced
+    await adapter.addLocalTrack(track1);
+    expect(mock.conference.addTrack).toHaveBeenCalledTimes(2);
+
+    // Trying to add track2 again should be guarded
+    await adapter.addLocalTrack(track2);
+    expect(mock.conference.addTrack).toHaveBeenCalledTimes(2);
   });
 });

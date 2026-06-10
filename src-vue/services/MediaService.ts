@@ -74,6 +74,7 @@ export interface MediaService {
   setLocalParticipantProperty(key: string, value: unknown): void;
   sendTextMessage(text: string): boolean;
   sendCommand(name: string, value: string): void;
+  removeCommand(name: string): void;
   getLocalUserId(): string | undefined;
   getConference(): import('@/types/jitsi').JitsiConference | undefined;
   isConnected(): boolean;

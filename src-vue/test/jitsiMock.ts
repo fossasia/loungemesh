@@ -41,10 +41,12 @@ export function installJitsiMock(): JitsiMockHandles {
     setDisplayName: vi.fn(),
     sendTextMessage: vi.fn(),
     sendCommand: vi.fn(),
+    removeCommand: vi.fn(),
     addCommandListener: vi.fn((name: string, handler: Handler) => {
       conferenceHandlers.set(`cmd:${name}`, handler);
     }),
     addTrack: vi.fn().mockResolvedValue(undefined),
+    removeTrack: vi.fn().mockResolvedValue(undefined),
     replaceTrack: vi.fn().mockResolvedValue(undefined),
     setLocalParticipantProperty: vi.fn(),
     setReceiverConstraints: vi.fn(),

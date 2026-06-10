@@ -99,6 +99,7 @@ export class JitsiAdapter implements MediaService {
   private elementVolumeFallback = new Set<string>();
   private speakingMonitors = new Map<string, () => void>();
   private playbackUnlocked = false;
+  private addedLocalTracks = new Set<any>();
 
   init(): void {
     if (this.jsMeet) return;
@@ -257,7 +258,11 @@ export class JitsiAdapter implements MediaService {
     conference.on(ev.TRACK_REMOVED, (track: unknown) => {
       const t = track as JitsiTrack;
       mediaDebugTrack('JitsiAdapter', 'TRACK_REMOVED', t);
-      if (t.isLocal?.()) return;
+      if (t.isLocal?.()) {
+        const raw = (t as any).__v_raw || t;
+        this.addedLocalTracks.delete(raw);
+        return;
+      }
       if (t.getType?.() === 'audio') {
         const participantId = participantIdFromTrack(t);
         if (participantId) this.removeParticipantAudio(participantId);
@@ -308,6 +313,7 @@ export class JitsiAdapter implements MediaService {
     this.conference = undefined;
     this.joined = false;
     this.disposeAudioGraph();
+    this.addedLocalTracks.clear();
   }
 
   async createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<JitsiTrack[]> {
@@ -327,11 +333,31 @@ export class JitsiAdapter implements MediaService {
   }
 
   async addLocalTrack(track: JitsiTrack): Promise<void> {
-    await this.conference?.addTrack(track);
+    const raw = (track as any).__v_raw || track;
+    if (this.addedLocalTracks.has(raw)) {
+      return;
+    }
+    this.addedLocalTracks.add(raw);
+    try {
+      await this.conference?.addTrack(track);
+    } catch (err) {
+      this.addedLocalTracks.delete(raw);
+      throw err;
+    }
   }
 
   async replaceLocalTrack(oldTrack: JitsiTrack, newTrack: JitsiTrack): Promise<void> {
-    await this.conference?.replaceTrack(oldTrack, newTrack);
+    const rawOld = (oldTrack as any).__v_raw || oldTrack;
+    const rawNew = (newTrack as any).__v_raw || newTrack;
+    this.addedLocalTracks.delete(rawOld);
+    this.addedLocalTracks.add(rawNew);
+    try {
+      await this.conference?.replaceTrack(oldTrack, newTrack);
+    } catch (err) {
+      this.addedLocalTracks.delete(rawNew);
+      this.addedLocalTracks.add(rawOld);
+      throw err;
+    }
   }
 
   setParticipantVolume(userId: string, gain: number): void {
@@ -408,7 +434,23 @@ export class JitsiAdapter implements MediaService {
   }
 
   sendCommand(name: string, value: string): void {
-    this.conference?.sendCommand(name, { value: encodeXmppCommandValue(value) });
+    if (!this.conference) return;
+    this.conference.sendCommand(name, { value: encodeXmppCommandValue(value) });
+    if (name === 'stage' || name === 'react' || name === 'mod' || name === 'hand') {
+      try {
+        this.conference.removeCommand(name);
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  removeCommand(name: string): void {
+    try {
+      this.conference?.removeCommand?.(name);
+    } catch (e) {
+      // ignore
+    }
   }
 
   getLocalUserId(): string | undefined {
