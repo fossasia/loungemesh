@@ -190,10 +190,9 @@ describe('handleSessionCommand', () => {
     expect(features.roomDefaults.whiteboard).toBe(false);
     handleSessionCommand(
       'access',
-      { value: JSON.stringify({ userId: 'u2', grants: { poll: true, stage: true } }) },
+      { value: JSON.stringify({ userId: 'u2', grants: { poll: true } }) },
     );
     expect(features.grantsForUser('u2').poll).toBe(true);
-    expect(features.grantsForUser('u2').stage).toBe(true);
     handleSessionCommand('access', { value: 'bad' });
   });
 
@@ -229,11 +228,61 @@ describe('handleSessionCommand', () => {
           messageId: 'm1',
           text: 'new',
           editedAt: 500,
+          editorId: 'u1',
         }),
       },
     );
     expect(conference.messages[0].text).toBe('new');
     expect(conference.messages[0].editedAt).toBe(500);
+  });
+
+  it('applies chat edits by nr when message ids differ', () => {
+    const conference = useConferenceStore();
+    conference.appendChatMessage({
+      id: 'u1',
+      text: 'old',
+      nr: 9,
+      messageId: 'm-9-u1',
+      history: [],
+    });
+    handleSessionCommand(
+      'chat',
+      {
+        value: JSON.stringify({
+          action: 'edit',
+          messageId: 'sender-uuid',
+          text: 'new',
+          editedAt: 500,
+          editorId: 'u1',
+          nr: 9,
+        }),
+      },
+    );
+    expect(conference.messages[0].text).toBe('new');
+  });
+
+  it('rejects chat edits from non-authors', () => {
+    const conference = useConferenceStore();
+    conference.appendChatMessage({
+      id: 'u1',
+      text: 'old',
+      nr: 1,
+      messageId: 'm1',
+      history: [],
+    });
+    handleSessionCommand(
+      'chat',
+      {
+        value: JSON.stringify({
+          action: 'edit',
+          messageId: 'm1',
+          text: 'hacked',
+          editedAt: 500,
+          editorId: 'host',
+        }),
+      },
+    );
+    expect(conference.messages[0].text).toBe('old');
   });
 
   it('handles whiteboard commands', () => {
@@ -250,6 +299,27 @@ describe('handleSessionCommand', () => {
     expect(features.whiteboardStrokes).toEqual([]);
     handleSessionCommand('wb', { value: 'not-json' });
     handleSessionCommand('wb', { value: JSON.stringify({ action: 'noop' }) });
+  });
+
+  it('handles stage promote, demote, layout, and settings commands', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'promote', id: 'guest' }) });
+    expect(features.stageOccupantId).toBe('guest');
+    expect(local.onStage).toBe(true);
+    handleSessionCommand(
+      'stage',
+      { value: JSON.stringify({ action: 'layout', layout: { scale: 1.2, expanded: true } }) },
+    );
+    expect(features.stageLayout.scale).toBe(1.2);
+    expect(features.stageLayout.expanded).toBe(true);
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true }) });
+    expect(features.stagePromotionEnabled).toBe(true);
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'demote', id: 'guest' }) });
+    expect(features.stageOccupantId).toBe('');
+    expect(local.onStage).toBe(false);
+    handleSessionCommand('stage', { value: 'bad' });
   });
 
   it('handles unknown command names', () => {

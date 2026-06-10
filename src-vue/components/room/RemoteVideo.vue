@@ -87,6 +87,7 @@ onBeforeUnmount(() => {
     autoplay
     playsinline
     muted
+    disablePictureInPicture
     class="remoteVideo"
     :class="{ speaking: !!speaking }"
     :id="`${id}video`"

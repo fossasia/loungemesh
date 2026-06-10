@@ -65,3 +65,33 @@
     transform: translateX(-50%) translateY(-4px);
   }
 }
+
+.stageOccupantBadge {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-round);
+  background: var(--btn-highlight-bg);
+  color: var(--btn-highlight-fg);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.videoContainer.onStageOccupant:not(.desktop) {
+  border-color: var(--color-blue100);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.45);
+}
+
+.videoContainer.onStageOccupant:not(.desktop) .vid {
+  border-color: var(--color-blue100);
+}

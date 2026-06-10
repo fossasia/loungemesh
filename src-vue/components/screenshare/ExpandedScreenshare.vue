@@ -35,6 +35,9 @@ const getInitialTop = () => {
 const left = ref(getInitialLeft());
 const top = ref(getInitialTop());
 
+const dragging = ref(false);
+const resizing = ref(false);
+
 let dragStartPointerX = 0;
 let dragStartPointerY = 0;
 let dragStartLeft = 0;
@@ -47,6 +50,7 @@ const onDragStart = (e: PointerEvent) => {
   if (e.button !== 0) return;
   if ((e.target as HTMLElement).closest('.minimizeButton')) return;
 
+  dragging.value = true;
   dragStartPointerX = e.clientX;
   dragStartPointerY = e.clientY;
   dragStartLeft = left.value;
@@ -68,6 +72,7 @@ const onDragMove = (e: PointerEvent) => {
 };
 
 const onDragEnd = (e: PointerEvent) => {
+  dragging.value = false;
   const target = e.currentTarget as HTMLElement;
   target.releasePointerCapture(e.pointerId);
   target.removeEventListener('pointermove', onDragMove);
@@ -77,6 +82,7 @@ const onDragEnd = (e: PointerEvent) => {
 
 const onResizeStart = (e: PointerEvent) => {
   if (e.button !== 0) return;
+  resizing.value = true;
   resizeStartPointerX = e.clientX;
   resizeStartWidth = width.value;
 
@@ -99,6 +105,7 @@ const onResizeMove = (e: PointerEvent) => {
 };
 
 const onResizeEnd = (e: PointerEvent) => {
+  resizing.value = false;
   const target = e.currentTarget as HTMLElement;
   target.releasePointerCapture(e.pointerId);
   target.removeEventListener('pointermove', onResizeMove);
@@ -133,6 +140,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="expandedScreenshareWindow"
+    :class="{ 'is-dragging': dragging, 'is-resizing': resizing }"
     :style="{
       left: left + 'px',
       top: top + 'px',
@@ -171,7 +179,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   user-select: none;
   animation: expandedPopIn 0.28s cubic-bezier(0.34, 1.4, 0.64, 1) both;
-  transition: box-shadow 0.2s;
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, box-shadow 0.2s;
+}
+
+.expandedScreenshareWindow.is-dragging,
+.expandedScreenshareWindow.is-resizing {
+  transition: none !important;
 }
 
 .expandedScreenshareWindow:active {

@@ -1,16 +1,29 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { bindScreenshareEndWatch } from '@/utils/screenshareDesktopWatch';
-import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
+import { stopLocalScreenshare } from '@/utils/localScreenshare';
+import { shouldAllowScreenshare } from '@/utils/sessionStage';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
 
 const { engine } = useMediaEngine();
 const local = useLocalStore();
+const features = useSessionFeaturesStore();
 const sharing = ref(false);
 let stopEndedWatch: (() => void) | undefined;
+
+const screenshareBlocked = computed(
+  () => !shouldAllowScreenshare(local.id, features.stageOccupantId) && !sharing.value,
+);
+
+const screenshareTitle = computed(() =>
+  screenshareBlocked.value
+    ? 'Screen sharing is unavailable while someone is on stage.'
+    : 'Screenshare',
+);
 
 function bindDesktopEndWatch() {
   stopEndedWatch?.();
@@ -21,11 +34,7 @@ function bindDesktopEndWatch() {
 
 async function finishShare() {
   sharing.value = false;
-  const track = local.screenshare;
-  if (track) {
-    local.screenshare = undefined;
-    await releaseLocalMediaTracks([track], engine.getConference());
-  }
+  await stopLocalScreenshare();
 }
 
 async function startShare() {
@@ -45,6 +54,7 @@ async function stopShare() {
 }
 
 async function toggleShare() {
+  if (screenshareBlocked.value) return;
   const conf = engine.getConference();
   if (!conf) return;
   if (local.screenshare || sharing.value) {
@@ -68,6 +78,14 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => features.stageOccupantId,
+  (occupantId) => {
+    if (!occupantId || occupantId === local.id) return;
+    if (local.screenshare || sharing.value) void finishShare();
+  },
+);
+
 onUnmounted(() => {
   stopEndedWatch?.();
   if (sharing.value || local.screenshare) {
@@ -78,8 +96,10 @@ onUnmounted(() => {
 
 <template>
   <IconButton
-    label="Screenshare"
+    :label="screenshareTitle"
+    :title="screenshareTitle"
     :active="sharing"
+    :disabled="screenshareBlocked"
     :sound="sharing ? 'toggleOff' : 'toggleOn'"
     @click="toggleShare"
   >

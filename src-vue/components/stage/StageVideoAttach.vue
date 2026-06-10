@@ -36,6 +36,7 @@ onBeforeUnmount(detach);
     :class="{ mirror: mirrored, fill }"
     autoplay
     playsinline
+    disablePictureInPicture
   />
 </template>
 

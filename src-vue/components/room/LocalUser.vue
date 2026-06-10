@@ -5,6 +5,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import UserBackdrop from './overlays/UserBackdrop.vue';
+import StagePresentation from '@/components/stage/StagePresentation.vue';
 import LocalAudioRing from './overlays/LocalAudioRing.vue';
 import LocalNameContainer from './LocalNameContainer.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
@@ -29,7 +30,7 @@ const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
 const dragSurface = ref<HTMLElement | null>(null);
 
-let dragging = false;
+const dragging = ref(false);
 let clickDelta = { x: 0, y: 0 };
 let attachedVideoTrack: typeof local.video;
 
@@ -48,6 +49,7 @@ const hasVideo = computed(() => !!local.video);
 const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
 const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
 const handUp = computed(() => features.handRaised);
+const isStageOccupant = computed(() => features.isLocalStageOccupant);
 
 function releaseVideoPreview() {
   if (attachedVideoTrack && videoEl.value) {
@@ -119,7 +121,7 @@ function onPointerDown(e: PointerEvent) {
   e.stopPropagation();
   const el = dragSurface.value;
   if (!el) return;
-  dragging = true;
+  dragging.value = true;
   const rect = el.getBoundingClientRect();
   const scale = local.scale || 1;
   clickDelta = {
@@ -130,7 +132,7 @@ function onPointerDown(e: PointerEvent) {
 }
 
 function onPointerMove(e: PointerEvent) {
-  if (!dragging) return;
+  if (!dragging.value) return;
   const scale = local.scale || 1;
   const pan = local.pan;
   const xPos = (e.clientX - pan.x) / scale - clickDelta.x;
@@ -139,8 +141,8 @@ function onPointerMove(e: PointerEvent) {
 }
 
 function onPointerUp(e: PointerEvent) {
-  if (!dragging) return;
-  dragging = false;
+  if (!dragging.value) return;
+  dragging.value = false;
   const el = dragSurface.value;
   if (!el) return;
   try {
@@ -160,6 +162,7 @@ defineExpose({ attach, videoEl });
   <div
     :id="userId"
     class="local userContainer"
+    :class="{ 'is-dragging': dragging }"
     :data-recording-participant="userId"
     :data-recording-name="conference.displayName"
     :style="style"
@@ -174,15 +177,25 @@ defineExpose({ attach, videoEl });
     >
       <LocalAudioRing />
       <div
+        v-if="isStageOccupant"
+        class="stageTileHost"
+        :class="{ speaking: local.speaking && !local.mute }"
+      >
+        <StagePresentation mode="tile" />
+        <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
+        <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
+        <span v-if="reaction" class="floatReact">{{ reaction }}</span>
+      </div>
+      <div
+        v-else
         class="videoContainer"
         :class="{
           avatarTile: !showCameraVideo,
           speaking: local.speaking && !local.mute && !showCameraVideo,
         }"
       >
-        <UserBackdrop v-if="!showCameraVideo" :onStage="local.onStage" />
+        <UserBackdrop v-if="!showCameraVideo" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
-        <!-- Prominent hand-raise badge floating above the video -->
         <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
         <span v-if="reaction" class="floatReact">{{ reaction }}</span>
         <video
@@ -191,6 +204,7 @@ defineExpose({ attach, videoEl });
           autoplay
           playsinline
           muted
+          disablePictureInPicture
           :class="[
             'vid',
             { speaking: local.speaking && !local.mute && showCameraVideo },
@@ -219,6 +233,13 @@ defineExpose({ attach, videoEl });
   max-width: 200px;
   pointer-events: auto;
 }
+.stageTileHost {
+  position: relative;
+  width: 200px;
+  z-index: 1;
+  overflow: visible;
+}
+
 .videoContainer {
   width: 200px;
   height: 200px;
@@ -252,6 +273,10 @@ defineExpose({ attach, videoEl });
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
+  transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), top 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.local.is-dragging {
+  transition: none !important;
 }
 </style>
 

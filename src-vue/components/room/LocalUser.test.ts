@@ -3,6 +3,7 @@ import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
+import { connectAndJoinTestConference } from '@/test/jitsiTestContext';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
@@ -116,6 +117,43 @@ describe('LocalUser', () => {
     local.videoType = 'camera';
     const { wrapper } = await mountWithApp(LocalUser);
     expect(wrapper.find('video.vid').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('replaces the avatar tile with the compact stage preview when on stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('presenter');
+    local.video = makeTrack('video');
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    features.stageOccupantId = 'presenter';
+    local.onStage = true;
+
+    const { wrapper } = await mountWithApp(LocalUser);
+    await flushPromises();
+    expect(wrapper.find('.stageTileHost').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="stage-presentation"].modeTile').exists()).toBe(true);
+    expect(wrapper.find('.videoContainer').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows mute control on the stage tile', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('presenter');
+    features.stageOccupantId = 'presenter';
+    local.onStage = true;
+    local.mute = true;
+    local.video = makeTrack('video');
+
+    const { wrapper } = await mountWithApp(LocalUser);
+    await flushPromises();
+    const mute = wrapper.findComponent({ name: 'MuteIndicator' });
+    expect(mute.exists()).toBe(true);
+    if (mute.exists()) await mute.trigger('click');
     wrapper.unmount();
   });
 

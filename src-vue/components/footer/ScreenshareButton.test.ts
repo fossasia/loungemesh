@@ -5,6 +5,7 @@ import { mountWithApp } from '@/test/mountApp';
 import { connectAndJoinTestConference, getJitsiTestContext } from '@/test/jitsiTestContext';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import ScreenshareButton from './ScreenshareButton.vue';
 
@@ -118,6 +119,22 @@ describe('ScreenshareButton', () => {
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
     expect(wrapper.find('button.ibtn').classes()).not.toContain('active');
+    wrapper.unmount();
+  });
+
+  it('disables screenshare while another user is on stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('viewer');
+    features.stageOccupantId = 'presenter';
+    const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks');
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+    const btn = wrapper.find('button.ibtn');
+    expect(btn.attributes('disabled')).toBeDefined();
+    expect(btn.attributes('title')).toContain('unavailable while someone is on stage');
+    await btn.trigger('click');
+    expect(createSpy).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

@@ -15,11 +15,13 @@ const props = withDefaults(
     sound?: UiSoundId | false;
     /** Unread / new-activity indicator dot. */
     activityDot?: boolean;
+    disabled?: boolean;
   }>(),
-  { ghost: false, primary: false, sound: 'tap', activityDot: false },
+  { ghost: false, primary: false, sound: 'tap', activityDot: false, disabled: false },
 );
 
 function onClick(): void {
+  if (props.disabled) return;
   if (props.sound !== false) playUiSound(props.sound);
 }
 </script>
@@ -34,10 +36,12 @@ function onClick(): void {
       ghost,
       primary,
       hasActivityDot: !!activityDot,
+      disabled: !!disabled,
     }"
     type="button"
     :title="label"
     :aria-label="label"
+    :disabled="disabled"
     v-bind="$attrs"
     @click="onClick"
   >
@@ -93,6 +97,13 @@ function onClick(): void {
 
 .ibtn:active {
   background-color: var(--color-mono60);
+}
+
+.ibtn.disabled,
+.ibtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .ibtn:focus {

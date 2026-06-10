@@ -4,6 +4,7 @@ import { worldToRoom } from '@/constants/pan';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { isParticipantOnStage } from '@/components/stage/getStageOccupantId';
 import RemoteVideo from './RemoteVideo.vue';
 import RemoteAudio from './RemoteAudio.vue';
 import NameTag from './overlays/NameTag.vue';
@@ -44,7 +45,7 @@ const videoTrackKey = computed(() => {
   const t = videoTrack.value as { getTrackLabel?: () => string } | undefined;
   return t?.getTrackLabel?.() ?? props.id;
 });
-const showAvatar = computed(() => !videoTrack.value);
+const showAvatar = computed(() => !videoTrack.value || isStageOccupant.value);
 const speaking = computed(() => !!user.value?.speaking && !user.value?.mute);
 const reaction = computed(() => features.userReactions[props.id]?.emoji);
 const handUp = computed(
@@ -52,6 +53,10 @@ const handUp = computed(
     user.value?.properties?.handRaised === true ||
     user.value?.properties?.handRaised === 'true',
 );
+const isStageOccupant = computed(() => {
+  conference.usersEpoch;
+  return isParticipantOnStage(props.id, features.stageOccupantId, conference.users);
+});
 </script>
 
 <template>
@@ -68,13 +73,11 @@ const handUp = computed(
       :class="{
         avatarTile: showAvatar,
         speaking: speaking && showAvatar,
+        onStageOccupant: isStageOccupant,
       }"
     >
-      <UserBackdrop
-        v-if="showAvatar"
-        :onStage="user.properties?.onStage === true || user.properties?.onStage === 'true'"
-      />
-      <template v-if="videoTrack">
+      <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" />
+      <template v-if="videoTrack && !isStageOccupant">
         <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>
       <span v-if="reaction" class="floatReact">{{ reaction }}</span>
@@ -110,6 +113,7 @@ const handUp = computed(
 /* Tile entrance: scale up from a small dot with a spring overshoot */
 .userContainer {
   animation: tileEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), top 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 @keyframes tileEnter {
