@@ -1,28 +1,29 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { WHITEBOARD_DEFAULT_PEN } from '@/constants/whiteboardPens';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import type { WhiteboardStroke } from '@/utils/whiteboardSync';
-import { clientToCanvasPoint, renderWhiteboard } from '@/utils/whiteboardCanvas';
+import {
+  clientToCanvasPoint,
+  ensureWhiteboardCanvasSize,
+  renderWhiteboard,
+} from '@/utils/whiteboardCanvas';
 
 /** Collaborative whiteboard drawing synced via conference commands. */
 export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
   const features = useSessionFeaturesStore();
   const { engine } = useMediaEngine();
   const canvasEl = ref<HTMLCanvasElement | null>(null);
+  const penColor = ref(WHITEBOARD_DEFAULT_PEN.color);
+  const penWidth = ref(WHITEBOARD_DEFAULT_PEN.width);
   let drawing = false;
   let currentStroke: WhiteboardStroke | null = null;
   let resizeObserver: ResizeObserver | undefined;
 
   function resizeCanvas() {
     const canvas = canvasEl.value;
-    const parent = canvas?.parentElement;
-    if (!canvas || !parent) return;
-    const w = Math.max(1, Math.floor(parent.clientWidth));
-    const h = Math.max(1, Math.floor(parent.clientHeight));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
-    }
+    if (!canvas) return;
+    ensureWhiteboardCanvasSize(canvas);
     redrawWhiteboard();
   }
 
@@ -43,8 +44,8 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
     drawing = true;
     currentStroke = {
       id: `wb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      color: '#1e3a8a',
-      width: 3,
+      color: penColor.value,
+      width: penWidth.value,
       points: [point],
     };
     canvasEl.value?.setPointerCapture(e.pointerId);
@@ -108,6 +109,8 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
 
   return {
     canvasEl,
+    penColor,
+    penWidth,
     bindCanvas,
     onCanvasDown,
     onCanvasMove,

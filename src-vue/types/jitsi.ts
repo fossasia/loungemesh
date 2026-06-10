@@ -44,6 +44,7 @@ export interface JitsiConference {
   setDisplayName(name: string): void;
   sendTextMessage(text: string): void;
   sendCommand(name: string, payload: { value: string }): void;
+  removeCommand(name: string): void;
   addCommandListener(name: string, handler: (payload: { value: string }) => void): void;
   addTrack(track: JitsiTrack): Promise<void>;
   removeTrack?(track: JitsiTrack): Promise<void>;

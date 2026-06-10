@@ -6,13 +6,34 @@ function getMediaRecorder(): MediaRecorderCtor | undefined {
   return (globalThis as { MediaRecorder?: MediaRecorderCtor }).MediaRecorder;
 }
 
+const MP4_RECORDER_TYPES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2', // H.264 Baseline + AAC-LC
+  'video/mp4;codecs=avc1.640028,mp4a.40.2', // H.264 High + AAC-LC
+  'video/mp4',
+] as const;
+
+const WEBM_RECORDER_TYPES = [
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+] as const;
+
+/** Safari records MP4 only; other browsers prefer WebM (more reliable for canvas capture). */
+export function isSafariBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /safari/i.test(ua) && !/chrome|chromium|android|crios|fxios/i.test(ua);
+}
+
+export function recorderMimeCandidates(): string[] {
+  return isSafariBrowser()
+    ? [...MP4_RECORDER_TYPES]
+    : [...WEBM_RECORDER_TYPES, ...MP4_RECORDER_TYPES];
+}
+
 /** Pick the first supported recording mime type, or undefined if none. */
 export function pickRecorderMimeType(candidates?: string[]): string | undefined {
-  const list = candidates ?? [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-  ];
+  const list = candidates ?? recorderMimeCandidates();
   const Recorder = getMediaRecorder();
   if (!Recorder?.isTypeSupported) return undefined;
   return list.find((type) => Recorder.isTypeSupported(type));
@@ -42,7 +63,7 @@ export type RecordingVideoSource = {
 export type SessionRecorder = {
   isSupported: boolean;
   isRecording: Ref<boolean>;
-  start: () => boolean;
+  start: (quality?: '720p' | '480p') => boolean;
   stop: () => Promise<Blob | null>;
 };
 
@@ -54,13 +75,14 @@ const CANVAS_HEIGHT = 720;
  * Client-side session recorder: composites the on-screen video tiles onto a
  * canvas and mixes every audio track through Web Audio, then records both with
  * MediaRecorder. This needs no server component (Jibri); the host downloads the
- * resulting .webm locally. Returns a no-op recorder when unsupported.
+ * resulting .mp4 locally. Returns a no-op recorder when unsupported.
  */
 export function useSessionRecorder(sources: SessionRecorderSources): SessionRecorder {
   const isRecording = ref(false);
   const supported = isRecordingSupported();
 
   let recorder: MediaRecorder | undefined;
+  let recordedMimeType: string | undefined;
   let chunks: Blob[] = [];
   let rafId: number | undefined;
   let audioContext: AudioContext | undefined;
@@ -195,10 +217,15 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
     rafId = window.requestAnimationFrame(paintFrame);
   }
 
-  function buildMixedStream(): MediaStream | null {
+  function buildMixedStream(quality: '720p' | '480p'): MediaStream | null {
     canvas = document.createElement('canvas');
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    if (quality === '480p') {
+      canvas.width = 848;
+      canvas.height = 480;
+    } else {
+      canvas.width = 1280;
+      canvas.height = 720;
+    }
     const captured = canvas.captureStream(FRAME_RATE);
 
     const Ctx = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -211,20 +238,55 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
     return captured;
   }
 
-  function start(): boolean {
+  function attachRecorder(active: MediaRecorder, mimeType: string | undefined) {
+    recordedMimeType = mimeType ?? active.mimeType ?? undefined;
+    chunks = [];
+    active.ondataavailable = (e: BlobEvent) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+    active.start(1000);
+    recorder = active;
+  }
+
+  function startRecorderOnStream(stream: MediaStream, mimeType: string | undefined): MediaRecorder | null {
+    const Recorder = getMediaRecorder();
+    if (!Recorder) return null;
+    try {
+      const active = new Recorder(stream, mimeType ? { mimeType } : undefined);
+      attachRecorder(active, mimeType ?? active.mimeType);
+      return active;
+    } catch {
+      return null;
+    }
+  }
+
+  function fallbackToWebm(stream: MediaStream): boolean {
+    const fallbackType = pickRecorderMimeType([...WEBM_RECORDER_TYPES]);
+    if (!fallbackType || fallbackType === recordedMimeType) return false;
+    const active = startRecorderOnStream(stream, fallbackType);
+    return !!active;
+  }
+
+  function start(quality: '720p' | '480p' = '720p'): boolean {
     if (!supported || isRecording.value) return false;
     const Recorder = getMediaRecorder();
     if (!Recorder) return false;
+    let stream: MediaStream | null = null;
     try {
-      const stream = buildMixedStream();
+      stream = buildMixedStream(quality);
       if (!stream) return false;
       const mimeType = pickRecorderMimeType();
-      recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
-      chunks = [];
-      recorder.ondataavailable = (e: BlobEvent) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+      const active = startRecorderOnStream(stream, mimeType);
+      if (!active) return false;
+      active.onerror = () => {
+        if (recordedMimeType?.startsWith('video/webm')) return;
+        try {
+          if (active.state !== 'inactive') active.stop();
+        } catch {
+          /* already stopped */
+        }
+        fallbackToWebm(stream!);
       };
-      recorder.start(1000);
       rafId = window.requestAnimationFrame(paintFrame);
       isRecording.value = true;
       return true;
@@ -261,11 +323,19 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
       active.onstop = () => {
         cleanup();
         isRecording.value = false;
-        const type = active.mimeType || 'video/webm';
-        resolve(chunks.length ? new Blob(chunks, { type }) : null);
+        const type = active.mimeType || recordedMimeType;
+        resolve(chunks.length ? new Blob(chunks, type ? { type } : undefined) : null);
         recorder = undefined;
+        recordedMimeType = undefined;
       };
       try {
+        if (active.state === 'recording') {
+          try {
+            active.requestData();
+          } catch {
+            /* final chunk may already be available */
+          }
+        }
         active.stop();
       } catch {
         cleanup();

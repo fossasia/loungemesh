@@ -23,7 +23,7 @@ export function useSessionExport(getSessionId: () => string) {
   }
 
   function exportRecording(blob: Blob): void {
-    downloadBlob(blob, exportFileName('recording', getSessionId()));
+    downloadBlob(blob, exportFileName('recording', getSessionId(), new Date(), 'mp4'));
   }
 
   return { exportNotes, exportWhiteboard, exportRecording };

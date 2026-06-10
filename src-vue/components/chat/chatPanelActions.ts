@@ -1,3 +1,4 @@
+import { encodeChatWireText } from '@/utils/chatWireFormat';
 import { insertEmojiAtCaret } from './insertEmoji';
 
 /** Insert emoji when the textarea ref is mounted. */
@@ -63,12 +64,12 @@ export function commitChatSend(
 ): ChatSendResult {
   const prepared = prepareChatSend(raw, hasConference);
   if (!prepared.ok) return prepared;
-  const delivered = send(prepared.text);
-  if (!delivered) return { ok: false, reason: 'send_failed' };
   const messageId =
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
       : `m-${Date.now()}`;
+  const delivered = send(encodeChatWireText(messageId, prepared.text));
+  if (!delivered) return { ok: false, reason: 'send_failed' };
   onSent(prepared.text, messageId);
   return { ok: true, messageId };
 }

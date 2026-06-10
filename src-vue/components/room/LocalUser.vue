@@ -29,7 +29,7 @@ const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
 const dragSurface = ref<HTMLElement | null>(null);
 
-let dragging = false;
+const dragging = ref(false);
 let clickDelta = { x: 0, y: 0 };
 let attachedVideoTrack: typeof local.video;
 
@@ -44,11 +44,12 @@ const style = computed(() => {
 });
 
 const userId = computed(() => local.id || 'localUser');
-const isDesktop = computed(() => local.videoType === 'desktop');
 const hasVideo = computed(() => !!local.video);
 const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
+const showAvatar = computed(() => !showCameraVideo.value || isStageOccupant.value);
 const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
 const handUp = computed(() => features.handRaised);
+const isStageOccupant = computed(() => features.isLocalStageOccupant);
 
 function releaseVideoPreview() {
   if (attachedVideoTrack && videoEl.value) {
@@ -107,7 +108,7 @@ function detach() {
 }
 
 watch(
-  () => [local.video, local.videoType, local.cameraOff, showCameraVideo.value],
+  () => [local.video, local.cameraOff, showCameraVideo.value],
   async () => {
     await nextTick();
     attach();
@@ -120,7 +121,7 @@ function onPointerDown(e: PointerEvent) {
   e.stopPropagation();
   const el = dragSurface.value;
   if (!el) return;
-  dragging = true;
+  dragging.value = true;
   const rect = el.getBoundingClientRect();
   const scale = local.scale || 1;
   clickDelta = {
@@ -131,7 +132,7 @@ function onPointerDown(e: PointerEvent) {
 }
 
 function onPointerMove(e: PointerEvent) {
-  if (!dragging) return;
+  if (!dragging.value) return;
   const scale = local.scale || 1;
   const pan = local.pan;
   const xPos = (e.clientX - pan.x) / scale - clickDelta.x;
@@ -140,8 +141,8 @@ function onPointerMove(e: PointerEvent) {
 }
 
 function onPointerUp(e: PointerEvent) {
-  if (!dragging) return;
-  dragging = false;
+  if (!dragging.value) return;
+  dragging.value = false;
   const el = dragSurface.value;
   if (!el) return;
   try {
@@ -161,7 +162,7 @@ defineExpose({ attach, videoEl });
   <div
     :id="userId"
     class="local userContainer"
-    :class="{ desktop: isDesktop }"
+    :class="{ 'is-dragging': dragging }"
     :data-recording-participant="userId"
     :data-recording-name="conference.displayName"
     :style="style"
@@ -169,33 +170,38 @@ defineExpose({ attach, videoEl });
     <div
       ref="dragSurface"
       class="dragSurface"
-      :class="{ desktop: isDesktop }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
     >
       <LocalAudioRing />
-      <div class="videoContainer" :class="{ desktop: isDesktop }">
-        <UserBackdrop v-if="!showCameraVideo" :onStage="local.onStage" />
+      <div
+        class="videoContainer"
+        :class="{
+          avatarTile: showAvatar,
+          speaking: local.speaking && !local.mute && showAvatar,
+          onStageOccupant: isStageOccupant,
+        }"
+      >
+        <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
-        <!-- Prominent hand-raise badge floating above the video -->
         <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
+        <span v-if="reaction" class="floatReact">{{ reaction }}</span>
         <video
-          v-show="showCameraVideo"
+          v-if="!showAvatar"
           ref="videoEl"
           autoplay
           playsinline
           muted
+          disablePictureInPicture
           :class="[
-            isDesktop ? 'desktopVid' : 'vid',
-            { speaking: local.speaking && !local.mute && showCameraVideo },
+            'vid',
+            { speaking: local.speaking && !local.mute && !showAvatar },
           ]"
         />
-        <div v-if="isDesktop && !hasVideo" class="sharePlaceholder">Starting screen share…</div>
       </div>
       <audio ref="audioEl" autoplay muted />
-      <span v-if="reaction" class="floatReact">{{ reaction }}</span>
     </div>
     <LocalNameContainer class="nameEditArea" :hand-up="handUp" />
   </div>
@@ -217,18 +223,20 @@ defineExpose({ attach, videoEl });
   max-width: 200px;
   pointer-events: auto;
 }
+.stageTileHost {
+  position: relative;
+  width: 200px;
+  z-index: 1;
+  overflow: visible;
+}
+
 .videoContainer {
-  width: auto;
+  width: 200px;
   height: 200px;
   border-radius: 100px;
   position: relative;
   z-index: 1;
   overflow: visible;
-}
-.videoContainer.desktop {
-  border-radius: var(--radius-sm);
-  min-width: 280px;
-  max-width: 360px;
 }
 .vid {
   position: relative;
@@ -238,78 +246,28 @@ defineExpose({ attach, videoEl });
   border-radius: 999px;
   object-fit: cover;
   background: #0f172a;
-  border: 4px solid var(--color-mono60);
+  border: 7px solid var(--line-dark);
   display: block;
 }
-.desktopVid {
-  width: 100%;
-  min-width: 280px;
-  max-width: 360px;
-  height: 200px;
-  display: block;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-  background: #0f172a;
-  border: 4px solid var(--color-mono60);
-}
-.vid.speaking,
-.desktopVid.speaking {
+.vid.speaking {
   border-color: var(--color-blue100);
   animation: speakPulse 1.8s ease-in-out infinite;
 }
 
 @keyframes speakPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.3); }
-  50%       { box-shadow: 0 0 0 8px rgba(79, 110, 247, 0.08); }
-}
-.sharePlaceholder {
-  width: 280px;
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0f172a;
-  color: var(--color-mono30);
-  font-size: var(--fs-small);
-  border-radius: var(--radius-sm);
+  0%, 100% { box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.65); }
+  50%       { box-shadow: 0 0 0 14px rgba(79, 110, 247, 0.28); }
 }
 .local {
   display: flex;
   flex-direction: column;
   align-items: center;
   box-sizing: border-box;
+  transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), top 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
-.floatReact {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  font-size: 1.5rem;
-  z-index: 5;
-  pointer-events: none;
-}
-
-/* Floating hand-raise badge above the video circle */
-.handBadge {
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 1.6rem;
-  line-height: 1;
-  z-index: 10;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
-  animation: handBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
-             handFloat 2.5s ease-in-out 0.45s infinite;
-}
-
-@keyframes handBounce {
-  from { opacity: 0; transform: translateX(-50%) scale(0.3) rotate(-25deg); }
-  to   { opacity: 1; transform: translateX(-50%) scale(1) rotate(0deg); }
-}
-
-@keyframes handFloat {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50%       { transform: translateX(-50%) translateY(-4px); }
+.local.is-dragging {
+  transition: none !important;
 }
 </style>
+
+<style scoped src="./participantTileOverlays.css"></style>

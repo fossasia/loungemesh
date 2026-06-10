@@ -62,6 +62,7 @@ describe('useMediaEngine', () => {
       getParticipantId: () => 'u3',
       getType: () => 'video',
       videoType: 'desktop',
+      isMuted: () => false,
       isLocal: () => false,
     } as JitsiTrack);
     jitsi.conference._fire(ev.conference.TRACK_ADDED, {
@@ -110,6 +111,7 @@ describe('useMediaEngine', () => {
       getParticipantId: () => 'cam',
       getType: () => 'video',
       videoType: 'camera',
+      isMuted: () => false,
       isLocal: () => false,
     } as JitsiTrack);
 
@@ -272,6 +274,15 @@ describe('useMediaEngine', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_FAILED, 'room unavailable');
     expect(api.joined.value).toBe(true);
     expect(api.engineError.value).toBeUndefined();
+  });
+
+  it('records conferenceError when the room is not joined', () => {
+    const engine = getMediaEngineInstance();
+    const api = useMediaEngine();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    engine.emit('conferenceError', 'failed early');
+    expect(api.joined.value).toBe(false);
+    expect(api.engineError.value).toBe('failed early');
   });
 
   it('ignores conferenceError events while the room is still joined', async () => {

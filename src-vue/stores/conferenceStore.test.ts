@@ -92,6 +92,17 @@ describe('conferenceStore', () => {
     expect(store.displayName).toBe('Alice');
   });
 
+  it('setUserTrack ignores muted camera video', () => {
+    const store = useConferenceStore();
+    store.addUser('u-muted-vid');
+    store.setUserTrack('u-muted-vid', 'video', {
+      getType: () => 'video',
+      isMuted: () => true,
+      videoType: 'camera',
+    } as never);
+    expect(store.users['u-muted-vid'].video).toBeUndefined();
+  });
+
   it('setUserTrack replaces user entry for reactivity', () => {
     const store = useConferenceStore();
     store.addUser('u6');
@@ -128,6 +139,34 @@ describe('conferenceStore', () => {
     } as never);
     store.clearUserTrack('u7', 'video');
     expect(store.users.u7.video).toBeUndefined();
+  });
+
+  it('setUserTrack and clearUserTrack handle screenshare desktop tracks separately', () => {
+    const store = useConferenceStore();
+    store.addUser('u-screen');
+    const track = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop',
+    } as never;
+    store.setUserTrack('u-screen', 'video', track);
+    expect(store.users['u-screen'].screenshare).toBe(track);
+    expect(store.users['u-screen'].video).toBeUndefined();
+
+    store.clearUserTrack('u-screen', 'screenshare');
+    expect(store.users['u-screen'].screenshare).toBeUndefined();
+  });
+
+  it('setUserTrack handles muted screenshare by clearing screenshare', () => {
+    const store = useConferenceStore();
+    store.addUser('u-screen-mute');
+    store.users['u-screen-mute'].screenshare = { getType: () => 'video' } as never;
+    store.setUserTrack('u-screen-mute', 'video', {
+      getType: () => 'video',
+      isMuted: () => true,
+      videoType: 'desktop',
+    } as never);
+    expect(store.users['u-screen-mute'].screenshare).toBeUndefined();
   });
 
   it('clearUserTrack removes audio and unmutes the user', () => {
@@ -194,6 +233,18 @@ describe('conferenceStore', () => {
     expect(store.messages[0].history).toEqual(['hi']);
     store.ingestChatMessage('other', 'yo', 43);
     expect(store.messages).toHaveLength(2);
+  });
+
+  it('ingests wire-encoded chat ids for remote clients', async () => {
+    const store = useConferenceStore();
+    const { encodeChatWireText } = await import('@/utils/chatWireFormat');
+    store.ingestChatMessage('peer', encodeChatWireText('shared-id', 'hello'), 7);
+    expect(store.messages[0]).toMatchObject({
+      id: 'peer',
+      text: 'hello',
+      nr: 7,
+      messageId: 'shared-id',
+    });
   });
 
   it('leaveConference resets state', () => {

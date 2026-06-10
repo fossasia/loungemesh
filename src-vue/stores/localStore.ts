@@ -35,6 +35,7 @@ import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { useConferenceStore } from './conferenceStore';
+import { useSessionFeaturesStore } from './sessionFeaturesStore';
 
 function uniqueTracks(tracks: Array<JitsiTrack | undefined>): JitsiTrack[] {
   return [...new Set(tracks.filter(Boolean) as JitsiTrack[])];
@@ -68,6 +69,7 @@ export type LocalState = {
   roomBounds: RoomBounds;
   audio?: JitsiTrack;
   video?: JitsiTrack;
+  screenshare?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   onStage: boolean;
   stageVisible: boolean;
@@ -91,6 +93,7 @@ export const useLocalStore = defineStore('local', {
     roomBounds,
     audio: undefined,
     video: undefined,
+    screenshare: undefined,
     videoType: 'camera',
     onStage: false,
     stageVisible: true,
@@ -127,7 +130,7 @@ export const useLocalStore = defineStore('local', {
       const existing = Object.values(conference.users).map((u) => u.pos);
       this.setLocalPosition(spreadInitialUserPosition(existing));
       const centerNow = () => {
-        if (window.innerWidth < 200 || window.innerHeight < 200) return;
+        if (typeof window === 'undefined' || window.innerWidth < 200 || window.innerHeight < 200) return;
         const pan = initialPanCenterOnUser(this.pos, defaultScale);
         this.setPanZoom({ pan, scale: defaultScale });
         this.calculateUsersOnScreen();
@@ -144,16 +147,19 @@ export const useLocalStore = defineStore('local', {
     },
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
-      const videoTrack = tracks.find((t) => t.getType?.() === 'video');
+      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType !== 'desktop');
+      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType === 'desktop');
       if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
-        const isDesktop = videoTrack.videoType === 'desktop';
-        if (this.cameraOff && !isDesktop) {
+        if (this.cameraOff) {
           disposeJitsiTrack(videoTrack);
         } else {
           this.video = markRaw(videoTrack);
-          this.videoType = isDesktop ? 'desktop' : 'camera';
+          this.videoType = 'camera';
         }
+      }
+      if (desktopTrack) {
+        this.screenshare = markRaw(desktopTrack);
       }
     },
     setOnStage(v: boolean) {
@@ -174,30 +180,21 @@ export const useLocalStore = defineStore('local', {
       const conference = engine.getConference();
       const users = useConferenceStore().users;
       const visibleUserIds: string[] = [];
-      const stageIds: string[] = [];
-
-      const onStageProp = (v: unknown) => v === true || v === 'true';
+      const features = useSessionFeaturesStore();
+      const stageOccupantId = features.stageOccupantId;
 
       document.querySelectorAll('.userContainer').forEach((el) => {
         const htmlEl = el as HTMLElement;
         const uid = htmlEl.id;
         if (!uid) return;
-        const user = users[uid];
-        if (user && onStageProp(user.properties?.onStage)) {
-          stageIds.push(uid);
-        }
         const rect = htmlEl.getBoundingClientRect();
         if (isOnScreen({ x: rect.x, y: rect.y }, rect.width, rect.height)) {
           visibleUserIds.push(uid);
         }
       });
 
-      if (this.onStage && this.id && !stageIds.includes(this.id)) {
-        stageIds.push(this.id);
-      }
-
       this.visibleUsers = [...new Set(visibleUserIds)];
-      this.usersOnStage = [...new Set(stageIds)];
+      this.usersOnStage = stageOccupantId ? [stageOccupantId] : [];
 
       mediaDebug('localStore', 'calculateUsersOnScreen', {
         visibleUserIds: this.visibleUsers,
@@ -267,8 +264,6 @@ export const useLocalStore = defineStore('local', {
       const engine = getMediaEngineInstance();
       const conf = engine.getConference();
       const track = this.audio;
-      // Signal mute to peers immediately so remote Web Audio graphs drop before
-      // removeTrack/dispose completes asynchronously.
       if (track && !track.isMuted?.()) {
         try {
           await track.mute();
@@ -276,13 +271,15 @@ export const useLocalStore = defineStore('local', {
           /* track may already be gone */
         }
       }
-      // Flip UI state first, then fully release the device so the mic indicator
-      // turns off — we re-acquire a fresh track on the next unmute.
       this.mute = true;
-      this.audio = undefined;
       this.speaking = false;
+      // Release the device so the OS mic indicator turns off (soft-mute leaves capture open).
+      this.audio = undefined;
       await nextTick();
-      await releaseLocalMediaTracks(uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]), conf);
+      await releaseLocalMediaTracks(
+        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]),
+        conf,
+      );
       unlockMediaPlaybackNow(engine);
       engine.refreshRemoteAudio?.();
     },
@@ -339,9 +336,10 @@ export const useLocalStore = defineStore('local', {
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();
-      await releaseLocalMediaTracks([this.audio, this.video], engine.getConference());
+      await releaseLocalMediaTracks([this.audio, this.video, this.screenshare], engine.getConference());
       this.audio = undefined;
       this.video = undefined;
+      this.screenshare = undefined;
       this.videoType = 'camera';
       this.speaking = false;
       this.cameraOff = true;

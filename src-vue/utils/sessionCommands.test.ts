@@ -3,10 +3,18 @@ import { setActivePinia, createPinia } from 'pinia';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { encodeNotesForWire } from './notesSync';
 import { handleSessionCommand } from './sessionCommands';
 
+vi.mock('@/utils/uiSounds', () => ({
+  playUiSound: vi.fn(),
+}));
+
 describe('handleSessionCommand', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+  });
 
   it('updates position and session features', () => {
     const conference = useConferenceStore();
@@ -24,11 +32,55 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('react', { value: JSON.stringify({ id: 'u1', emoji: '👍' }) });
     expect(features.userReactions.u1?.emoji).toBe('👍');
 
+    conference.addUser('u2');
     handleSessionCommand('hand', { value: JSON.stringify({ id: 'u2', raised: true }) });
     expect(conference.users.u2.properties.handRaised).toBe(true);
   });
 
-  it('handles lobby, poll, notes, and moderator actions', () => {
+  it('plays hand raise sound only once per raise', async () => {
+    const { playUiSound } = await import('@/utils/uiSounds');
+    const conference = useConferenceStore();
+    conference.addUser('u2');
+    const payload = { value: JSON.stringify({ id: 'u2', raised: true }) };
+    handleSessionCommand('hand', payload);
+    handleSessionCommand('hand', payload);
+    handleSessionCommand('pos', { value: JSON.stringify({ id: 'u2', x: 3, y: 4 }) });
+    handleSessionCommand('hand', payload);
+    expect(playUiSound).toHaveBeenCalledTimes(1);
+    expect(playUiSound).toHaveBeenCalledWith('handRaise');
+  });
+
+  it('applies room background commands', () => {
+    const features = useSessionFeaturesStore();
+    handleSessionCommand('room', {
+      value: JSON.stringify({ gridBackgroundUrl: 'data:image/jpeg;base64,abc' }),
+    });
+    expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
+
+    handleSessionCommand('room', { value: JSON.stringify({ action: 'begin', total: 2 }) });
+    handleSessionCommand('room', {
+      value: JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,' }),
+    });
+    handleSessionCommand('room', {
+      value: JSON.stringify({ action: 'chunk', index: 1, data: 'abc' }),
+    });
+    expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
+
+    handleSessionCommand('room', { value: JSON.stringify({ action: 'clear' }) });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    handleSessionCommand('room', { value: JSON.stringify({ gridBackgroundUrl: null }) });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    handleSessionCommand('room', { value: 'not-json' });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    handleSessionCommand('room', { value: JSON.stringify({ gridBackgroundUrl: 123 }) });
+    expect(features.gridBackgroundUrl).toBe('');
+  });
+
+  it('handles lobby, poll, notes, and moderator actions', async () => {
+    const { playUiSound } = await import('@/utils/uiSounds');
     const features = useSessionFeaturesStore();
     const conference = useConferenceStore();
     const local = useLocalStore();
@@ -54,11 +106,47 @@ describe('handleSessionCommand', () => {
       ],
       open: true,
     };
+    vi.mocked(playUiSound).mockClear();
     handleSessionCommand('poll', { value: JSON.stringify(poll) });
     expect(features.activePoll?.question).toBe('Q?');
+    expect(features.hasUnreadPoll).toBe(true);
+    expect(playUiSound).toHaveBeenCalledWith('chatMessage');
+
+    features.panel = 'poll';
+    features.pollSeenSeq = features.pollActivitySeq;
+    vi.mocked(playUiSound).mockClear();
+    handleSessionCommand('poll', {
+      value: JSON.stringify({
+        ...poll,
+        options: [{ id: 'a', label: 'Yes', votes: 1, voters: ['other'] }],
+      }),
+    });
+    expect(playUiSound).not.toHaveBeenCalled();
+    expect(features.hasUnreadPoll).toBe(false);
+
+    handleSessionCommand('poll', { value: 'not-json' });
+    const bumps = features.pollActivitySeq;
+    handleSessionCommand('poll', { value: JSON.stringify(poll) });
+    expect(features.pollActivitySeq).toBe(bumps);
+
+    handleSessionCommand('poll', { value: 'null' });
+    expect(features.activePoll).toBeNull();
 
     handleSessionCommand('notes', { value: JSON.stringify({ text: 'hello' }) });
     expect(features.sharedNotes).toBe('hello');
+
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'begin', total: 1 }) });
+    handleSessionCommand('notes', {
+      value: JSON.stringify({
+        action: 'chunk',
+        index: 0,
+        data: encodeNotesForWire('# Markdown & <xml>'),
+      }),
+    });
+    expect(features.sharedNotes).toBe('# Markdown & <xml>');
+
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'clear' }) });
+    expect(features.sharedNotes).toBe('');
     expect(features.hasUnreadNotes).toBe(true);
 
     handleSessionCommand('wb', {
@@ -102,10 +190,9 @@ describe('handleSessionCommand', () => {
     expect(features.roomDefaults.whiteboard).toBe(false);
     handleSessionCommand(
       'access',
-      { value: JSON.stringify({ userId: 'u2', grants: { poll: true, stage: true } }) },
+      { value: JSON.stringify({ userId: 'u2', grants: { poll: true } }) },
     );
     expect(features.grantsForUser('u2').poll).toBe(true);
-    expect(features.grantsForUser('u2').stage).toBe(true);
     handleSessionCommand('access', { value: 'bad' });
   });
 
@@ -141,11 +228,61 @@ describe('handleSessionCommand', () => {
           messageId: 'm1',
           text: 'new',
           editedAt: 500,
+          editorId: 'u1',
         }),
       },
     );
     expect(conference.messages[0].text).toBe('new');
     expect(conference.messages[0].editedAt).toBe(500);
+  });
+
+  it('applies chat edits by nr when message ids differ', () => {
+    const conference = useConferenceStore();
+    conference.appendChatMessage({
+      id: 'u1',
+      text: 'old',
+      nr: 9,
+      messageId: 'm-9-u1',
+      history: [],
+    });
+    handleSessionCommand(
+      'chat',
+      {
+        value: JSON.stringify({
+          action: 'edit',
+          messageId: 'sender-uuid',
+          text: 'new',
+          editedAt: 500,
+          editorId: 'u1',
+          nr: 9,
+        }),
+      },
+    );
+    expect(conference.messages[0].text).toBe('new');
+  });
+
+  it('rejects chat edits from non-authors', () => {
+    const conference = useConferenceStore();
+    conference.appendChatMessage({
+      id: 'u1',
+      text: 'old',
+      nr: 1,
+      messageId: 'm1',
+      history: [],
+    });
+    handleSessionCommand(
+      'chat',
+      {
+        value: JSON.stringify({
+          action: 'edit',
+          messageId: 'm1',
+          text: 'hacked',
+          editedAt: 500,
+          editorId: 'host',
+        }),
+      },
+    );
+    expect(conference.messages[0].text).toBe('old');
   });
 
   it('handles whiteboard commands', () => {
@@ -162,6 +299,106 @@ describe('handleSessionCommand', () => {
     expect(features.whiteboardStrokes).toEqual([]);
     handleSessionCommand('wb', { value: 'not-json' });
     handleSessionCommand('wb', { value: JSON.stringify({ action: 'noop' }) });
+  });
+
+  it('handles stage promote, demote, layout, and settings commands', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'promote', id: 'guest' }) });
+    expect(features.stageOccupantId).toBe('guest');
+    expect(local.onStage).toBe(true);
+
+    // Set occupant to someone else to test layout sync commands (bypassing loopback check)
+    features.stageOccupantId = 'someone-else';
+    handleSessionCommand(
+      'stage',
+      { value: JSON.stringify({ action: 'layout', layout: { scale: 1.2, expanded: true } }) },
+    );
+    expect(features.stageLayout.scale).toBe(1.2);
+    expect(features.stageLayout.expanded).toBe(true);
+
+    // Restore guest occupant
+    features.stageOccupantId = 'guest';
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true }) });
+    expect(features.stagePromotionEnabled).toBe(true);
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'demote', id: 'guest' }) });
+    expect(features.stageOccupantId).toBe('');
+    expect(local.onStage).toBe(false);
+    handleSessionCommand('stage', { value: 'bad' });
+  });
+
+  it('deduplicates stage commands with unique cmdId and trims processed cache', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+
+    // First invite should succeed
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: 'unique-1' }),
+    });
+    expect(features.stageInvitationPending).toBe(true);
+
+    // Clear state
+    features.stageInvitationPending = false;
+
+    // Second invite with same cmdId should be ignored
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: 'unique-1' }),
+    });
+    expect(features.stageInvitationPending).toBe(false);
+
+    // Invite with new cmdId should succeed
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: 'unique-2' }),
+    });
+    expect(features.stageInvitationPending).toBe(true);
+
+    // Flood with 105 unique commands to cover cache pruning logic
+    for (let i = 0; i < 105; i++) {
+      handleSessionCommand('stage', {
+        value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: `unique-flood-${i}` }),
+      });
+    }
+  });
+
+  it('covers defensive checks for empty first value in stage command cache pruning', () => {
+    const local = useLocalStore();
+    local.setMyID('guest');
+    
+    // Flood with 101 items first
+    for (let i = 0; i < 101; i++) {
+      handleSessionCommand('stage', {
+        value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true, _cmdId: `prune-flood-${i}` }),
+      });
+    }
+    
+    // Now mock Set.prototype.values to return undefined
+    vi.spyOn(Set.prototype, 'values').mockImplementationOnce(function (this: any) {
+      return {
+        next: () => ({ done: true, value: undefined }),
+        [Symbol.iterator]() { return this; }
+      } as any;
+    });
+    
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true, _cmdId: 'prune-trigger' }),
+    });
+  });
+
+  it('skips applying stage layout command when local user is the stage occupant', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('occupant-id');
+    features.stageOccupantId = 'occupant-id';
+    
+    features.stageLayout.scale = 1.0;
+    
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'layout', layout: { scale: 1.5, expanded: true } }),
+    });
+    
+    expect(features.stageLayout.scale).toBe(1.0);
   });
 
   it('handles unknown command names', () => {
@@ -216,10 +453,14 @@ describe('handleSessionCommand', () => {
 
   it('ignores invalid payloads', () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
     conference.addUser('u1');
     const before = { ...conference.users.u1.pos };
     handleSessionCommand('pos', { value: 'not-json' });
     expect(conference.users.u1.pos).toEqual(before);
+    features.sharedNotes = 'unchanged';
+    handleSessionCommand('notes', { value: 'not-json' });
+    expect(features.sharedNotes).toBe('unchanged');
   });
 
   it('ignores name commands with blank or missing names', () => {

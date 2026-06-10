@@ -1,83 +1,74 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useLocalStore } from '@/stores/localStore';
-import { restoreCameraVideo } from '@/composables/restoreCameraVideo';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { bindScreenshareEndWatch } from '@/utils/screenshareDesktopWatch';
-import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
+import { stopLocalScreenshare, toggleLocalScreenshare } from '@/utils/localScreenshare';
+import { shouldAllowScreenshare } from '@/utils/sessionStage';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
 
 const { engine } = useMediaEngine();
 const local = useLocalStore();
+const features = useSessionFeaturesStore();
 const sharing = ref(false);
 let stopEndedWatch: (() => void) | undefined;
 
+const screenshareBlocked = computed(
+  () => !shouldAllowScreenshare(local.id, features.stageOccupantId) && !sharing.value,
+);
+
+const screenshareTitle = computed(() =>
+  screenshareBlocked.value
+    ? 'Screen sharing is unavailable while someone is on stage.'
+    : 'Screenshare',
+);
+
 function bindDesktopEndWatch() {
   stopEndedWatch?.();
-  stopEndedWatch = bindScreenshareEndWatch(local.video, () => {
+  stopEndedWatch = bindScreenshareEndWatch(local.screenshare, () => {
     void finishShare();
   });
 }
 
 async function finishShare() {
   sharing.value = false;
-  await restoreCameraVideo(engine, local);
-}
-
-async function startShare() {
-  const conf = engine.getConference()!;
-  const oldTrack = conf.getLocalVideoTrack?.();
-  const tracks = await engine.createLocalTracks(['desktop']);
-  const newTrack = tracks.find((t) => t.getType?.() === 'video') ?? tracks[0];
-  if (!newTrack || newTrack.videoType !== 'desktop') return;
-
-  if (oldTrack) {
-    await engine.replaceLocalTrack(oldTrack, newTrack);
-    disposeJitsiTrack(oldTrack);
-  } else {
-    await engine.addLocalTrack(newTrack);
-  }
-  const list = [];
-  if (local.audio) list.push(local.audio);
-  list.push(newTrack);
-  local.setLocalTracks(list);
-  sharing.value = true;
-  bindDesktopEndWatch();
-}
-
-async function stopShare() {
-  await finishShare();
+  await stopLocalScreenshare();
 }
 
 async function toggleShare() {
+  if (screenshareBlocked.value) return;
   const conf = engine.getConference();
   if (!conf) return;
-  const oldTrack = conf.getLocalVideoTrack?.();
-  if (oldTrack?.videoType === 'desktop' || sharing.value) {
-    await stopShare();
-    return;
-  }
   try {
-    await startShare();
+    await toggleLocalScreenshare(engine);
   } catch {
     sharing.value = false;
   }
 }
 
 watch(
-  () => local.video?.videoType,
-  (type) => {
-    sharing.value = type === 'desktop';
-    if (type === 'desktop') bindDesktopEndWatch();
+  () => local.screenshare,
+  (track) => {
+    sharing.value = !!track;
+    if (track) bindDesktopEndWatch();
     else stopEndedWatch?.();
   },
   { immediate: true },
 );
 
+watch(
+  () => features.stageOccupantId,
+  (occupantId) => {
+    if (!occupantId || occupantId === local.id) return;
+    if (local.screenshare || sharing.value) void finishShare();
+  },
+);
+
 onUnmounted(() => {
   stopEndedWatch?.();
-  if (sharing.value || local.videoType === 'desktop') {
+  if (sharing.value || local.screenshare) {
     void finishShare();
   }
 });
@@ -85,8 +76,10 @@ onUnmounted(() => {
 
 <template>
   <IconButton
-    label="Screenshare"
+    :label="screenshareTitle"
+    :title="screenshareTitle"
     :active="sharing"
+    :disabled="screenshareBlocked"
     :sound="sharing ? 'toggleOff' : 'toggleOn'"
     @click="toggleShare"
   >

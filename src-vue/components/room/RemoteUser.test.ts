@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
@@ -45,6 +45,16 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
+  it('shows avatar tile ring when remote camera is off', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u-ring', { _displayName: 'No Cam' } as never);
+    conference.users['u-ring'].pos = { x: 0, y: 0 };
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-ring' } });
+    expect(wrapper.find('.videoContainer.avatarTile').exists()).toBe(true);
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('shows avatar when remote camera is off', async () => {
     const conference = useConferenceStore();
     conference.addUser('u-muted-flag', { _displayName: 'Muted Flag' } as never);
@@ -53,16 +63,6 @@ describe('RemoteUser', () => {
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-muted-flag' } });
     expect(wrapper.find('video.remoteVideo').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'UserBackdrop' }).exists()).toBe(true);
-    wrapper.unmount();
-  });
-
-  it('renders desktop share layout', async () => {
-    const conference = useConferenceStore();
-    conference.addUser('u1', { _displayName: 'Bob' } as never);
-    conference.users.u1.pos = { x: 0, y: 0 };
-    conference.users.u1.video = makeTrack('desktop');
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u1' } });
-    expect(wrapper.find('.desktopVideo').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -77,6 +77,7 @@ describe('RemoteUser', () => {
   });
 
   it('shows reaction emoji and raised hand', async () => {
+    vi.useFakeTimers();
     const conference = useConferenceStore();
     const features = useSessionFeaturesStore();
     conference.addUser('u4', { _displayName: 'Lee' } as never);
@@ -84,9 +85,14 @@ describe('RemoteUser', () => {
     conference.users.u4.properties = { handRaised: true };
     features.setReaction('u4', '🎉');
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u4' } });
-    expect(wrapper.text()).toContain('🎉');
-    expect(wrapper.text()).toContain('✋');
+    expect(wrapper.find('.floatReact').text()).toBe('🎉');
+    expect(wrapper.find('.handBadge').exists()).toBe(true);
+    vi.advanceTimersByTime(2500);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.floatReact').exists()).toBe(false);
+    expect(wrapper.find('.handBadge').exists()).toBe(true);
     wrapper.unmount();
+    vi.useRealTimers();
   });
 
   it('falls back to a default name when no display name is known', async () => {

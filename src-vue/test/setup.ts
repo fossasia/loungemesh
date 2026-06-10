@@ -79,6 +79,17 @@ Object.defineProperty(window, 'innerHeight', { value: 720, writable: true, confi
 HTMLElement.prototype.setPointerCapture = vi.fn();
 HTMLElement.prototype.releasePointerCapture = vi.fn();
 
+// jsdom's play()/pause() only log "Not implemented" and return undefined. Stub silently
+// so coverage paths stay the same as the real jsdom behavior.
+HTMLMediaElement.prototype.play = function play() {
+  return undefined as unknown as Promise<void>;
+};
+HTMLMediaElement.prototype.pause = function pause() {};
+
+if (!document.elementFromPoint) {
+  document.elementFromPoint = () => null;
+}
+
 class MockResizeObserver {
   private readonly cb: ResizeObserverCallback;
   observe = vi.fn();
@@ -89,13 +100,19 @@ class MockResizeObserver {
     (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver = this;
   }
   /** Trigger a resize notification (tests only). */
-  trigger() {
-    this.cb([], this as unknown as ResizeObserver);
+  trigger(width = 0) {
+    const entries =
+      width > 0
+        ? [{ contentRect: { width, height: 0 } } as ResizeObserverEntry]
+        : [];
+    this.cb(entries, this as unknown as ResizeObserver);
   }
 }
 // @ts-expect-error test shim
 globalThis.ResizeObserver = MockResizeObserver;
 
-export function triggerLastResizeObserver() {
-  (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver?.trigger();
+export function triggerLastResizeObserver(width?: number) {
+  (globalThis as { __lastResizeObserver?: MockResizeObserver }).__lastResizeObserver?.trigger(
+    width,
+  );
 }

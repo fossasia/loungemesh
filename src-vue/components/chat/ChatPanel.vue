@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -23,15 +23,26 @@ import {
   handleChatKeydown,
   scrollChatToBottom,
 } from './chatPanelActions';
-import { CHAT_EMOJIS } from './insertEmoji';
+import { loadEmojiPickerPanel } from '@/components/ui/loadEmojiPickerPanel';
+
+const EmojiPickerPanel = defineAsyncComponent(loadEmojiPickerPanel);
 import { chatPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
+import {
+  isChatNotificationSoundEnabled,
+  setChatNotificationSoundEnabled,
+} from '@/utils/chatNotificationSound';
 import { playUiSound } from '@/utils/uiSounds';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
 const features = useSessionFeaturesStore();
 const { engine, joined: engineJoined } = useMediaEngine();
-const open = ref(false);
+const open = computed({
+  get: () => features.panel === 'chat',
+  set: (val) => {
+    features.panel = val ? 'chat' : '';
+  },
+});
 const chatSeenCount = ref(0);
 const chatRoot = ref<HTMLElement | null>(null);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
@@ -39,6 +50,8 @@ const chatError = ref('');
 const editingId = ref<string | null>(null);
 const editDraft = ref('');
 const historyOpen = ref<Record<string, boolean>>({});
+const chatSoundOn = ref(isChatNotificationSoundEnabled());
+const emojiPickerOpen = ref(false);
 
 const localUserId = computed(() => local.id || engine.getLocalUserId() || '');
 
@@ -93,14 +106,24 @@ function cancelEdit() {
 }
 
 function saveEdit(messageId: string) {
+  const message = conference.messages.find((m) => m.messageId === messageId);
+  if (!message || !canEditChatMessage(message, localUserId.value)) return;
+
   const result = commitChatEdit(
     editDraft.value,
     chatReady(),
     (id, text, editedAt) => {
-      conference.editChatMessage(id, text, editedAt);
+      conference.editChatMessage(id, text, editedAt, message.nr, message.id);
       engine.sendCommand(
         'chat',
-        JSON.stringify({ action: 'edit', messageId: id, text, editedAt }),
+        JSON.stringify({
+          action: 'edit',
+          messageId: id,
+          text,
+          editedAt,
+          editorId: localUserId.value,
+          nr: message.nr >= 0 ? message.nr : undefined,
+        }),
       );
     },
     messageId,
@@ -134,8 +157,15 @@ function onKeydown(e: KeyboardEvent) {
   handleChatKeydown(e, el, sendMessage);
 }
 
-function addEmoji(emoji: string) {
+function onEmojiPick(emoji: string) {
   addEmojiToInput(inputEl.value, emoji);
+  emojiPickerOpen.value = false;
+}
+
+function toggleChatSound() {
+  chatSoundOn.value = !chatSoundOn.value;
+  setChatNotificationSoundEnabled(chatSoundOn.value);
+  playUiSound(chatSoundOn.value ? 'toggleOn' : 'toggleOff');
 }
 
 async function scrollChatIfOpen() {
@@ -159,7 +189,7 @@ function onIncomingMessages(nextCount: number, prevCount: number) {
     return;
   }
   const latest = conference.messages[nextCount - 1];
-  if (latest && latest.id !== localUserId.value) {
+  if (latest && latest.id !== localUserId.value && chatSoundOn.value) {
     playUiSound('chatMessage');
   }
 }
@@ -167,11 +197,25 @@ function onIncomingMessages(nextCount: number, prevCount: number) {
 watch(() => conference.messages.length, onIncomingMessages);
 watch(open, onChatPanelOpen);
 watch(
+  () => features.stageOccupantId === local.id,
+  async (isStageUser, wasStageUser) => {
+    if (!isStageUser || wasStageUser) return;
+    open.value = true;
+    markChatSeen();
+    chatError.value = '';
+    await nextTick();
+    scrollChatToBottom(chatRoot.value);
+    inputEl.value?.focus();
+  },
+);
+watch(
   () => [conference.isJoined, engineJoined.value, conference.conferenceObject],
   () => {
     if (chatReady()) chatError.value = '';
   },
 );
+
+defineExpose({ open });
 </script>
 
 <template>
@@ -188,6 +232,19 @@ watch(
       }"
       :onClose="() => (open = false)"
     >
+      <template #afterTitle>
+        <button
+          type="button"
+          class="notifyToggle"
+          :title="chatSoundOn ? 'Mute message sounds' : 'Unmute message sounds'"
+          :aria-label="chatSoundOn ? 'Mute message sounds' : 'Unmute message sounds'"
+          :aria-pressed="chatSoundOn"
+          @click="toggleChatSound"
+        >
+          <AppIcon :name="chatSoundOn ? 'bell' : 'bell-off'" :size="18" />
+        </button>
+      </template>
+
       <div ref="chatRoot" class="messages">
         <p v-if="!conference.messages.length" class="empty">No messages yet.</p>
         <div
@@ -250,7 +307,7 @@ watch(
             </template>
 
             <div
-              v-if="editingId !== message.messageId && canEditChatMessage(message, localUserId, features.isHost)"
+              v-if="editingId !== message.messageId && canEditChatMessage(message, localUserId)"
               class="msgActions"
             >
               <button
@@ -265,22 +322,23 @@ watch(
         </div>
       </div>
 
-      <div class="emojiRow">
-        <button
-          v-for="emoji in CHAT_EMOJIS"
-          :key="emoji"
-          type="button"
-          class="emojiBtn"
-          :title="`Insert ${emoji}`"
-          @click="addEmoji(emoji)"
-        >
-          {{ emoji }}
-        </button>
+      <div v-if="emojiPickerOpen" class="emojiPickerWrap" @pointerdown.stop>
+        <EmojiPickerPanel @select="onEmojiPick" />
       </div>
 
       <p v-if="chatError" class="chatErr" role="alert">{{ chatError }}</p>
 
       <div class="input">
+        <button
+          type="button"
+          class="emojiToggle"
+          title="Insert emoji"
+          aria-label="Insert emoji"
+          :aria-expanded="emojiPickerOpen"
+          @click="emojiPickerOpen = !emojiPickerOpen"
+        >
+          <AppIcon name="smile" :size="20" />
+        </button>
         <textarea
           ref="inputEl"
           id="chatInput"
@@ -413,27 +471,36 @@ watch(
   color: var(--color-mono30);
   font-weight: 500;
 }
-.emojiRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.emojiPickerWrap {
+  width: 100%;
+  min-width: 0;
   margin-bottom: 10px;
-  max-height: 120px;
-  overflow-y: auto;
-  padding: 4px 2px;
   flex-shrink: 0;
+  overflow: visible;
+  box-sizing: border-box;
 }
-.emojiBtn {
+.emojiToggle {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 4px;
   border: none;
-  background: var(--color-mono95);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 1.2rem;
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   cursor: pointer;
-  line-height: 1;
-  min-width: 36px;
+  color: var(--color-mono30);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.emojiBtn:hover {
+.emojiToggle:hover {
+  background: var(--btn-default-bg-hover);
+  color: var(--color-mono10);
+}
+.emojiToggle[aria-expanded='true'] {
+  color: var(--color-blue100);
   background: var(--btn-default-bg-hover);
 }
 .chatErr {
@@ -449,6 +516,27 @@ watch(
   min-height: 52px;
   background: #fff;
   border: 1px solid rgba(220, 222, 225, 1);
+}
+.notifyToggle {
+  border: none;
+  background: transparent;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  color: var(--color-mono30);
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notifyToggle:hover {
+  background: var(--btn-default-bg-hover);
+  color: var(--color-mono10);
+}
+.notifyToggle[aria-pressed='true'] {
+  color: var(--color-blue100);
 }
 .ta {
   flex: 1;

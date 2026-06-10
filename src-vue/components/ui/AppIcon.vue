@@ -3,13 +3,20 @@ import { computed, type Component } from 'vue';
 import {
   ArrowRight,
   BarChart3,
+  Bell,
+  BellOff,
+  ChevronDown,
+  ChevronUp,
   Circle,
+  Eye,
   EyeOff,
   FileText,
   Hand,
+  Maximize2,
   MessageSquare,
   Mic,
   MicOff,
+  Minimize2,
   Minus,
   MonitorUp,
   MoreVertical,
@@ -22,6 +29,9 @@ import {
   VideoOff,
   VolumeX,
   X,
+  LogOut,
+  UserMinus,
+  Info,
 } from '@lucide/vue';
 
 const props = withDefaults(
@@ -36,11 +46,18 @@ const props = withDefaults(
 export type IconName =
   | 'arrow-right'
   | 'bar-chart'
+  | 'bell'
+  | 'bell-off'
   | 'chat'
+  | 'chevron-down'
+  | 'chevron-up'
   | 'close'
+  | 'eye'
   | 'eye-off'
   | 'file-text'
   | 'hand'
+  | 'maximize'
+  | 'minimize'
   | 'mic'
   | 'mic-off'
   | 'minus'
@@ -54,16 +71,26 @@ export type IconName =
   | 'user'
   | 'video'
   | 'video-off'
-  | 'volume-x';
+  | 'volume-x'
+  | 'log-out'
+  | 'user-minus'
+  | 'info';
 
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
   'bar-chart': BarChart3,
+  bell: Bell,
+  'bell-off': BellOff,
   chat: MessageSquare,
+  'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
   close: X,
+  eye: Eye,
   'eye-off': EyeOff,
   'file-text': FileText,
   hand: Hand,
+  maximize: Maximize2,
+  minimize: Minimize2,
   mic: Mic,
   'mic-off': MicOff,
   minus: Minus,
@@ -78,6 +105,9 @@ const registry: Record<IconName, Component> = {
   video: Video,
   'video-off': VideoOff,
   'volume-x': VolumeX,
+  'log-out': LogOut,
+  'user-minus': UserMinus,
+  info: Info,
 };
 
 const icon = computed(() => registry[props.name]);

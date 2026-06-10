@@ -16,6 +16,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src-vue', import.meta.url)),
     },
   },
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
   server: {
     port: 5173,
     // lib-jitsi-meet is not bundled; proxy /libs/ to the jitsi-web container so
@@ -42,6 +45,9 @@ export default defineConfig({
             id.includes('node_modules/pinia/')
           ) {
             return 'vendor-vue';
+          }
+          if (id.includes('node_modules/emoji-mart-vue-fast')) {
+            return 'vendor-emoji';
           }
         },
       },

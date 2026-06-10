@@ -6,7 +6,7 @@ import { useLocalStore } from '@/stores/localStore';
 describe('ensureLocalTracks', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('requests audio and video when missing', async () => {
+  it('requests audio and video together when both are missing', async () => {
     const local = useLocalStore();
     const engine = {
       createLocalTracks: vi.fn().mockResolvedValue([

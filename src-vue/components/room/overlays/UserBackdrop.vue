@@ -42,6 +42,6 @@ withDefaults(
 }
 .onStage .ic {
   margin-bottom: 4px;
-  color: currentColor;
+  color: var(--color-blue100);
 }
 </style>

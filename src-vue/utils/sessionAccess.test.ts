@@ -30,10 +30,10 @@ describe('sessionAccess', () => {
       notes: true,
       whiteboard: false,
     });
-    expect(grantsPayloadForSync(room, 'u2', { u2: { stage: true } })).toEqual({
+    expect(grantsPayloadForSync(room, 'u2', { u2: { poll: true } })).toEqual({
       defaults: room,
       userId: 'u2',
-      grants: { stage: true },
+      grants: { poll: true },
     });
   });
 });

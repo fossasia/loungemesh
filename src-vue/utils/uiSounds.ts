@@ -13,7 +13,8 @@ export type UiSoundId =
   | 'recordStop'
   | 'leave'
   | 'success'
-  | 'chatMessage';
+  | 'chatMessage'
+  | 'stageInvite';
 
 let audioContext: AudioContext | undefined;
 
@@ -45,7 +46,7 @@ function getAudioContext(): AudioContext | undefined {
   return audioContext;
 }
 
-type ToneOptions = {
+export type ToneOptions = {
   freq: number;
   endFreq?: number;
   at?: number;
@@ -147,6 +148,13 @@ export function playUiSound(id: UiSoundId): void {
       playSequence([
         { freq: 740, duration: 0.07, volume: 0.058, type: 'sine' },
         { freq: 988, at: 0.065, duration: 0.11, volume: 0.062, type: 'sine' },
+      ]);
+      break;
+    case 'stageInvite':
+      playSequence([
+        { freq: 880, duration: 0.15, volume: 0.15, type: 'square' },
+        { freq: 880, at: 0.2, duration: 0.15, volume: 0.15, type: 'square' },
+        { freq: 1200, at: 0.4, duration: 0.3, volume: 0.20, type: 'square' },
       ]);
       break;
   }

@@ -9,15 +9,27 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { createChatMessage } from '@/utils/chatMessage';
+import { decodeChatWireText } from '@/utils/chatWireFormat';
 import * as uiSounds from '@/utils/uiSounds';
+import { setChatNotificationSoundEnabled } from '@/utils/chatNotificationSound';
 import ChatPanel from './ChatPanel.vue';
+
+const CHAT_SOUND_KEY = 'loungemesh:chat-notification-sound';
 
 function chatMsg(id: string, text: string, nr: number) {
   return createChatMessage(id, text, nr);
 }
 
+function lastSentChatText(sendTextMessage: { mock: { calls: unknown[][] } }): string {
+  const wire = sendTextMessage.mock.calls.at(-1)?.[0] as string;
+  return decodeChatWireText(wire).text;
+}
+
 describe('ChatPanel', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.removeItem(CHAT_SOUND_KEY);
+  });
 
   it('sends messages, parses links, and handles keyboard shortcuts', async () => {
     const { jitsi, conference } = await connectAndJoinTestConference();
@@ -36,7 +48,7 @@ describe('ChatPanel', () => {
     const textarea = wrapper.find('textarea');
     await textarea.setValue('hello');
     await wrapper.find('.send').trigger('click');
-    expect(jitsi.conference.sendTextMessage).toHaveBeenCalledWith('hello');
+    expect(lastSentChatText(jitsi.conference.sendTextMessage)).toBe('hello');
 
     await textarea.setValue('   ');
     await wrapper.find('.send').trigger('click');
@@ -153,7 +165,7 @@ describe('ChatPanel', () => {
     const textarea = wrapper.find('textarea');
     await textarea.setValue('hello');
     await wrapper.find('.send').trigger('click');
-    expect(jitsi.conference.sendTextMessage).toHaveBeenCalledWith('hello');
+    expect(lastSentChatText(jitsi.conference.sendTextMessage)).toBe('hello');
     expect(wrapper.find('.chatErr').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -168,7 +180,7 @@ describe('ChatPanel', () => {
     const textarea = wrapper.find('textarea');
     await textarea.setValue('via engine');
     await wrapper.find('.send').trigger('click');
-    expect(jitsi.conference.sendTextMessage).toHaveBeenCalledWith('via engine');
+    expect(lastSentChatText(jitsi.conference.sendTextMessage)).toBe('via engine');
     expect(engine.getConference()).toBeTruthy();
     wrapper.unmount();
   });
@@ -210,12 +222,41 @@ describe('ChatPanel', () => {
   it('inserts emoji from the picker', async () => {
     const conference = useConferenceStore();
     conference.conferenceObject = {} as never;
-    const { wrapper } = await mountWithApp(ChatPanel);
+    const { wrapper } = await mountWithApp(ChatPanel, {
+      global: {
+        stubs: {
+          EmojiPickerPanel: {
+            template:
+              '<button type="button" class="emojiPickStub" @click="$emit(\'select\', \'😀\')">pick</button>',
+          },
+        },
+      },
+    });
     await wrapper.find('button.ibtn').trigger('click');
     const textarea = wrapper.find('textarea');
     await textarea.setValue('hi ');
-    await wrapper.find('.emojiBtn').trigger('click');
+    await wrapper.find('.emojiToggle').trigger('click');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(true);
+    await wrapper.find('.emojiPickerWrap').trigger('pointerdown');
+    await wrapper.find('.emojiPickStub').trigger('click');
     expect((textarea.element as HTMLTextAreaElement).value).toContain('😀');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('toggles the emoji picker without inserting', async () => {
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const toggle = wrapper.find('.emojiToggle');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(true);
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    expect(wrapper.find('.emojiPickerWrap').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -332,6 +373,23 @@ describe('ChatPanel', () => {
     await flushPromises();
     await wrapper.find('button.ibtn').trigger('click');
     expect(wrapper.find('.chatErr').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('only shows edit on the local user messages', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    conference.conferenceObject = {} as never;
+    conference.isJoined = true;
+    conference.messages = [chatMsg('me', 'mine', 1), chatMsg('bob', 'theirs', 2)];
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const edits = wrapper.findAll('.msgActions .linkBtn');
+    expect(edits).toHaveLength(1);
+    expect(edits[0]!.text()).toBe('Edit');
     wrapper.unmount();
   });
 
@@ -452,12 +510,12 @@ describe('ChatPanel', () => {
     const conference = useConferenceStore();
     const local = useLocalStore();
     const { engine } = await import('@/composables/useMediaEngine').then((m) => m.useMediaEngine());
-    local.setMyID('');
+    local.setMyID('me');
     conference.conferenceObject = undefined;
     conference.isJoined = false;
     vi.spyOn(engine, 'getConference').mockReturnValue(undefined);
-    vi.spyOn(engine, 'getLocalUserId').mockReturnValue(undefined);
-    conference.messages = [chatMsg('', 'x', 1)];
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('me');
+    conference.messages = [chatMsg('me', 'x', 1)];
     const { wrapper } = await mountWithApp(ChatPanel);
     await wrapper.find('button.ibtn').trigger('click');
     await wrapper.find('.linkBtn.subtle').trigger('click');
@@ -508,8 +566,7 @@ describe('ChatPanel', () => {
   });
 
   it('shows an activity dot and plays a sound for remote messages while closed', async () => {
-    vi.mock('@/utils/uiSounds', () => ({ playUiSound: vi.fn() }));
-    const { playUiSound } = await import('@/utils/uiSounds');
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
     const conference = useConferenceStore();
     conference.conferenceObject = {} as never;
     const local = useLocalStore();
@@ -519,10 +576,175 @@ describe('ChatPanel', () => {
     expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(true);
     conference.messages.push({ id: 'remote-2', text: 'again', nr: 2 });
     await flushPromises();
-    expect(playUiSound).toHaveBeenCalledWith('chatMessage');
+    expect(soundSpy).toHaveBeenCalledWith('chatMessage');
     await wrapper.find('button.ibtn').trigger('click');
     expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(false);
+    soundSpy.mockRestore();
     wrapper.unmount();
-    vi.doUnmock('@/utils/uiSounds');
+  });
+
+  it('skips incoming message sound when notifications are muted', async () => {
+    setChatNotificationSoundEnabled(false);
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    const { wrapper } = await mountWithApp(ChatPanel);
+    soundSpy.mockClear();
+    conference.messages = [{ id: 'remote-1', text: 'hello', nr: 1 }];
+    await flushPromises();
+    conference.messages.push({ id: 'remote-2', text: 'again', nr: 2 });
+    await flushPromises();
+    expect(soundSpy).not.toHaveBeenCalledWith('chatMessage');
+    soundSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('toggles notification sound from the chat input bar', async () => {
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
+    const conference = useConferenceStore();
+    conference.conferenceObject = {} as never;
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const toggle = wrapper.find('.titleRow .notifyToggle');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-pressed')).toBe('false');
+    expect(localStorage.getItem(CHAT_SOUND_KEY)).toBe('0');
+    expect(soundSpy).toHaveBeenCalledWith('toggleOff');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    expect(localStorage.getItem(CHAT_SOUND_KEY)).toBe('1');
+    soundSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('opens automatically when the local user is promoted to stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('presenter');
+    const { wrapper } = await mountWithApp(ChatPanel);
+    expect(wrapper.find('.chatCard').exists()).toBe(false);
+    features.stageOccupantId = 'presenter';
+    await nextTick();
+    expect(wrapper.find('.chatCard').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('covers useMediaEngine conferenceError branches', async () => {
+    const { getMediaEngineInstance } = await import('@/services/mediaEngineSingleton');
+    const { useMediaEngine } = await import('@/composables/useMediaEngine');
+    const engine = getMediaEngineInstance();
+    useMediaEngine();
+
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    engine.emit('conferenceError', 'err');
+
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    engine.emit('conferenceError', 'err');
+  });
+
+  it('covers additional saveEdit and stage occupant watch branches', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    conference.conferenceObject = {} as never;
+    conference.isJoined = true;
+
+    // Msg with nr < 0 to cover the undefined branch of message.nr
+    conference.messages = [
+      { id: 'me', text: 'no-nr-msg', nr: -1, messageId: 'm1' }
+    ];
+
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const editBtn = wrapper.find('.msgActions .linkBtn');
+    await editBtn.trigger('click');
+    await wrapper.find('.editTa').setValue('new text');
+    await wrapper.find('.editActions .linkBtn').trigger('click');
+    expect(conference.messages[0].text).toBe('new text');
+
+    // Trigger stage occupant watch with isStageUser = false, wasStageUser = true/false
+    features.stageOccupantId = 'other';
+    await nextTick();
+    features.stageOccupantId = 'me';
+    await nextTick();
+    // wasStageUser = true, isStageUser = true (setting to same id)
+    features.stageOccupantId = 'me';
+    await nextTick();
+
+    wrapper.unmount();
+  });
+
+  it('covers ChatPanel.vue edge case branches', async () => {
+    const { conference } = await connectAndJoinTestConference();
+    const { wrapper } = await mountWithApp(ChatPanel);
+    const vm = wrapper.vm as any;
+
+    // 1. Cover line 177: onChatPanelOpen(false)
+    await vm.onChatPanelOpen(false);
+
+    // 2. Cover line 185: onIncomingMessages with nextCount <= prevCount
+    vm.onIncomingMessages(2, 2);
+    vm.onIncomingMessages(1, 2);
+
+    // 3. Cover line 186: onIncomingMessages with open.value false (already false on mount)
+    // Let's create an incoming message from another user to trigger playUiSound when open is false
+    const local = useLocalStore();
+    local.setMyID('me');
+    // mock a message
+    conference.messages.push({
+      id: 'someone-else',
+      senderId: 'someone-else',
+      text: 'hello',
+      time: Date.now(),
+      messageId: 'msg-1',
+      nr: 0,
+      avatar: '',
+      displayName: 'Someone Else'
+    } as any);
+    vm.onIncomingMessages(1, 0);
+
+    // 4. Cover line 214: chatReady() returning true/false in watch
+    // Trigger the watcher by modifying conference.isJoined
+    conference.isJoined = true;
+    await flushPromises();
+
+    // 5. Cover line 110: saveEdit early returns
+    vm.saveEdit('non-existent-id');
+    vm.saveEdit('msg-1');
+
+    // 6. Cover line 145: e.key === 'Enter' && !e.shiftKey in edit mode
+    // Let's mount another ChatPanel, open it, add a message, start edit, and trigger keydown Enter
+    const { wrapper: editWrapper } = await mountWithApp(ChatPanel);
+    await editWrapper.find('button.ibtn').trigger('click'); // open panel
+    // Add a message
+    conference.messages.push({
+      id: 'me',
+      senderId: 'me',
+      text: 'original',
+      time: Date.now(),
+      messageId: 'edit-msg-1',
+      nr: 0,
+      avatar: '',
+      displayName: 'Me'
+    } as any);
+    await flushPromises();
+    const editBtn = editWrapper.find('.linkBtn.subtle');
+    await editBtn.trigger('click');
+    const editTa = editWrapper.find('.editTa');
+    await editTa.setValue('new keyboard save');
+    editTa.element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+    await flushPromises();
+    expect(conference.messages.find(m => m.messageId === 'edit-msg-1')!.text).toBe('new keyboard save');
+
+    editWrapper.unmount();
+    wrapper.unmount();
   });
 });

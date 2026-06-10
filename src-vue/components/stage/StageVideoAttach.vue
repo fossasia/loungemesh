@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import type { JitsiTrackLike } from '@/types/jitsi';
 
 const props = defineProps<{
   track?: JitsiTrackLike;
   mirrored?: boolean;
+  /** Fill the stage frame edge-to-edge (no letterboxing). */
+  fill?: boolean;
 }>();
 
 const videoEl = ref<HTMLVideoElement | null>(null);
@@ -31,9 +33,10 @@ onBeforeUnmount(detach);
     v-if="track"
     ref="videoEl"
     class="vid"
-    :class="{ mirror: mirrored }"
+    :class="{ mirror: mirrored, fill }"
     autoplay
     playsinline
+    disablePictureInPicture
   />
 </template>
 
@@ -44,6 +47,10 @@ onBeforeUnmount(detach);
   max-height: 200px;
   object-fit: cover;
   background: #0f172a;
+}
+.vid.fill {
+  height: 100%;
+  max-height: none;
 }
 .mirror {
   transform: scaleX(-1);

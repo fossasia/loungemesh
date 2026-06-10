@@ -1,0 +1,97 @@
+/* Camera-off placeholder: match the visible ring on live video tiles */
+.avatarTile:not(.desktop) {
+  border: 7px solid var(--line-dark);
+  box-sizing: border-box;
+}
+
+.avatarTile:not(.desktop).speaking {
+  border-color: var(--color-blue100);
+  animation: avatarSpeakPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes avatarSpeakPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.65);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(79, 110, 247, 0.28);
+  }
+}
+
+/* Reaction + hand-raise overlays on local/remote participant video tiles */
+.floatReact {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 2.5rem;
+  line-height: 1;
+  z-index: 10;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}
+
+.handBadge {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 3.75rem;
+  line-height: 1;
+  z-index: 10;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  animation: handBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    handFloat 2.5s ease-in-out 0.45s infinite;
+}
+
+@keyframes handBounce {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.3) rotate(-25deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes handFloat {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+.stageOccupantBadge {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-round);
+  background: var(--btn-highlight-bg);
+  color: var(--btn-highlight-fg);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.videoContainer.onStageOccupant:not(.desktop) {
+  border-color: var(--color-blue100);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.45);
+}
+
+.videoContainer.onStageOccupant:not(.desktop) .vid {
+  border-color: var(--color-blue100);
+}

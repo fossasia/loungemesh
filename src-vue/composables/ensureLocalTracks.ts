@@ -17,6 +17,8 @@ export async function ensureLocalTracks(
   if (!local.mute && !local.audio) devices.push('audio');
   if (!local.cameraOff && !local.video) devices.push('video');
   if (!devices.length) return existing;
+  // One createLocalTracks call merges audio+video into a single getUserMedia request.
+  // Parallel calls break Firefox (lost/failed concurrent capture requests).
   const tracks = await engine.createLocalTracks(devices);
   unlockMediaPlaybackNow(engine);
   const merged = [...existing];

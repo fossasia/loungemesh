@@ -24,7 +24,11 @@ function syncSession() {
     conferenceStore,
     engine,
     conferenceOptions,
-    resetSessionForJoin: () => useSessionFeaturesStore().resetHostForJoin(),
+    resetSessionForJoin: () => {
+      const features = useSessionFeaturesStore();
+      features.resetHostForJoin();
+      features.loadPersistedHostSettings(roomId);
+    },
   });
 }
 

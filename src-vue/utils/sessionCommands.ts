@@ -1,11 +1,23 @@
+import { canApplyChatEdit } from '@/utils/chatMessage';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+import { pollActivityChanged } from '@/utils/sessionPoll';
+import { playUiSound } from '@/utils/uiSounds';
+import {
+  applyStageDemote,
+  applyStageLayout,
+  applyStagePromote,
+  applyStageInvite,
+  type StageCommand,
+} from '@/utils/sessionStage';
 
-type CommandPayload = { value: string };
+export type CommandPayload = { value: string };
+
+const processedStageCommandIds = new Set<string>();
 
 function parse<T>(payload: CommandPayload): T | null {
   try {
@@ -73,14 +85,51 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       break;
     }
     case 'poll': {
-      features.applyPoll(parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload));
+      if (payload.value === 'null') {
+        features.applyPoll(null);
+        break;
+      }
+      const data = parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload);
+      if (!data) break;
+      const prev = features.activePoll;
+      const panelClosed = features.panel !== 'poll';
+      features.applyPoll(data);
+      if (pollActivityChanged(prev, features.activePoll)) {
+        features.bumpPollActivity();
+        if (panelClosed) playUiSound('chatMessage');
+      }
       break;
     }
     case 'notes': {
-      const data = parse<{ text?: string }>(payload);
-      if (data?.text != null) {
+      const data = parse<
+        import('@/utils/notesSync').NotesCommand | { text?: string }
+      >(payload);
+      if (!data) break;
+      if ('action' in data && data.action) {
+        features.applyNotesCommand(data);
+        break;
+      }
+      if (data.text != null) {
         features.sharedNotes = data.text;
         features.bumpNotesActivity();
+      }
+      break;
+    }
+    case 'room': {
+      const data = parse<
+        import('@/utils/roomBackgroundSync').RoomBackgroundCommand | {
+          gridBackgroundUrl?: string | null;
+        }
+      >(payload);
+      if (!data) break;
+      if ('action' in data && data.action) {
+        features.applyRoomBackgroundCommand(data);
+        break;
+      }
+      if (data.gridBackgroundUrl === null || data.gridBackgroundUrl === '') {
+        features.gridBackgroundUrl = '';
+      } else if (typeof data.gridBackgroundUrl === 'string') {
+        features.gridBackgroundUrl = data.gridBackgroundUrl;
       }
       break;
     }
@@ -101,14 +150,24 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
         messageId?: string;
         text?: string;
         editedAt?: number;
+        editorId?: string;
+        nr?: number;
       }>(payload);
       if (
         data?.action === 'edit' &&
         data.messageId &&
         data.text != null &&
-        data.editedAt != null
+        data.editedAt != null &&
+        data.editorId &&
+        canApplyChatEdit(conference.messages, data.messageId, data.editorId, data.nr)
       ) {
-        conference.editChatMessage(data.messageId, data.text, data.editedAt);
+        conference.editChatMessage(
+          data.messageId,
+          data.text,
+          data.editedAt,
+          data.nr,
+          data.editorId,
+        );
       }
       break;
     }
@@ -139,6 +198,41 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       if (data.action === 'stroke') {
         features.addWhiteboardStroke(data.stroke);
         features.bumpWhiteboardActivity();
+      }
+      break;
+    }
+    case 'stage': {
+      const data = parse<StageCommand & { _cmdId?: string }>(payload);
+      if (!data?.action) break;
+      if (data._cmdId) {
+        if (processedStageCommandIds.has(data._cmdId)) {
+          break;
+        }
+        processedStageCommandIds.add(data._cmdId);
+        if (processedStageCommandIds.size > 100) {
+          const first = processedStageCommandIds.values().next().value;
+          if (first !== undefined) {
+            processedStageCommandIds.delete(first);
+          }
+        }
+      }
+      if (data.action === 'invite' && data.id) {
+        const engine = getMediaEngineInstance();
+        applyStageInvite(engine, data.id);
+      }
+      if (data.action === 'promote' && data.id) {
+        applyStagePromote(data.id);
+      }
+      if (data.action === 'demote' && data.id) {
+        applyStageDemote(data.id);
+      }
+      if (data.action === 'layout' && data.layout) {
+        if (local.id !== features.stageOccupantId) {
+          applyStageLayout(data.layout);
+        }
+      }
+      if (data.action === 'settings' && data.stagePromotionEnabled != null) {
+        features.stagePromotionEnabled = data.stagePromotionEnabled;
       }
       break;
     }

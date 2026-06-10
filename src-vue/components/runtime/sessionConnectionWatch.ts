@@ -12,6 +12,7 @@ export type SessionConferenceState = {
   displayName: string;
   setConferenceName: (name: string) => void;
   leaveConference: () => void;
+  clearJoinState: () => void;
 };
 
 export type SessionConnectionDeps = {
@@ -24,6 +25,21 @@ export type SessionConnectionDeps = {
   resetSessionForJoin?: () => void;
 };
 
+function isActiveInRoom(deps: SessionConnectionDeps, roomId: string): boolean {
+  return (
+    deps.engine.isJoined() &&
+    deps.conferenceStore.isJoined &&
+    deps.conferenceStore.conferenceName === roomId
+  );
+}
+
+function clearStaleJoin(deps: SessionConnectionDeps): void {
+  if (deps.engine.isJoined()) deps.leaveRoom();
+  if (deps.conferenceStore.isJoined || deps.conferenceStore.isJoining) {
+    deps.conferenceStore.clearJoinState();
+  }
+}
+
 /** Handle route / connection changes for the session Jitsi lifecycle. */
 export async function handleSessionConnectionWatch(
   roomId: string,
@@ -33,6 +49,7 @@ export async function handleSessionConnectionWatch(
   if (!roomId) return;
 
   if (!isConnected) {
+    clearStaleJoin(deps);
     deps.conferenceStore.error = undefined;
     try {
       await deps.connect();
@@ -46,11 +63,14 @@ export async function handleSessionConnectionWatch(
   }
 
   if (shouldSkipConferenceJoin(deps.conferenceStore)) return;
+  if (isActiveInRoom(deps, roomId)) return;
+
   if (deps.conferenceStore.isJoined && deps.conferenceStore.conferenceName !== roomId) {
     deps.leaveRoom();
     deps.conferenceStore.leaveConference();
   }
-  if (deps.conferenceStore.isJoined && deps.conferenceStore.conferenceName === roomId) return;
+
+  clearStaleJoin(deps);
 
   deps.conferenceStore.error = undefined;
   deps.conferenceStore.setConferenceName(roomId);

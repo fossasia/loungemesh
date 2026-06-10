@@ -21,24 +21,46 @@ export function formatEditedAt(editedAt: number): string {
   }).format(new Date(editedAt));
 }
 
-export function canEditChatMessage(
-  message: ChatMessage,
-  localUserId: string,
-  isModerator: boolean,
+export function canEditChatMessage(message: ChatMessage, localUserId: string): boolean {
+  return !!localUserId && message.id === localUserId;
+}
+
+export type ChatMessageRef = {
+  messageId: string;
+  nr?: number;
+  authorId?: string;
+};
+
+export function findChatMessage(
+  messages: ChatMessage[],
+  ref: ChatMessageRef,
+): ChatMessage | undefined {
+  const byId = messages.find((m) => m.messageId === ref.messageId);
+  if (byId) return byId;
+  if (ref.nr == null || !ref.authorId) return undefined;
+  return messages.find((m) => m.nr === ref.nr && m.id === ref.authorId);
+}
+
+export function canApplyChatEdit(
+  messages: ChatMessage[],
+  messageId: string,
+  editorId: string,
+  nr?: number,
 ): boolean {
-  if (isModerator) return true;
-  return message.id === localUserId;
+  const message = findChatMessage(messages, { messageId, nr, authorId: editorId });
+  return !!message && message.id === editorId;
 }
 
 export function applyChatEdit(
   messages: ChatMessage[],
-  messageId: string,
+  ref: ChatMessageRef,
   text: string,
   editedAt: number,
 ): ChatMessage[] {
-  const idx = messages.findIndex((m) => m.messageId === messageId);
+  const current = findChatMessage(messages, ref);
+  if (!current) return messages;
+  const idx = messages.indexOf(current);
   if (idx < 0) return messages;
-  const current = messages[idx];
   if (current.text === text) return messages;
   const history = [...(current.history ?? []), current.text];
   const next = [...messages];

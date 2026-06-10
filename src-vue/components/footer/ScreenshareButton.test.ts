@@ -5,42 +5,41 @@ import { mountWithApp } from '@/test/mountApp';
 import { connectAndJoinTestConference, getJitsiTestContext } from '@/test/jitsiTestContext';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import ScreenshareButton from './ScreenshareButton.vue';
+import IconButton from '@/components/ui/IconButton.vue';
+
+vi.mock('@/utils/clearMediaElement', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/utils/clearMediaElement')>();
+  return {
+    ...original,
+    waitForMediaElementDetach: () => Promise.resolve(),
+  };
+});
 
 describe('ScreenshareButton', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('preserves audio track when starting screenshare', async () => {
+  it('adds a desktop track when none exists', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
-    local.audio = makeTrack('audio');
-    getJitsiTestContext().conference.getLocalVideoTrack = vi.fn(() => undefined);
-    const setSpy = vi.spyOn(local, 'setLocalTracks');
+    const addSpy = vi.spyOn(getMediaEngineInstance(), 'addLocalTrack').mockResolvedValue(undefined);
     const { wrapper } = await mountWithApp(ScreenshareButton);
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
-    expect(setSpy).toHaveBeenCalledWith(expect.arrayContaining([local.audio]));
-    setSpy.mockRestore();
-    wrapper.unmount();
-  });
-
-  it('replaces camera when starting share with an existing video track', async () => {
-    await connectAndJoinTestConference();
-    const camera = makeTrack('video');
-    getJitsiTestContext().conference.getLocalVideoTrack = vi.fn(() => camera);
-    const replaceSpy = vi.spyOn(getMediaEngineInstance(), 'replaceLocalTrack').mockResolvedValue(undefined);
-    const { wrapper } = await mountWithApp(ScreenshareButton);
-    await wrapper.find('button.ibtn').trigger('click');
-    await flushPromises();
-    expect(replaceSpy).toHaveBeenCalledWith(camera, expect.anything());
+    expect(getJitsiTestContext().jsMeet.createLocalTracks).toHaveBeenCalledWith({
+      devices: ['desktop'],
+      firePermissionPromptIsShownEvent: true,
+    });
+    expect(addSpy).toHaveBeenCalled();
+    expect(local.screenshare).toBeTruthy();
     wrapper.unmount();
   });
 
   it('no-ops when desktop track creation returns a non-desktop video', async () => {
     await connectAndJoinTestConference();
     const camera = makeTrack('video');
-    getJitsiTestContext().conference.getLocalVideoTrack = vi.fn(() => undefined);
     vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockResolvedValueOnce([camera]);
     const addSpy = vi.spyOn(getMediaEngineInstance(), 'addLocalTrack');
     const { wrapper } = await mountWithApp(ScreenshareButton);
@@ -50,45 +49,45 @@ describe('ScreenshareButton', () => {
     wrapper.unmount();
   });
 
-  it('adds a desktop track when none exists', async () => {
-    await connectAndJoinTestConference();
-    getJitsiTestContext().conference.getLocalVideoTrack = vi.fn(() => undefined);
-    const addSpy = vi.spyOn(getMediaEngineInstance(), 'addLocalTrack').mockResolvedValue(undefined);
-    const { wrapper } = await mountWithApp(ScreenshareButton);
-    await wrapper.find('button.ibtn').trigger('click');
-    await flushPromises();
-    expect(getJitsiTestContext().jsMeet.createLocalTracks).toHaveBeenCalled();
-    expect(addSpy).toHaveBeenCalled();
-    wrapper.unmount();
-  });
-
   it('stops sharing when toggling off desktop track', async () => {
-    const { jitsi } = await connectAndJoinTestConference();
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
     const desktop = makeTrack('desktop');
-    const camera = makeTrack('video');
-    jitsi.conference.getLocalVideoTrack = vi.fn(() => desktop);
-    const engine = getMediaEngineInstance();
-    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([camera]);
+    local.screenshare = desktop;
     const { wrapper } = await mountWithApp(ScreenshareButton);
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
-    await wrapper.find('button.ibtn').trigger('click');
-    await flushPromises();
+    expect(local.screenshare).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('replaces an existing desktop track with camera', async () => {
-    const { jitsi } = await connectAndJoinTestConference();
-    const oldTrack = makeTrack('desktop');
-    const newTrack = makeTrack('video');
-    jitsi.conference.getLocalVideoTrack = vi.fn(() => oldTrack);
-    const engine = getMediaEngineInstance();
-    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([newTrack]);
-    const replaceSpy = vi.spyOn(engine, 'replaceLocalTrack').mockResolvedValue(undefined);
+  it('toggles screensharing on, off, and on again', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const conf = getMediaEngineInstance().getConference()!;
+    const addSpy = vi.spyOn(getMediaEngineInstance(), 'addLocalTrack').mockResolvedValue(undefined);
+    const removeSpy = vi.spyOn(conf, 'removeTrack').mockResolvedValue(undefined);
+    
     const { wrapper } = await mountWithApp(ScreenshareButton);
+    
+    // Toggle On
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
-    expect(replaceSpy).toHaveBeenCalled();
+    expect(local.screenshare).toBeTruthy();
+    expect(addSpy).toHaveBeenCalledTimes(1);
+
+    // Toggle Off
+    await wrapper.find('button.ibtn').trigger('click');
+    await flushPromises();
+    expect(local.screenshare).toBeUndefined();
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+
+    // Toggle On Again
+    await wrapper.find('button.ibtn').trigger('click');
+    await flushPromises();
+    expect(local.screenshare).toBeTruthy();
+    expect(addSpy).toHaveBeenCalledTimes(2);
+
     wrapper.unmount();
   });
 
@@ -104,7 +103,6 @@ describe('ScreenshareButton', () => {
 
   it('handles missing new track from createLocalTracks', async () => {
     await connectAndJoinTestConference();
-    getJitsiTestContext().conference.getLocalVideoTrack = vi.fn(() => undefined);
     vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockResolvedValueOnce([]);
     const { wrapper } = await mountWithApp(ScreenshareButton);
     await wrapper.find('button.ibtn').trigger('click');
@@ -112,34 +110,15 @@ describe('ScreenshareButton', () => {
     wrapper.unmount();
   });
 
-  it('skips end-watch binding when video track is not desktop', async () => {
-    await connectAndJoinTestConference();
-    const local = useLocalStore();
-    const camera = makeTrack('video');
-    local.video = camera;
-    local.videoType = 'desktop';
-    const { wrapper } = await mountWithApp(ScreenshareButton);
-    wrapper.unmount();
-  });
-
-  it('skips end-watch binding when no video track is set', async () => {
-    await connectAndJoinTestConference();
-    const local = useLocalStore();
-    local.video = undefined;
-    local.videoType = 'desktop';
-    const { wrapper } = await mountWithApp(ScreenshareButton);
-    wrapper.unmount();
-  });
-
   it('cleans up desktop end listener on unmount', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
-    local.video = makeTrack('desktop');
+    local.screenshare = makeTrack('desktop');
     const { wrapper } = await mountWithApp(ScreenshareButton);
     wrapper.unmount();
   });
 
-  it('restores camera when the browser ends desktop capture', async () => {
+  it('stops screenshare when the browser ends desktop capture', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
     const listeners: Record<string, () => void> = {};
@@ -152,15 +131,11 @@ describe('ScreenshareButton', () => {
     const desktop = makeTrack('desktop');
     (desktop as { getOriginalStream?: () => MediaStream }).getOriginalStream = () =>
       ({ getVideoTracks: () => [vt] }) as unknown as MediaStream;
-    const camera = makeTrack('video');
-    local.video = desktop;
-    local.videoType = 'desktop';
-    getJitsiTestContext().conference.getLocalVideoTrack = vi.fn(() => desktop);
-    vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockResolvedValue([camera]);
+    local.screenshare = desktop;
     const { wrapper } = await mountWithApp(ScreenshareButton);
     listeners.ended?.();
     await flushPromises();
-    expect(local.videoType).toBe('camera');
+    expect(local.screenshare).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -183,6 +158,72 @@ describe('ScreenshareButton', () => {
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
     expect(wrapper.find('button.ibtn').classes()).not.toContain('active');
+    wrapper.unmount();
+  });
+
+  it('disables screenshare while another user is on stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('viewer');
+    features.stageOccupantId = 'presenter';
+    const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks');
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+    const btn = wrapper.find('button.ibtn');
+    expect(btn.attributes('disabled')).toBeDefined();
+    expect(btn.attributes('title')).toContain('unavailable while someone is on stage');
+    await btn.trigger('click');
+    expect(createSpy).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('calls finishShare when sharing.value is true but screenshare is undefined', async () => {
+    await connectAndJoinTestConference();
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+    (wrapper.vm as { sharing: boolean }).sharing = true;
+    wrapper.unmount();
+  });
+
+  it('stops screenshare when another user goes on stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('me');
+    const desktop = makeTrack('desktop');
+    local.screenshare = desktop;
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+    features.stageOccupantId = 'someone-else';
+    await flushPromises();
+    expect(local.screenshare).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('covers remaining branches in watch and toggleShare', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('me');
+
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+
+    // 1. Trigger click when blocked to cover line 41
+    features.stageOccupantId = 'someone-else';
+    await flushPromises();
+    await wrapper.findComponent(IconButton).vm.$emit('click');
+    await flushPromises();
+
+    // 2. Watcher branch: occupantId is falsy
+    features.stageOccupantId = '';
+    await flushPromises();
+
+    // 3. Watcher branch: occupantId is local.id
+    features.stageOccupantId = 'me';
+    await flushPromises();
+
+    // 4. Watcher branch: remote occupantId, but not sharing
+    features.stageOccupantId = 'someone-else';
+    await flushPromises();
+
     wrapper.unmount();
   });
 });

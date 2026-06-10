@@ -1,6 +1,6 @@
 import { playbackGainForUser } from '@/utils/participantPlaybackGain';
 
-type ProximityUser = { mute: boolean };
+export type ProximityUser = { mute: boolean };
 
 /** Apply a proximity volume update when the participant is known. */
 export function applyWorkerVolume(

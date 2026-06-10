@@ -31,6 +31,8 @@ const JITSI_LIBRARY_PATTERNS = [
   /Analytics disabled, disposing/i,
   /Connecting audio context/i,
   /^Strophe \d+/i,
+  /XML Parsing Error:/i,
+  /prefix not bound to a namespace/i,
 ];
 
 export function resetJitsiConsoleFilterForTests(): void {

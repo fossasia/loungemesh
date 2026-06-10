@@ -311,4 +311,15 @@ describe('JitsiConnection', () => {
     joinSpy.mockRestore();
     wrapper.unmount();
   });
+
+  it('covers useMediaEngine conferenceError branches', () => {
+    const engine = getMediaEngineInstance();
+    useMediaEngine();
+    
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    engine.emit('conferenceError', 'err');
+    
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    engine.emit('conferenceError', 'err');
+  });
 });

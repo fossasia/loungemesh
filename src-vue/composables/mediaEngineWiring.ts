@@ -15,6 +15,14 @@ import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
 import { normalizeSessionError } from '@/services/sessionErrorCodes';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
+import { broadcastSharedNotes } from '@/utils/notesSync';
+import { isOnStage } from '@/components/stage/isOnStage';
+import { defaultStageLayout } from '@/stores/sessionFeaturesStore';
+import {
+  clearStageIfParticipantLeft,
+  stopLocalScreenshareIfNeeded,
+} from '@/utils/sessionStage';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -55,11 +63,19 @@ export function wireStoreSync(engine: MediaService): void {
         features.approveLobby(id);
         engine.sendCommand('host', JSON.stringify({ hostId: id }));
         engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
+        if (features.applyNotesTemplateIfNeeded()) {
+          broadcastSharedNotes(engine, features.sharedNotes);
+        }
+        broadcastHostRoomSettings(engine, features);
       } else if (!features.hostId) {
         features.setHost(id);
         features.approveLobby(id);
         engine.sendCommand('host', JSON.stringify({ hostId: id }));
         engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
+        if (features.applyNotesTemplateIfNeeded()) {
+          broadcastSharedNotes(engine, features.sharedNotes);
+        }
+        broadcastHostRoomSettings(engine, features);
       } else if (features.lobbyEnabled && !features.lobbyApproved[id]) {
         features.localLobbyPending = true;
         engine.sendCommand(
@@ -103,12 +119,14 @@ export function wireStoreSync(engine: MediaService): void {
         JSON.stringify(grantsPayloadForSync(features.roomDefaults, id, features.userGrants)),
       );
       if (features.sharedNotes) {
-        engine.sendCommand('notes', JSON.stringify({ text: features.sharedNotes }));
+        broadcastSharedNotes(engine, features.sharedNotes);
       }
+      broadcastHostRoomSettings(engine, features);
     }
     scheduleReceiverRefresh();
   });
   engine.on('userLeft', (id) => {
+    clearStageIfParticipantLeft(id);
     conferenceStore.removeUser(id);
   });
   engine.on('displayNameChanged', (id, displayName) => {
@@ -123,7 +141,15 @@ export function wireStoreSync(engine: MediaService): void {
     }
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
-    conferenceStore.setUserTrack(id, kind, track);
+    if (kind === 'video' && track.isMuted()) {
+      if (track.videoType === 'desktop') {
+        conferenceStore.clearUserTrack(id, 'screenshare');
+      } else {
+        conferenceStore.clearUserTrack(id, 'video');
+      }
+    } else {
+      conferenceStore.setUserTrack(id, kind, track);
+    }
     if (kind === 'audio') {
       if (track.isMuted()) {
         engine.disconnectParticipantAudio?.(id);
@@ -144,7 +170,11 @@ export function wireStoreSync(engine: MediaService): void {
     const kind = track.getType() === 'audio' ? 'audio' : 'video';
     if (kind === 'video') {
       if (track.isMuted()) {
-        conferenceStore.clearUserTrack(id, 'video');
+        if (track.videoType === 'desktop') {
+          conferenceStore.clearUserTrack(id, 'screenshare');
+        } else {
+          conferenceStore.clearUserTrack(id, 'video');
+        }
       } else {
         conferenceStore.setUserTrack(id, kind, track);
       }
@@ -165,7 +195,15 @@ export function wireStoreSync(engine: MediaService): void {
     mediaDebugTrack('wiring', 'trackRemoved', track, { resolvedParticipantId: id, kind });
     if (!id) return;
     if (kind === 'audio') engine.disconnectParticipantAudio?.(id);
-    conferenceStore.clearUserTrack(id, kind);
+    if (kind === 'video') {
+      if (track.videoType === 'desktop') {
+        conferenceStore.clearUserTrack(id, 'screenshare');
+      } else {
+        conferenceStore.clearUserTrack(id, 'video');
+      }
+    } else {
+      conferenceStore.clearUserTrack(id, kind);
+    }
     if (kind === 'video') emitMediaStateSnapshot('trackRemoved');
     scheduleReceiverRefresh();
   });
@@ -173,26 +211,51 @@ export function wireStoreSync(engine: MediaService): void {
     conferenceStore.ingestChatMessage(id, text, nr);
   });
   engine.on('participantPropertyChanged', (id, properties) => {
-    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
-    const user = conferenceStore.users[id];
-    if (!user) return;
     const safe = sanitizeParticipantProperties(properties);
+    if ('handRaised' in safe) {
+      applyParticipantHandRaised(id, parseHandRaised(safe.handRaised));
+      delete safe.handRaised;
+    }
+    if ('onStage' in safe) {
+      const features = useSessionFeaturesStore();
+      const local = useLocalStore();
+      const onStage = isOnStage(safe.onStage);
+      // NOTE: Do NOT call applyStagePromote/applyStageDemote here.
+      // Those helpers call engine.setLocalParticipantProperty which triggers
+      // another participantPropertyChanged, creating an infinite loop.
+      // Instead, update store state directly (no engine re-broadcast).
+      if (onStage && (!features.stageOccupantId || features.stageOccupantId === id)) {
+        features.stageOccupantId = id;
+        features.stageInvitationPending = false;
+        features.invitedStageUserId = '';
+        void stopLocalScreenshareIfNeeded(local.id, id);
+        if (local.id === id) {
+          local.setOnStage(true);
+          // Don't re-call engine.setLocalParticipantProperty — we ARE responding to it.
+        }
+      } else if (!onStage && features.stageOccupantId === id) {
+        features.stageOccupantId = '';
+        features.stageLayout = defaultStageLayout();
+        features.stageInvitationPending = false;
+        features.invitedStageUserId = '';
+        if (local.id === id) {
+          local.setOnStage(false);
+          // Don't re-call engine.setLocalParticipantProperty — we ARE responding to it.
+        }
+      }
+    }
+    const user = conferenceStore.users[id];
+    if (!user || !Object.keys(safe).length) return;
     const patch: Partial<typeof user> = {
       properties: { ...user.properties, ...safe },
     };
     if ('speaking' in safe) {
       patch.speaking = safe.speaking === true || safe.speaking === 'true';
     }
-    if ('handRaised' in safe) {
-      patch.properties = {
-        ...patch.properties!,
-        handRaised: parseHandRaised(safe.handRaised),
-      };
-    }
     conferenceStore.patchUser(id, patch);
   });
   engine.on('participantSpeakingChanged', (id, speaking) => {
-    if (!conferenceStore.users[id]) conferenceStore.addUser(id);
+    if (!conferenceStore.users[id]) return;
     conferenceStore.patchUser(id, { speaking });
   });
   engine.on('command', (name, payload) => {

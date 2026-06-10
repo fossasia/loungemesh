@@ -8,6 +8,7 @@ import { spreadInitialUserPosition } from '@/constants/pan';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
 import { applyChatEdit, createChatMessage } from '@/utils/chatMessage';
+import { decodeChatWireText } from '@/utils/chatWireFormat';
 import { displayNameFromParticipant } from '@/utils/jitsiParticipant';
 
 export type Vector2 = { x: number; y: number };
@@ -20,6 +21,7 @@ export type RemoteUser = {
   pos: Vector2;
   audio?: JitsiTrack;
   video?: JitsiTrack;
+  screenshare?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   properties: Record<string, unknown>;
   /** Plain display-name snapshot — never store a Jitsi participant object. */
@@ -106,11 +108,23 @@ export const useConferenceStore = defineStore('conference', {
       }
       if (kind === 'audio') {
         this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
+      } else if (track.isMuted?.()) {
+        if (track.videoType === 'desktop') {
+          this.clearUserTrack(id, 'screenshare');
+        } else {
+          this.clearUserTrack(id, 'video');
+        }
       } else {
-        this.patchUser(id, {
-          video: markRaw(track),
-          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
-        });
+        if (track.videoType === 'desktop') {
+          this.patchUser(id, {
+            screenshare: markRaw(track),
+          });
+        } else {
+          this.patchUser(id, {
+            video: markRaw(track),
+            videoType: 'camera',
+          });
+        }
         mediaDebug('conferenceStore', 'setUserTrack:video', {
           id,
           muted: track.isMuted?.(),
@@ -119,10 +133,13 @@ export const useConferenceStore = defineStore('conference', {
         });
       }
     },
-    clearUserTrack(id: string, kind: 'audio' | 'video') {
+    clearUserTrack(id: string, kind: 'audio' | 'video' | 'screenshare') {
       if (!this.users[id]) return;
       if (kind === 'audio') {
         this.patchUser(id, { audio: undefined, mute: false });
+      } else if (kind === 'screenshare') {
+        this.patchUser(id, { screenshare: undefined });
+        mediaDebug('conferenceStore', 'clearUserTrack:screenshare', { id, usersEpoch: this.usersEpoch });
       } else {
         this.patchUser(id, { video: undefined, videoType: undefined });
         mediaDebug('conferenceStore', 'clearUserTrack:video', { id, usersEpoch: this.usersEpoch });
@@ -155,30 +172,52 @@ export const useConferenceStore = defineStore('conference', {
       this.messages = [...this.messages, msg];
     },
     ingestChatMessage(id: string, text: string, nr: number) {
-      if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === text)) {
+      const { messageId: wireId, text: displayText } = decodeChatWireText(text);
+      if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === displayText)) {
         return;
       }
       const pending = this.messages.findIndex(
-        (m) => m.id === id && m.text === text && m.nr < 0,
+        (m) => m.id === id && m.text === displayText && m.nr < 0,
       );
       if (pending >= 0) {
         const next = [...this.messages];
         const prev = next[pending];
-        next[pending] = { ...prev, id, text, nr };
+        next[pending] = {
+          ...prev,
+          id,
+          text: displayText,
+          nr,
+          messageId: wireId ?? prev.messageId,
+        };
         this.messages = next;
         return;
       }
-      this.messages = [...this.messages, createChatMessage(id, text, nr)];
+      this.messages = [...this.messages, createChatMessage(id, displayText, nr, wireId)];
     },
-    editChatMessage(messageId: string, text: string, editedAt: number) {
-      this.messages = applyChatEdit(this.messages, messageId, text, editedAt);
+    editChatMessage(
+      messageId: string,
+      text: string,
+      editedAt: number,
+      nr?: number,
+      authorId?: string,
+    ) {
+      this.messages = applyChatEdit(
+        this.messages,
+        { messageId, nr, authorId },
+        text,
+        editedAt,
+      );
     },
-    leaveConference() {
+    /** Drop Jitsi join state without clearing session features (transient reconnect). */
+    clearJoinState() {
       this.conferenceObject = undefined;
       this.isJoined = false;
       this.isJoining = false;
       this.users = {};
       this.usersEpoch += 1;
+    },
+    leaveConference() {
+      this.clearJoinState();
       this.messages = [];
       this.error = undefined;
       useSessionFeaturesStore().resetForLeave();

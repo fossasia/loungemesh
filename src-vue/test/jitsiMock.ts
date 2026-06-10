@@ -41,10 +41,12 @@ export function installJitsiMock(): JitsiMockHandles {
     setDisplayName: vi.fn(),
     sendTextMessage: vi.fn(),
     sendCommand: vi.fn(),
+    removeCommand: vi.fn(),
     addCommandListener: vi.fn((name: string, handler: Handler) => {
       conferenceHandlers.set(`cmd:${name}`, handler);
     }),
     addTrack: vi.fn().mockResolvedValue(undefined),
+    removeTrack: vi.fn().mockResolvedValue(undefined),
     replaceTrack: vi.fn().mockResolvedValue(undefined),
     setLocalParticipantProperty: vi.fn(),
     setReceiverConstraints: vi.fn(),
@@ -132,7 +134,12 @@ export function installJitsiMock(): JitsiMockHandles {
 }
 
 export function makeRemoteAudioTrack(id: string): JitsiTrack {
-  const stream = { id: 'stream-1' } as unknown as MediaStream;
+  const audioTrack = { kind: 'audio', readyState: 'live', stop: vi.fn() } as unknown as MediaStreamTrack;
+  const stream = {
+    id: 'stream-1',
+    getAudioTracks: () => [audioTrack],
+    getTracks: () => [audioTrack],
+  } as unknown as MediaStream;
   return {
     getType: () => 'audio',
     getParticipantId: () => id,
@@ -140,7 +147,9 @@ export function makeRemoteAudioTrack(id: string): JitsiTrack {
     isMuted: () => false,
     mute: vi.fn(),
     unmute: vi.fn(),
-    attach: vi.fn(),
+    attach: vi.fn((el: HTMLAudioElement) => {
+      el.srcObject = stream;
+    }),
     detach: vi.fn(),
     getOriginalStream: () => stream,
   } as unknown as JitsiTrack;

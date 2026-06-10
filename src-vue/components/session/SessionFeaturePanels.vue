@@ -4,15 +4,25 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import MenuCard from '@/components/common/MenuCard.vue';
+import NotesEditor from '@/components/session/NotesEditor.vue';
 import { notesPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
 import { kickParticipant, muteParticipant } from '@/utils/sessionModeration';
 import type { FeatureKey } from '@/types/userGrants';
+import {
+  demoteFromStage,
+  promoteToStage,
+  stageDisplayName,
+  syncStagePromotionEnabled,
+} from '@/utils/sessionStage';
 import {
   createNotesPushScheduler,
   featureCardStyleForPanel,
   nextNotesDraft,
   shouldPublishNotesDraft,
 } from '@/utils/sessionNotesPanel';
+import { broadcastSharedNotes } from '@/utils/notesSync';
+import HostRoomSettingsSection from '@/components/session/HostRoomSettingsSection.vue';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 const panelHeight = sessionPanelLayout.height;
 const panelBottom = sessionPanelLayout.bottom;
@@ -23,7 +33,6 @@ const featureLabels: Record<FeatureKey, string> = {
   notes: 'Notes',
   whiteboard: 'Board',
   poll: 'Polls',
-  stage: 'Stage',
 };
 
 const features = useSessionFeaturesStore();
@@ -89,11 +98,24 @@ const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: dispos
     if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
     if (features.sharedNotes !== notesEditBase.value) return;
     features.sharedNotes = text;
-    engine.sendCommand('notes', JSON.stringify({ text }));
+    broadcastSharedNotes(engine, text);
     notesDirty.value = false;
     notesEditBase.value = text;
   },
 );
+
+const canResetNotesToTemplate = computed(
+  () => features.isHost && !!features.notesTemplate.trim(),
+);
+
+function resetNotesToTemplate() {
+  cancelNotes();
+  features.resetSharedNotesToTemplate();
+  notesDraft.value = features.sharedNotes;
+  notesEditBase.value = features.sharedNotes;
+  notesDirty.value = false;
+  broadcastSharedNotes(engine, features.sharedNotes);
+}
 
 function syncLobby() {
   engine.sendCommand('lobby', JSON.stringify({ enabled: features.lobbyEnabled }));
@@ -138,6 +160,25 @@ function muteUser(id: string) {
   muteParticipant(conference, engine, id);
 }
 
+function onStagePromotionToggle(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked;
+  syncStagePromotionEnabled(engine, enabled);
+}
+
+function promoteUser(id: string) {
+  const result = promoteToStage(engine, id);
+  if (!result.ok) features.setStageMessage(result.message);
+}
+
+function demoteUser(id: string) {
+  demoteFromStage(engine, id);
+}
+
+const stageStatusLabel = computed(() => {
+  const id = features.stageOccupantId;
+  return id ? stageDisplayName(id) : 'Vacant';
+});
+
 function displayName(uid: string): string {
   conference.usersEpoch;
   return (
@@ -157,7 +198,8 @@ const panelOpen = computed(
     !!features.panel &&
     features.panel !== 'whiteboard' &&
     features.panel !== 'reactions' &&
-    features.panel !== 'poll',
+    features.panel !== 'poll' &&
+    features.panel !== 'chat',
 );
 
 const title = computed(() => {
@@ -182,7 +224,7 @@ const featureCardStyle = computed(() => {
     return {
       ...style,
       width: 'min(520px, calc(100vw - 32px))',
-      maxHeight: panelHeight,
+      maxHeight: 'min(960px, calc(100vh - 120px))',
     };
   }
   return style;
@@ -197,18 +239,54 @@ const featureCardStyle = computed(() => {
     :style="featureCardStyle"
     :onClose="() => (features.panel = '')"
   >
+    <template v-if="features.panel === 'notes' && canResetNotesToTemplate" #afterTitle>
+      <button type="button" class="notesResetBtn" @click="resetNotesToTemplate">
+        Reset to template
+      </button>
+    </template>
     <div v-if="features.panel === 'moderator'" class="body modBody">
+      <HostRoomSettingsSection v-if="features.isHost" />
+
+      <p v-if="features.stageMessage" class="stageMessage" role="status">{{ features.stageMessage }}</p>
+
       <section class="section">
-        <h3 class="sectionTitle">Room defaults</h3>
-        <p class="sectionHint">New participants start with these permissions unless overridden below.</p>
-        <div class="grantGrid grantGridHead">
-          <span />
-          <span v-for="key in (Object.keys(featureLabels) as FeatureKey[])" :key="key">{{
-            featureLabels[key]
-          }}</span>
+        <div class="roomControls">
+          <label class="roomToggle">
+            <input v-model="features.lobbyEnabled" type="checkbox" @change="syncLobby" />
+            <span>Lobby</span>
+          </label>
+          <label class="roomToggle">
+            <input
+              :checked="features.stagePromotionEnabled"
+              type="checkbox"
+              @change="onStagePromotionToggle"
+            />
+            <span>Allow stage promotion</span>
+          </label>
         </div>
-        <div class="grantGrid">
-          <span class="grantLabel">Everyone</span>
+        <p class="stageStatus">Stage: <strong>{{ stageStatusLabel }}</strong></p>
+        <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
+          <p class="sectionHint">Waiting to join</p>
+          <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
+            <span class="name">{{ w.name }}</span>
+            <button type="button" class="pill" @click="approve(w.id)">Admit</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3 class="sectionTitle">Feature access</h3>
+        <p class="sectionHint">Default permissions for new participants.</p>
+        <div class="grantTable" role="presentation">
+          <span class="grantCorner" aria-hidden="true" />
+          <span
+            v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+            :key="`head-${key}`"
+            class="grantColHead"
+          >
+            {{ featureLabels[key] }}
+          </span>
+          <span class="grantRowLabel">Everyone</span>
           <label
             v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
             :key="`room-${key}`"
@@ -224,37 +302,67 @@ const featureCardStyle = computed(() => {
       </section>
 
       <section class="section">
-        <label class="lobbyToggle">
-          <input v-model="features.lobbyEnabled" type="checkbox" @change="syncLobby" />
-          <span>Lobby / waiting room</span>
-        </label>
-        <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
-          <p class="sectionHint">Waiting to join</p>
-          <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
-            <span class="name">{{ w.name }}</span>
-            <button type="button" class="pill" @click="approve(w.id)">Admit</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h3 class="sectionTitle">Per participant</h3>
-        <p class="sectionHint">Override access for individuals. Host always has full access.</p>
+        <h3 class="sectionTitle">Participants</h3>
         <div
           v-for="uid in participantIds"
           :key="uid"
           class="participantCard"
-          :class="{ isHost: uid === features.hostId }"
+          :class="{ isHost: uid === features.hostId, onStage: uid === features.stageOccupantId }"
         >
           <div class="participantHead">
-            <span class="name">{{ displayName(uid) }}</span>
-            <span v-if="uid === features.hostId" class="badge">Host</span>
-            <div v-else class="modActions">
-              <button type="button" class="pill subtle" @click="muteUser(uid)">Mute</button>
-              <button type="button" class="pill warn" @click="kickUser(uid)">Remove</button>
+            <div class="participantMeta">
+              <span class="name">{{ displayName(uid) }}</span>
+              <span v-if="uid === features.hostId" class="badge">Host</span>
+              <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">On stage</span>
+              <span v-else-if="uid === features.invitedStageUserId" class="badge stageInvitedBadge">Invited</span>
+            </div>
+            <div class="modActions">
+              <button
+                v-if="features.canPromoteToStage && uid !== features.stageOccupantId && uid !== features.invitedStageUserId"
+                type="button"
+                class="pill"
+                @click="promoteUser(uid)"
+              >
+                Promote
+              </button>
+              <button
+                v-if="features.isHost && (uid === features.stageOccupantId || uid === features.invitedStageUserId)"
+                type="button"
+                class="pill subtle"
+                @click="demoteUser(uid)"
+              >
+                {{ uid === features.stageOccupantId ? 'Remove from stage' : 'Cancel invite' }}
+              </button>
+              <button
+                v-if="uid !== features.hostId"
+                type="button"
+                class="pill subtle iconBtnOnly"
+                title="Mute"
+                @click="muteUser(uid)"
+              >
+                <AppIcon name="mic-off" :size="16" />
+              </button>
+              <button
+                v-if="uid !== features.hostId"
+                type="button"
+                class="pill warn iconBtnOnly"
+                title="Remove"
+                @click="kickUser(uid)"
+              >
+                <AppIcon name="user-minus" :size="16" />
+              </button>
             </div>
           </div>
-          <div v-if="uid !== features.hostId" class="grantGrid grantGridCompact">
+          <div v-if="uid !== features.hostId" class="grantTable" role="presentation">
+            <span class="grantCorner" aria-hidden="true" />
+            <span
+              v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+              :key="`head-${uid}-${key}`"
+              class="grantColHead"
+            >
+              {{ featureLabels[key] }}
+            </span>
+            <span class="grantRowLabel">Permissions</span>
             <label
               v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
               :key="`${uid}-${key}`"
@@ -265,7 +373,6 @@ const featureCardStyle = computed(() => {
                 :checked="features.grantsForUser(uid)[key]"
                 @change="onUserGrantChange(uid, key, $event)"
               />
-              <span class="grantMini">{{ featureLabels[key] }}</span>
             </label>
           </div>
         </div>
@@ -273,16 +380,16 @@ const featureCardStyle = computed(() => {
     </div>
 
     <div v-else-if="features.panel === 'notes'" class="body notesBody">
-      <textarea
+      <NotesEditor
         v-model="notesDraft"
-        class="notesTa"
-        placeholder="Collaborative notes — visible to everyone in the call"
+        class="notesEditorWrap"
         :readonly="!features.canUseNotes"
-        @input="onNotesInput"
+        @update:model-value="onNotesInput"
         @blur="onNotesBlur"
       />
       <p class="hint">Edits sync in real time for everyone in the call.</p>
     </div>
+
   </MenuCard>
 </template>
 
@@ -294,9 +401,62 @@ const featureCardStyle = computed(() => {
   display: flex;
   flex-direction: column;
 }
-.featureCard.modCard,
+.featureCard.modCard {
+  height: auto;
+  min-height: min(768px, calc((100vh - 120px) * 0.8));
+  max-height: min(960px, calc(100vh - 120px));
+}
 .featureCard.notesCard {
   max-height: min(720px, calc(100vh - 100px));
+}
+.notesCard :deep(.header) {
+  align-items: center;
+  gap: 6px;
+}
+.notesCard :deep(.titleRow) {
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+.notesCard :deep(.close) {
+  transform: none;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
+  background: var(--btn-default-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.notesCard :deep(.close:hover) {
+  background: var(--btn-default-bg-hover);
+  border-color: var(--line-default);
+}
+.notesCard :deep(.x) {
+  font-size: 18px;
+  line-height: 1;
+}
+.notesResetBtn {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
+  padding: 4px 10px;
+  min-height: 28px;
+  box-sizing: border-box;
+  font-size: var(--fs-small);
+  font-family: var(--font-body);
+  background: var(--btn-default-bg);
+  color: var(--color-text-default);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notesResetBtn:hover {
+  background: var(--btn-default-bg-hover);
+  border-color: var(--line-default);
 }
 .body {
   flex: 1;
@@ -325,46 +485,76 @@ const featureCardStyle = computed(() => {
   font-size: var(--fs-small);
   color: var(--color-mono30);
 }
-.grantGrid {
-  display: grid;
-  grid-template-columns: 1fr repeat(4, 36px);
-  gap: 6px 8px;
-  align-items: center;
-}
-.grantGridHead {
-  font-size: var(--fs-small);
-  font-weight: var(--fw-medium);
-  color: var(--color-mono30);
-  text-align: center;
-}
-.grantGridHead span:first-child {
-  text-align: left;
-}
-.grantLabel {
-  font-size: var(--fs-small);
-  font-weight: var(--fw-medium);
-}
-.grantCheck {
+.roomControls {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  cursor: pointer;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 8px;
 }
-.grantMini {
-  font-size: 0.7rem;
-  color: var(--color-mono30);
-}
-.grantGridCompact {
-  grid-template-columns: repeat(4, 1fr);
-  margin-top: 8px;
-}
-.lobbyToggle {
+.roomToggle {
   display: flex;
   gap: 8px;
   align-items: center;
   font-size: var(--fs-body);
   cursor: pointer;
+}
+.stageStatus {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-mono30);
+}
+.stageMessage {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--btn-warning-bg);
+  color: var(--btn-warning-fg);
+  font-size: var(--fs-small);
+}
+.grantTable {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) repeat(3, minmax(52px, 1fr));
+  gap: 8px 10px;
+  align-items: center;
+}
+.grantCorner {
+  justify-self: start;
+}
+.grantColHead {
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+  color: var(--color-mono30);
+  text-align: center;
+}
+.grantRowLabel {
+  justify-self: start;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+}
+.grantCheck {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+.grantTableHead {
+  margin-bottom: 8px;
+}
+.participantCard .grantTable {
+  margin-top: 8px;
+}
+.participantMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.participantCard.onStage {
+  border-color: var(--color-blue100);
+}
+.stageBadge {
+  background: var(--btn-highlight-bg);
+  color: var(--btn-highlight-fg);
 }
 .lobbyBlock {
   margin-top: 10px;
@@ -428,22 +618,36 @@ const featureCardStyle = computed(() => {
   background: var(--btn-warning-bg);
   color: var(--btn-warning-fg);
 }
+.iconBtnOnly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.stageInvitedBadge {
+  background: var(--color-blue95);
+  color: var(--color-blue100);
+  border: 1px solid var(--color-blue100);
+  animation: pulseInvited 2s infinite;
+}
+@keyframes pulseInvited {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
+}
 .notesBody {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
-.notesTa {
+.notesEditorWrap {
   flex: 1;
+  min-width: 0;
   min-height: 0;
-  resize: none;
-  width: 100%;
-  box-sizing: border-box;
-  font-family: var(--font-body);
-  border: 1px solid var(--line-dark);
-  border-radius: var(--radius-sm);
-  padding: 8px;
+  display: flex;
 }
 .hint {
   font-size: var(--fs-small);

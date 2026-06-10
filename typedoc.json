@@ -17,5 +17,8 @@
   "excludePrivate": true,
   "excludeProtected": true,
   "hideGenerator": true,
-  "githubPages": false
+  "githubPages": false,
+  "validation": {
+    "notExported": false
+  }
 }

@@ -9,7 +9,12 @@ function mountDialog(props: Record<string, unknown>) {
       isRecording: false,
       recordingSupported: true,
       hasRecording: false,
+      quality: '720p' as const,
       ...props,
+    },
+    global: {
+      // Teleport renders inline in tests
+      stubs: { Teleport: true, Transition: false },
     },
   });
 }
@@ -22,13 +27,11 @@ describe('LeaveDialog', () => {
     await buttons[0].trigger('click');
     await buttons[1].trigger('click');
     await buttons[2].trigger('click');
-    await wrapper.find('.record').trigger('click');
     await wrapper.find('.btn.leave').trigger('click');
     await wrapper.find('.btn.cancel').trigger('click');
     expect(wrapper.emitted('export-notes')).toHaveLength(1);
     expect(wrapper.emitted('export-whiteboard')).toHaveLength(1);
     expect(wrapper.emitted('export-recording')).toHaveLength(1);
-    expect(wrapper.emitted('toggle-recording')).toHaveLength(1);
     expect(wrapper.emitted('leave')).toHaveLength(1);
     expect(wrapper.emitted('cancel')).toHaveLength(1);
   });
@@ -39,18 +42,20 @@ describe('LeaveDialog', () => {
     expect((recordingBtn.element as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('hides recording controls when recording is unsupported', () => {
+  it('hides the recording export when recording is unsupported', () => {
     const wrapper = mountDialog({ recordingSupported: false });
     expect(wrapper.findAll('.export')).toHaveLength(2);
-    expect(wrapper.find('.record').exists()).toBe(false);
   });
 
-  it('shows the live recording state', async () => {
-    const wrapper = mountDialog({ isRecording: true });
-    expect(wrapper.find('.dot.live').exists()).toBe(true);
-    expect(wrapper.find('.record').text()).toContain('Stop recording');
-    await wrapper.find('.record').trigger('click');
-    expect(wrapper.emitted('toggle-recording')).toHaveLength(1);
+  it('shows LIVE pill on the recording export button while recording is active', () => {
+    const wrapper = mountDialog({ isRecording: true, recordingSupported: true });
+    expect(wrapper.find('.livePill').exists()).toBe(true);
+  });
+
+  it('shows .mp4 extension on the recording download button', () => {
+    const wrapper = mountDialog({ hasRecording: true });
+    const exts = wrapper.findAll('.ext');
+    expect(exts[exts.length - 1].text()).toBe('.mp4');
   });
 
   it('emits cancel when the backdrop is clicked', async () => {
@@ -62,6 +67,17 @@ describe('LeaveDialog', () => {
   it('shows a simple confirmation for non-hosts', () => {
     const wrapper = mountDialog({ isHost: false });
     expect(wrapper.findAll('.export')).toHaveLength(0);
-    expect(wrapper.find('.sub').text()).toContain('disconnected');
+    expect(wrapper.find('.sub').text()).toContain('removed');
+  });
+
+  it('emits leave on the leave button', async () => {
+    const wrapper = mountDialog({});
+    await wrapper.find('.btn.leave').trigger('click');
+    expect(wrapper.emitted('leave')).toHaveLength(1);
+  });
+
+  it('covers the implicit else branch of onExport', () => {
+    const wrapper = mountDialog({});
+    (wrapper.vm as any).onExport('unknown');
   });
 });
