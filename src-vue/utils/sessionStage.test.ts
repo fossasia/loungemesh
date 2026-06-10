@@ -6,6 +6,7 @@ import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   STAGE_OCCUPIED_MESSAGE,
   applyStagePromote,
+  applyStageInvite,
   broadcastStageLayout,
   canDemoteFromStage,
   canPromoteToStage,
@@ -29,6 +30,8 @@ describe('sessionStage', () => {
   });
 
   it('guards promotion and demotion', () => {
+    const local = useLocalStore();
+    local.setMyID('u1');
     expect(canPromoteToStage(false, true, '', 'u2')).toEqual({
       ok: false,
       message: 'Only the host can promote to stage.',
@@ -42,8 +45,26 @@ describe('sessionStage', () => {
       message: STAGE_OCCUPIED_MESSAGE,
     });
     expect(canPromoteToStage(true, true, '', 'u2')).toEqual({ ok: true });
+    
+    // Host demoting occupant
     expect(canDemoteFromStage(true, 'u1', 'u1')).toBe(true);
     expect(canDemoteFromStage(true, 'u1', 'u2')).toBe(false);
+
+    // Non-host self-demotion
+    expect(canDemoteFromStage(false, 'u1', 'u1')).toBe(true);
+
+    // Non-host demoting another user
+    expect(canDemoteFromStage(false, 'u1', 'u2')).toBe(false);
+
+    // Host canceling invitation for invited guest
+    const features = useSessionFeaturesStore();
+    features.invitedStageUserId = 'u2';
+    expect(canDemoteFromStage(true, '', 'u2')).toBe(true);
+
+    // Guest declining/canceling self-invite
+    local.setMyID('u2');
+    features.stageInvitationPending = true;
+    expect(canDemoteFromStage(false, '', 'u2')).toBe(true);
   });
 
   it('notifies the local occupant when promoted to stage', () => {
@@ -67,8 +88,11 @@ describe('sessionStage', () => {
 
     const promote = promoteToStage(engine, 'guest');
     expect(promote).toEqual({ ok: true });
+    expect(features.invitedStageUserId).toBe('guest');
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"invite"'));
+
+    applyStagePromote('guest');
     expect(features.stageOccupantId).toBe('guest');
-    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"promote"'));
 
     demoteFromStage(engine, 'guest');
     expect(features.stageOccupantId).toBe('');
@@ -112,5 +136,28 @@ describe('sessionStage', () => {
     expect(features.stageOccupantId).toBe('');
     clearStageIfParticipantLeft('u2');
     expect(features.stageOccupantId).toBe('');
+  });
+
+  it('handles applyStageInvite for remote users', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    local.setMyID('host');
+    
+    applyStageInvite(engine, 'guest');
+    expect(features.invitedStageUserId).toBe('guest');
+    expect(features.stageInvitationPending).toBe(false);
+  });
+
+  it('handles promoting self to stage', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    local.setMyID('host');
+    features.setHost('host');
+    features.stagePromotionEnabled = true;
+
+    promoteToStage(engine, 'host');
+    expect(features.stageInvitationPending).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import JitsiConnection from '@/components/runtime/JitsiConnection.vue';
 import LocalStoreLogic from '@/components/runtime/LocalStoreLogic.vue';
@@ -14,7 +14,8 @@ import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
 import SharedScreens from '@/components/screenshare/SharedScreens.vue';
-import { demoteFromStage } from '@/utils/sessionStage';
+import { demoteFromStage, applyStagePromote, broadcastStageLayout } from '@/utils/sessionStage';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 
 const ChatPanel = defineAsyncComponent(() => import('@/components/chat/ChatPanel.vue'));
 const StagePresentation = defineAsyncComponent(
@@ -27,6 +28,9 @@ const SessionFeaturePanels = defineAsyncComponent(
 const LobbyOverlay = defineAsyncComponent(() => import('@/components/session/LobbyOverlay.vue'));
 const WhiteboardOverlay = defineAsyncComponent(
   () => import('@/components/session/WhiteboardOverlay.vue'),
+);
+const StagePreviewDialog = defineAsyncComponent(
+  () => import('@/components/stage/StagePreviewDialog.vue'),
 );
 import { useLocalStore } from '@/stores/localStore';
 import { useConferenceStore } from '@/stores/conferenceStore';
@@ -105,6 +109,44 @@ async function doLeave() {
   disconnect();
   router.push('/');
 }
+
+const showStagePreviewDialog = ref(false);
+
+let stageInviteInterval: ReturnType<typeof setInterval> | undefined;
+
+watch(
+  () => [features.stageInvitationPending, features.isLocalStageOccupant] as const,
+  ([pending, isOccupant]) => {
+    if (pending && !isOccupant) {
+      showStagePreviewDialog.value = true;
+    } else if (!pending && !isOccupant) {
+      showStagePreviewDialog.value = false;
+    }
+  }
+);
+
+watch(
+  () => [features.stageInvitationPending, features.isLocalStageOccupant, showStagePreviewDialog.value] as const,
+  ([pending, isOccupant, dialogOpen]) => {
+    if (stageInviteInterval) {
+      clearInterval(stageInviteInterval);
+      stageInviteInterval = undefined;
+    }
+    if (pending && !isOccupant && dialogOpen) {
+      playUiSound('stageInvite');
+      stageInviteInterval = setInterval(() => {
+        playUiSound('stageInvite');
+      }, 4000);
+    }
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  if (stageInviteInterval) {
+    clearInterval(stageInviteInterval);
+  }
+});
 </script>
 
 <template>
@@ -126,14 +168,18 @@ async function doLeave() {
     v-if="features.panel === 'whiteboard'"
     :on-close="() => (features.panel = '')"
   />
+  <StagePreviewDialog
+    v-if="showStagePreviewDialog"
+    @close="showStagePreviewDialog = false"
+  />
   <StagePresentation
-    v-if="features.isStageModeActive && !features.isLocalStageOccupant"
+    v-if="features.isStageModeActive"
     mode="audience"
   />
   <p v-if="features.stageMessage" class="stageToast" role="status">{{ features.stageMessage }}</p>
   <Transition name="fade">
     <div
-      v-if="features.panel && features.panel !== 'whiteboard'"
+      v-if="features.panel && features.panel !== 'whiteboard' && features.panel !== 'notes' && features.panel !== 'chat'"
       class="panelBackdrop"
       @click="features.panel = ''"
     />
@@ -161,6 +207,19 @@ async function doLeave() {
       </template>
     </IconButton>
     <ScreenshareButton />
+    <IconButton
+      v-if="features.stageInvitationPending || features.isLocalStageOccupant"
+      label="Stage Settings"
+      :active="showStagePreviewDialog"
+      :warning="features.stageInvitationPending"
+      class="stageBtn"
+      :class="{ animatePulse: features.stageInvitationPending }"
+      @click="showStagePreviewDialog = !showStagePreviewDialog"
+    >
+      <template #icon>
+        <AppIcon name="stage" />
+      </template>
+    </IconButton>
     <SessionRecordButton
       v-if="features.isHost && recorder.isSupported"
       :is-recording="recorder.isRecording.value"
@@ -226,7 +285,7 @@ async function doLeave() {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.25);
-  z-index: 3999;
+  z-index: 4400;
   pointer-events: auto;
   backdrop-filter: blur(2px);
 }
@@ -239,5 +298,17 @@ async function doLeave() {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+@keyframes pulseBtn {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.animatePulse {
+  animation: pulseBtn 2s infinite;
+  background: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-fg) !important;
 }
 </style>

@@ -7,6 +7,12 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import SessionPage from './SessionPage.vue';
+import { playUiSound } from '@/utils/uiSounds';
+
+vi.mock('@/utils/uiSounds', () => ({
+  playUiSound: vi.fn(),
+  resetUiSoundsForTests: vi.fn(),
+}));
 
 vi.mock('@/components/screenshare/SharedScreens.vue', () => ({
   default: {
@@ -53,7 +59,7 @@ describe('SessionPage', () => {
     wrapper.unmount();
   });
 
-  it('shows the audience stage view only for non-occupants', async () => {
+  it('shows the stage view for everyone, including the occupant', async () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('presenter');
@@ -65,7 +71,7 @@ describe('SessionPage', () => {
       global: { stubs: sessionStubs },
     });
     await flushPromises();
-    expect(wrapper.find('.stage-presentation-stub').exists()).toBe(false);
+    expect(wrapper.find('.stage-presentation-stub').exists()).toBe(true);
     wrapper.unmount();
 
     local.setMyID('viewer');
@@ -397,6 +403,45 @@ describe('SessionPage', () => {
     await flushPromises();
     expect(resetSpy).toHaveBeenCalled();
     resetSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('plays persistent invitation sound when stageInvitationPending is true', async () => {
+    vi.mocked(playUiSound).mockClear();
+    vi.useFakeTimers();
+
+    const features = useSessionFeaturesStore();
+    features.stageInvitationPending = false;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    expect(playUiSound).not.toHaveBeenCalled();
+
+    features.stageInvitationPending = true;
+    await flushPromises();
+
+    expect(playUiSound).toHaveBeenLastCalledWith('stageInvite');
+    expect(playUiSound).toHaveBeenCalledTimes(1);
+
+    // Fast-forward time
+    vi.advanceTimersByTime(4000);
+    expect(playUiSound).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(4000);
+    expect(playUiSound).toHaveBeenCalledTimes(3);
+
+    features.stageInvitationPending = false;
+    await flushPromises();
+
+    vi.advanceTimersByTime(4000);
+    expect(playUiSound).toHaveBeenCalledTimes(3); // should stop playing
+
+    vi.useRealTimers();
     wrapper.unmount();
   });
 });

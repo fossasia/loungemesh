@@ -308,18 +308,58 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('stage', { value: JSON.stringify({ action: 'promote', id: 'guest' }) });
     expect(features.stageOccupantId).toBe('guest');
     expect(local.onStage).toBe(true);
+
+    // Set occupant to someone else to test layout sync commands (bypassing loopback check)
+    features.stageOccupantId = 'someone-else';
     handleSessionCommand(
       'stage',
       { value: JSON.stringify({ action: 'layout', layout: { scale: 1.2, expanded: true } }) },
     );
     expect(features.stageLayout.scale).toBe(1.2);
     expect(features.stageLayout.expanded).toBe(true);
+
+    // Restore guest occupant
+    features.stageOccupantId = 'guest';
     handleSessionCommand('stage', { value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true }) });
     expect(features.stagePromotionEnabled).toBe(true);
     handleSessionCommand('stage', { value: JSON.stringify({ action: 'demote', id: 'guest' }) });
     expect(features.stageOccupantId).toBe('');
     expect(local.onStage).toBe(false);
     handleSessionCommand('stage', { value: 'bad' });
+  });
+
+  it('deduplicates stage commands with unique cmdId and trims processed cache', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+
+    // First invite should succeed
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: 'unique-1' }),
+    });
+    expect(features.stageInvitationPending).toBe(true);
+
+    // Clear state
+    features.stageInvitationPending = false;
+
+    // Second invite with same cmdId should be ignored
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: 'unique-1' }),
+    });
+    expect(features.stageInvitationPending).toBe(false);
+
+    // Invite with new cmdId should succeed
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: 'unique-2' }),
+    });
+    expect(features.stageInvitationPending).toBe(true);
+
+    // Flood with 105 unique commands to cover cache pruning logic
+    for (let i = 0; i < 105; i++) {
+      handleSessionCommand('stage', {
+        value: JSON.stringify({ action: 'invite', id: 'guest', _cmdId: `unique-flood-${i}` }),
+      });
+    }
   });
 
   it('handles unknown command names', () => {

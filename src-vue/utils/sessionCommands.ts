@@ -11,10 +11,13 @@ import {
   applyStageDemote,
   applyStageLayout,
   applyStagePromote,
+  applyStageInvite,
   type StageCommand,
 } from '@/utils/sessionStage';
 
 type CommandPayload = { value: string };
+
+const processedStageCommandIds = new Set<string>();
 
 function parse<T>(payload: CommandPayload): T | null {
   try {
@@ -199,8 +202,24 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       break;
     }
     case 'stage': {
-      const data = parse<StageCommand>(payload);
+      const data = parse<StageCommand & { _cmdId?: string }>(payload);
       if (!data?.action) break;
+      if (data._cmdId) {
+        if (processedStageCommandIds.has(data._cmdId)) {
+          break;
+        }
+        processedStageCommandIds.add(data._cmdId);
+        if (processedStageCommandIds.size > 100) {
+          const first = processedStageCommandIds.values().next().value;
+          if (first !== undefined) {
+            processedStageCommandIds.delete(first);
+          }
+        }
+      }
+      if (data.action === 'invite' && data.id) {
+        const engine = getMediaEngineInstance();
+        applyStageInvite(engine, data.id);
+      }
       if (data.action === 'promote' && data.id) {
         applyStagePromote(data.id);
       }
@@ -208,7 +227,9 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
         applyStageDemote(data.id);
       }
       if (data.action === 'layout' && data.layout) {
-        applyStageLayout(data.layout);
+        if (local.id !== features.stageOccupantId) {
+          applyStageLayout(data.layout);
+        }
       }
       if (data.action === 'settings' && data.stagePromotionEnabled != null) {
         features.stagePromotionEnabled = data.stagePromotionEnabled;

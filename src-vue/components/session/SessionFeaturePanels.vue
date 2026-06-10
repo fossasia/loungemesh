@@ -22,6 +22,7 @@ import {
 } from '@/utils/sessionNotesPanel';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import HostRoomSettingsSection from '@/components/session/HostRoomSettingsSection.vue';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 const panelHeight = sessionPanelLayout.height;
 const panelBottom = sessionPanelLayout.bottom;
@@ -223,7 +224,7 @@ const featureCardStyle = computed(() => {
     return {
       ...style,
       width: 'min(520px, calc(100vw - 32px))',
-      maxHeight: panelHeight,
+      maxHeight: 'min(960px, calc(100vh - 120px))',
     };
   }
   return style;
@@ -313,10 +314,11 @@ const featureCardStyle = computed(() => {
               <span class="name">{{ displayName(uid) }}</span>
               <span v-if="uid === features.hostId" class="badge">Host</span>
               <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">On stage</span>
+              <span v-else-if="uid === features.invitedStageUserId" class="badge stageInvitedBadge">Invited</span>
             </div>
             <div class="modActions">
               <button
-                v-if="features.canPromoteToStage && uid !== features.stageOccupantId"
+                v-if="features.canPromoteToStage && uid !== features.stageOccupantId && uid !== features.invitedStageUserId"
                 type="button"
                 class="pill"
                 @click="promoteUser(uid)"
@@ -324,33 +326,43 @@ const featureCardStyle = computed(() => {
                 Promote
               </button>
               <button
-                v-if="features.isHost && uid === features.stageOccupantId"
+                v-if="features.isHost && (uid === features.stageOccupantId || uid === features.invitedStageUserId)"
                 type="button"
                 class="pill subtle"
                 @click="demoteUser(uid)"
               >
-                Remove from stage
+                {{ uid === features.stageOccupantId ? 'Remove from stage' : 'Cancel invite' }}
               </button>
               <button
                 v-if="uid !== features.hostId"
                 type="button"
-                class="pill subtle"
+                class="pill subtle iconBtnOnly"
+                title="Mute"
                 @click="muteUser(uid)"
               >
-                Mute
+                <AppIcon name="mic-off" :size="16" />
               </button>
               <button
                 v-if="uid !== features.hostId"
                 type="button"
-                class="pill warn"
+                class="pill warn iconBtnOnly"
+                title="Remove"
                 @click="kickUser(uid)"
               >
-                Remove
+                <AppIcon name="user-minus" :size="16" />
               </button>
             </div>
           </div>
           <div v-if="uid !== features.hostId" class="grantTable" role="presentation">
             <span class="grantCorner" aria-hidden="true" />
+            <span
+              v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+              :key="`head-${uid}-${key}`"
+              class="grantColHead"
+            >
+              {{ featureLabels[key] }}
+            </span>
+            <span class="grantRowLabel">Permissions</span>
             <label
               v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
               :key="`${uid}-${key}`"
@@ -389,7 +401,11 @@ const featureCardStyle = computed(() => {
   display: flex;
   flex-direction: column;
 }
-.featureCard.modCard,
+.featureCard.modCard {
+  height: auto;
+  min-height: min(768px, calc((100vh - 120px) * 0.8));
+  max-height: min(960px, calc(100vh - 120px));
+}
 .featureCard.notesCard {
   max-height: min(720px, calc(100vh - 100px));
 }
@@ -601,6 +617,25 @@ const featureCardStyle = computed(() => {
 .pill.warn {
   background: var(--btn-warning-bg);
   color: var(--btn-warning-fg);
+}
+.iconBtnOnly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.stageInvitedBadge {
+  background: var(--color-blue95);
+  color: var(--color-blue100);
+  border: 1px solid var(--color-blue100);
+  animation: pulseInvited 2s infinite;
+}
+@keyframes pulseInvited {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
 }
 .notesBody {
   display: flex;

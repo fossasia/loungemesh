@@ -19,7 +19,10 @@ import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import { isOnStage } from '@/components/stage/isOnStage';
 import { defaultStageLayout } from '@/stores/sessionFeaturesStore';
-import { clearStageIfParticipantLeft } from '@/utils/sessionStage';
+import {
+  clearStageIfParticipantLeft,
+  stopLocalScreenshareIfNeeded,
+} from '@/utils/sessionStage';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -217,13 +220,28 @@ export function wireStoreSync(engine: MediaService): void {
       const features = useSessionFeaturesStore();
       const local = useLocalStore();
       const onStage = isOnStage(safe.onStage);
+      // NOTE: Do NOT call applyStagePromote/applyStageDemote here.
+      // Those helpers call engine.setLocalParticipantProperty which triggers
+      // another participantPropertyChanged, creating an infinite loop.
+      // Instead, update store state directly (no engine re-broadcast).
       if (onStage && (!features.stageOccupantId || features.stageOccupantId === id)) {
         features.stageOccupantId = id;
-        if (local.id === id) local.setOnStage(true);
+        features.stageInvitationPending = false;
+        features.invitedStageUserId = '';
+        void stopLocalScreenshareIfNeeded(local.id, id);
+        if (local.id === id) {
+          local.setOnStage(true);
+          // Don't re-call engine.setLocalParticipantProperty — we ARE responding to it.
+        }
       } else if (!onStage && features.stageOccupantId === id) {
         features.stageOccupantId = '';
         features.stageLayout = defaultStageLayout();
-        if (local.id === id) local.setOnStage(false);
+        features.stageInvitationPending = false;
+        features.invitedStageUserId = '';
+        if (local.id === id) {
+          local.setOnStage(false);
+          // Don't re-call engine.setLocalParticipantProperty — we ARE responding to it.
+        }
       }
     }
     const user = conferenceStore.users[id];

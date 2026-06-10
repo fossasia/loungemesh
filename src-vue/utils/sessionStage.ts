@@ -11,6 +11,7 @@ import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { stopLocalScreenshare } from '@/utils/localScreenshare';
 
 export type StageCommand =
+  | { action: 'invite'; id: string }
   | { action: 'promote'; id: string; by?: string }
   | { action: 'demote'; id: string }
   | { action: 'layout'; layout: Partial<StageLayout> }
@@ -42,11 +43,20 @@ export function canPromoteToStage(
 }
 
 export function canDemoteFromStage(isHost: boolean, stageOccupantId: string, targetId: string): boolean {
-  return isHost && stageOccupantId === targetId;
+  const local = useLocalStore();
+  const features = useSessionFeaturesStore();
+  const isSelf = !!(local.id && local.id === targetId);
+  const isOccupant = stageOccupantId === targetId;
+  const isInvited = features.invitedStageUserId === targetId || (isSelf && features.stageInvitationPending);
+  return (isHost || isSelf) && (isOccupant || isInvited);
 }
 
 function sendStageCommand(engine: MediaService, command: StageCommand): void {
-  engine.sendCommand('stage', JSON.stringify(command));
+  const cmdWithId = {
+    ...command,
+    _cmdId: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+  };
+  engine.sendCommand('stage', JSON.stringify(cmdWithId));
 }
 
 export async function stopLocalScreenshareIfNeeded(localId: string, stageOccupantId: string): Promise<void> {
@@ -61,11 +71,26 @@ function applyLocalOnStage(onStage: boolean): void {
   engine.setLocalParticipantProperty('onStage', onStage);
 }
 
+export function applyStageInvite(engine: MediaService, targetId: string): void {
+  const features = useSessionFeaturesStore();
+  const local = useLocalStore();
+
+  if (local.id === targetId) {
+    if (features.stageOccupantId !== local.id) {
+      features.stageInvitationPending = true;
+    }
+  } else {
+    features.invitedStageUserId = targetId;
+  }
+}
+
 export function applyStagePromote(id: string): void {
   const features = useSessionFeaturesStore();
   const local = useLocalStore();
   const wasLocalOccupant = local.id === id && features.stageOccupantId === id && local.onStage;
   features.stageOccupantId = id;
+  features.stageInvitationPending = false;
+  features.invitedStageUserId = '';
   void stopLocalScreenshareIfNeeded(local.id, id);
   if (local.id === id) {
     applyLocalOnStage(true);
@@ -75,6 +100,11 @@ export function applyStagePromote(id: string): void {
   }
 }
 
+export function goLiveOnStage(engine: MediaService, localId: string): void {
+  sendStageCommand(engine, { action: 'promote', id: localId });
+  applyStagePromote(localId);
+}
+
 export function applyStageDemote(id: string): void {
   const features = useSessionFeaturesStore();
   const local = useLocalStore();
@@ -82,6 +112,8 @@ export function applyStageDemote(id: string): void {
     features.stageOccupantId = '';
     features.stageLayout = defaultStageLayout();
   }
+  features.stageInvitationPending = false;
+  features.invitedStageUserId = '';
   if (local.id === id) {
     applyLocalOnStage(false);
   }
@@ -102,8 +134,14 @@ export function promoteToStage(engine: MediaService, targetId: string): { ok: tr
     targetId,
   );
   if (!check.ok) return check;
-  sendStageCommand(engine, { action: 'promote', id: targetId, by: local.id });
-  applyStagePromote(targetId);
+
+  const isTargetLocal = local.id === targetId;
+  sendStageCommand(engine, { action: 'invite', id: targetId });
+  if (isTargetLocal) {
+    features.stageInvitationPending = true;
+  } else {
+    features.invitedStageUserId = targetId;
+  }
   return { ok: true };
 }
 

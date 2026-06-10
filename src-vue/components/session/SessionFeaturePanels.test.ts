@@ -133,9 +133,9 @@ describe('SessionFeaturePanels', () => {
       .find((row) => row.text().includes('Peer'));
     expect(peerCard).toBeTruthy();
     await peerCard!.find('.pill').trigger('click');
-    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"promote"'));
-    const muteBtn = peerCard!.findAll('.pill.subtle').find((btn) => btn.text() === 'Mute');
-    const removeBtn = peerCard!.findAll('.pill.warn').find((btn) => btn.text() === 'Remove');
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"invite"'));
+    const muteBtn = peerCard!.find('button[title="Mute"]');
+    const removeBtn = peerCard!.find('button[title="Remove"]');
     await muteBtn!.trigger('click');
     await removeBtn!.trigger('click');
     const peerGrant = peerCard!.find('.grantCheck input');
