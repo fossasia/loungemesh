@@ -9,6 +9,12 @@ import { notesPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
 import { kickParticipant, muteParticipant } from '@/utils/sessionModeration';
 import type { FeatureKey } from '@/types/userGrants';
 import {
+  demoteFromStage,
+  promoteToStage,
+  stageDisplayName,
+  syncStagePromotionEnabled,
+} from '@/utils/sessionStage';
+import {
   createNotesPushScheduler,
   featureCardStyleForPanel,
   nextNotesDraft,
@@ -26,7 +32,6 @@ const featureLabels: Record<FeatureKey, string> = {
   notes: 'Notes',
   whiteboard: 'Board',
   poll: 'Polls',
-  stage: 'Stage',
 };
 
 const features = useSessionFeaturesStore();
@@ -154,6 +159,25 @@ function muteUser(id: string) {
   muteParticipant(conference, engine, id);
 }
 
+function onStagePromotionToggle(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked;
+  syncStagePromotionEnabled(engine, enabled);
+}
+
+function promoteUser(id: string) {
+  const result = promoteToStage(engine, id);
+  if (!result.ok) features.setStageMessage(result.message);
+}
+
+function demoteUser(id: string) {
+  demoteFromStage(engine, id);
+}
+
+const stageStatusLabel = computed(() => {
+  const id = features.stageOccupantId;
+  return id ? stageDisplayName(id) : 'Vacant';
+});
+
 function displayName(uid: string): string {
   conference.usersEpoch;
   return (
@@ -173,7 +197,8 @@ const panelOpen = computed(
     !!features.panel &&
     features.panel !== 'whiteboard' &&
     features.panel !== 'reactions' &&
-    features.panel !== 'poll',
+    features.panel !== 'poll' &&
+    features.panel !== 'chat',
 );
 
 const title = computed(() => {
@@ -221,9 +246,36 @@ const featureCardStyle = computed(() => {
     <div v-if="features.panel === 'moderator'" class="body modBody">
       <HostRoomSettingsSection v-if="features.isHost" />
 
+      <p v-if="features.stageMessage" class="stageMessage" role="status">{{ features.stageMessage }}</p>
+
       <section class="section">
-        <h3 class="sectionTitle">Room defaults</h3>
-        <p class="sectionHint">New participants start with these permissions unless overridden below.</p>
+        <div class="roomControls">
+          <label class="roomToggle">
+            <input v-model="features.lobbyEnabled" type="checkbox" @change="syncLobby" />
+            <span>Lobby</span>
+          </label>
+          <label class="roomToggle">
+            <input
+              :checked="features.stagePromotionEnabled"
+              type="checkbox"
+              @change="onStagePromotionToggle"
+            />
+            <span>Allow stage promotion</span>
+          </label>
+        </div>
+        <p class="stageStatus">Stage: <strong>{{ stageStatusLabel }}</strong></p>
+        <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
+          <p class="sectionHint">Waiting to join</p>
+          <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
+            <span class="name">{{ w.name }}</span>
+            <button type="button" class="pill" @click="approve(w.id)">Admit</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3 class="sectionTitle">Feature access</h3>
+        <p class="sectionHint">Default permissions for new participants.</p>
         <div class="grantTable" role="presentation">
           <span class="grantCorner" aria-hidden="true" />
           <span
@@ -249,44 +301,52 @@ const featureCardStyle = computed(() => {
       </section>
 
       <section class="section">
-        <label class="lobbyToggle">
-          <input v-model="features.lobbyEnabled" type="checkbox" @change="syncLobby" />
-          <span>Lobby / waiting room</span>
-        </label>
-        <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
-          <p class="sectionHint">Waiting to join</p>
-          <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
-            <span class="name">{{ w.name }}</span>
-            <button type="button" class="pill" @click="approve(w.id)">Admit</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h3 class="sectionTitle">Per participant</h3>
-        <p class="sectionHint">Override access for individuals. Host always has full access.</p>
-        <div class="grantTable grantTableHead" role="presentation">
-          <span class="grantCorner" aria-hidden="true" />
-          <span
-            v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
-            :key="`participant-head-${key}`"
-            class="grantColHead"
-          >
-            {{ featureLabels[key] }}
-          </span>
-        </div>
+        <h3 class="sectionTitle">Participants</h3>
         <div
           v-for="uid in participantIds"
           :key="uid"
           class="participantCard"
-          :class="{ isHost: uid === features.hostId }"
+          :class="{ isHost: uid === features.hostId, onStage: uid === features.stageOccupantId }"
         >
           <div class="participantHead">
-            <span class="name">{{ displayName(uid) }}</span>
-            <span v-if="uid === features.hostId" class="badge">Host</span>
-            <div v-else class="modActions">
-              <button type="button" class="pill subtle" @click="muteUser(uid)">Mute</button>
-              <button type="button" class="pill warn" @click="kickUser(uid)">Remove</button>
+            <div class="participantMeta">
+              <span class="name">{{ displayName(uid) }}</span>
+              <span v-if="uid === features.hostId" class="badge">Host</span>
+              <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">On stage</span>
+            </div>
+            <div class="modActions">
+              <button
+                v-if="features.canPromoteToStage && uid !== features.stageOccupantId"
+                type="button"
+                class="pill"
+                @click="promoteUser(uid)"
+              >
+                Promote
+              </button>
+              <button
+                v-if="features.isHost && uid === features.stageOccupantId"
+                type="button"
+                class="pill subtle"
+                @click="demoteUser(uid)"
+              >
+                Remove from stage
+              </button>
+              <button
+                v-if="uid !== features.hostId"
+                type="button"
+                class="pill subtle"
+                @click="muteUser(uid)"
+              >
+                Mute
+              </button>
+              <button
+                v-if="uid !== features.hostId"
+                type="button"
+                class="pill warn"
+                @click="kickUser(uid)"
+              >
+                Remove
+              </button>
             </div>
           </div>
           <div v-if="uid !== features.hostId" class="grantTable" role="presentation">
@@ -409,9 +469,35 @@ const featureCardStyle = computed(() => {
   font-size: var(--fs-small);
   color: var(--color-mono30);
 }
+.roomControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 8px;
+}
+.roomToggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+.stageStatus {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-mono30);
+}
+.stageMessage {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--btn-warning-bg);
+  color: var(--btn-warning-fg);
+  font-size: var(--fs-small);
+}
 .grantTable {
   display: grid;
-  grid-template-columns: minmax(72px, auto) repeat(4, minmax(52px, 1fr));
+  grid-template-columns: minmax(72px, auto) repeat(3, minmax(52px, 1fr));
   gap: 8px 10px;
   align-items: center;
 }
@@ -441,12 +527,18 @@ const featureCardStyle = computed(() => {
 .participantCard .grantTable {
   margin-top: 8px;
 }
-.lobbyToggle {
+.participantMeta {
   display: flex;
-  gap: 8px;
   align-items: center;
-  font-size: var(--fs-body);
-  cursor: pointer;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.participantCard.onStage {
+  border-color: var(--color-blue100);
+}
+.stageBadge {
+  background: var(--btn-highlight-bg);
+  color: var(--btn-highlight-fg);
 }
 .lobbyBlock {
   margin-top: 10px;

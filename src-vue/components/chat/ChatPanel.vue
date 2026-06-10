@@ -37,7 +37,12 @@ const conference = useConferenceStore();
 const local = useLocalStore();
 const features = useSessionFeaturesStore();
 const { engine, joined: engineJoined } = useMediaEngine();
-const open = ref(false);
+const open = computed({
+  get: () => features.panel === 'chat',
+  set: (val) => {
+    features.panel = val ? 'chat' : '';
+  },
+});
 const chatSeenCount = ref(0);
 const chatRoot = ref<HTMLElement | null>(null);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
@@ -101,14 +106,24 @@ function cancelEdit() {
 }
 
 function saveEdit(messageId: string) {
+  const message = conference.messages.find((m) => m.messageId === messageId);
+  if (!message || !canEditChatMessage(message, localUserId.value)) return;
+
   const result = commitChatEdit(
     editDraft.value,
     chatReady(),
     (id, text, editedAt) => {
-      conference.editChatMessage(id, text, editedAt);
+      conference.editChatMessage(id, text, editedAt, message.nr, message.id);
       engine.sendCommand(
         'chat',
-        JSON.stringify({ action: 'edit', messageId: id, text, editedAt }),
+        JSON.stringify({
+          action: 'edit',
+          messageId: id,
+          text,
+          editedAt,
+          editorId: localUserId.value,
+          nr: message.nr >= 0 ? message.nr : undefined,
+        }),
       );
     },
     messageId,
@@ -182,11 +197,25 @@ function onIncomingMessages(nextCount: number, prevCount: number) {
 watch(() => conference.messages.length, onIncomingMessages);
 watch(open, onChatPanelOpen);
 watch(
+  () => features.stageOccupantId === local.id,
+  async (isStageUser, wasStageUser) => {
+    if (!isStageUser || wasStageUser) return;
+    open.value = true;
+    markChatSeen();
+    chatError.value = '';
+    await nextTick();
+    scrollChatToBottom(chatRoot.value);
+    inputEl.value?.focus();
+  },
+);
+watch(
   () => [conference.isJoined, engineJoined.value, conference.conferenceObject],
   () => {
     if (chatReady()) chatError.value = '';
   },
 );
+
+defineExpose({ open });
 </script>
 
 <template>
@@ -278,7 +307,7 @@ watch(
             </template>
 
             <div
-              v-if="editingId !== message.messageId && canEditChatMessage(message, localUserId, features.isHost)"
+              v-if="editingId !== message.messageId && canEditChatMessage(message, localUserId)"
               class="msgActions"
             >
               <button

@@ -1,4 +1,6 @@
 import { defineStore } from 'pinia';
+import { getStageOccupantId } from '@/components/stage/getStageOccupantId';
+import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import {
   mergeWhiteboardStroke,
@@ -36,6 +38,24 @@ export type ActivePoll = {
 export type UserReaction = { emoji: string; at: number };
 export type { WhiteboardStroke };
 
+export type StagePipCorner = 'tl' | 'tr' | 'bl' | 'br';
+
+export type StageLayout = {
+  pipCorner: StagePipCorner;
+  pipOffset: { x: number; y: number };
+  scale: number;
+  expanded: boolean;
+};
+
+export function defaultStageLayout(): StageLayout {
+  return {
+    pipCorner: 'br',
+    pipOffset: { x: 0, y: 0 },
+    scale: 1,
+    expanded: false,
+  };
+}
+
 export const useSessionFeaturesStore = defineStore('sessionFeatures', {
   state: () => ({
     hostId: '',
@@ -56,7 +76,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     whiteboardStrokes: [] as WhiteboardStroke[],
     roomDefaults: defaultUserGrants(),
     userGrants: {} as Record<string, Partial<UserGrants>>,
-    panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'notes' | 'whiteboard',
+    panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'notes' | 'whiteboard' | 'chat',
     pendingHostClaim: false,
     notesActivitySeq: 0,
     notesSeenSeq: 0,
@@ -64,6 +84,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     whiteboardSeenSeq: 0,
     pollActivitySeq: 0,
     pollSeenSeq: 0,
+    stagePromotionEnabled: false,
+    stageOccupantId: '',
+    stageLayout: defaultStageLayout(),
+    stageMessage: '',
   }),
   getters: {
     hasUnreadNotes(): boolean {
@@ -99,8 +123,22 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     canUsePoll(): boolean {
       return this.localGrants.poll;
     },
-    canUseStage(): boolean {
-      return this.localGrants.stage;
+    canPromoteToStage(): boolean {
+      return this.isHost && this.stagePromotionEnabled;
+    },
+    isStageModeActive(): boolean {
+      const conference = useConferenceStore();
+      const local = useLocalStore();
+      if (getStageOccupantId(this.stageOccupantId, conference.users)) return true;
+      return local.onStage && !!local.id;
+    },
+    isLocalStageOccupant(): boolean {
+      const local = useLocalStore();
+      if (!local.id) return false;
+      const conference = useConferenceStore();
+      const occupant = getStageOccupantId(this.stageOccupantId, conference.users);
+      if (occupant) return occupant === local.id;
+      return local.onStage;
     },
     canClearWhiteboard(): boolean {
       return this.isHost;
@@ -316,6 +354,13 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.hostId = '';
       this.pendingHostClaim = true;
     },
+    setStageMessage(message: string) {
+      this.stageMessage = message;
+      if (!message) return;
+      window.setTimeout(() => {
+        if (this.stageMessage === message) this.stageMessage = '';
+      }, 4000);
+    },
     resetForLeave() {
       this.hostId = '';
       this.panel = '';
@@ -335,6 +380,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.whiteboardSeenSeq = 0;
       this.pollActivitySeq = 0;
       this.pollSeenSeq = 0;
+      this.stagePromotionEnabled = false;
+      this.stageOccupantId = '';
+      this.stageLayout = defaultStageLayout();
+      this.stageMessage = '';
     },
   },
 });

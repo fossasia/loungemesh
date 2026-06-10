@@ -121,7 +121,7 @@ describe('SessionTools', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     const { wrapper } = await mountWithApp(SessionTools);
     expect(wrapper.find('[aria-label="Shared notes"]').exists()).toBe(true);
     await wrapper.find('[aria-label="Shared notes"]').trigger('click');

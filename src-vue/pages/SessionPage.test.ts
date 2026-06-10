@@ -23,14 +23,13 @@ const sessionStubs = {
   RemoteUsers: { template: '<div />' },
   LocalUser: { template: '<div />' },
   FooterBar: { template: '<div><slot /><slot name="right" /></div>' },
-  StageButton: { template: '<div />' },
   ScreenshareButton: { template: '<div />' },
+  StagePresentation: { template: '<div class="stage-presentation-stub" />' },
   ZoomControls: { template: '<div class="zoom-stub" />' },
   SessionTools: { template: '<div class="session-tools-stub" />' },
   SessionFeaturePanels: { template: '<div class="session-panels-stub" />' },
   LobbyOverlay: { template: '<div />' },
   ChatPanel: { template: '<div class="chat-stub" />' },
-  StagePanel: { template: '<div />' },
   WhiteboardOverlay: { template: '<div />' },
 };
 
@@ -39,6 +38,46 @@ describe('SessionPage', () => {
 
   afterEach(async () => {
     await flushPromises();
+  });
+
+  it('hides shared screens while stage mode is active', async () => {
+    const features = useSessionFeaturesStore();
+    features.stageOccupantId = 'presenter';
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('.shared-screens-mock').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows the audience stage view only for non-occupants', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('presenter');
+    features.stageOccupantId = 'presenter';
+    local.onStage = true;
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('.stage-presentation-stub').exists()).toBe(false);
+    wrapper.unmount();
+
+    local.setMyID('viewer');
+    features.stageOccupantId = 'presenter';
+    const audience = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(audience.wrapper.find('.stage-presentation-stub').exists()).toBe(true);
+    audience.wrapper.unmount();
   });
 
   it('hides moderator control for non-host participants', async () => {
@@ -53,7 +92,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div class="chat-stub" />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -77,7 +116,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div class="chat-stub" />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -126,7 +165,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -261,7 +300,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -325,7 +364,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           WhiteboardOverlay: {
             props: ['onClose'],
             template: '<button class="wb-close" @click="onClose()">Close</button>',
@@ -348,7 +387,7 @@ describe('SessionPage', () => {
       global: {
         stubs: {
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           ...sessionStubs,
         },
       },

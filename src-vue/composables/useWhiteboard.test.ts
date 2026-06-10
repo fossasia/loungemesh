@@ -237,7 +237,7 @@ describe('useWhiteboard', () => {
   it('blocks drawing and clearing without permission', async () => {
     const features = useSessionFeaturesStore();
     features.setHost('other');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx() as never);
     const { wrapper } = await mountWithApp(Harness, { props: { draw: false } });
     await flushPromises();

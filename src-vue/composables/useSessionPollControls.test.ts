@@ -39,7 +39,7 @@ describe('useSessionPollControls', () => {
     const local = useLocalStore();
     local.setMyID('host');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     features.activePoll = {
       id: 'p1',
       question: 'Q',
@@ -62,7 +62,7 @@ describe('useSessionPollControls', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     features.activePoll = {
       id: 'p1',
       question: 'Q',

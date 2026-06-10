@@ -13,11 +13,13 @@ import AppHeader from '@/components/layout/AppHeader.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
-import StageButton from '@/components/stage/StageButton.vue';
 import SharedScreens from '@/components/screenshare/SharedScreens.vue';
+import { demoteFromStage } from '@/utils/sessionStage';
 
 const ChatPanel = defineAsyncComponent(() => import('@/components/chat/ChatPanel.vue'));
-const StagePanel = defineAsyncComponent(() => import('@/components/stage/StagePanel.vue'));
+const StagePresentation = defineAsyncComponent(
+  () => import('@/components/stage/StagePresentation.vue'),
+);
 const SessionTools = defineAsyncComponent(() => import('@/components/session/SessionTools.vue'));
 const SessionFeaturePanels = defineAsyncComponent(
   () => import('@/components/session/SessionFeaturePanels.vue'),
@@ -91,6 +93,9 @@ function requestLeave() {
 async function doLeave() {
   showLeaveDialog.value = false;
   await recording.stopIfRecording();
+  if (features.stageOccupantId === local.id) {
+    demoteFromStage(engine, local.id);
+  }
   local.setOnStage(false);
   engine.setLocalParticipantProperty('onStage', false);
   // Await track release so the camera LED turns off before navigating away
@@ -115,16 +120,26 @@ async function doLeave() {
       <LocalUser />
     </Room>
   </PanWrapper>
-  <SharedScreens />
+  <SharedScreens v-if="!features.isStageModeActive" />
   <SessionFeaturePanels />
   <WhiteboardOverlay
     v-if="features.panel === 'whiteboard'"
     :on-close="() => (features.panel = '')"
   />
-  <StagePanel />
+  <StagePresentation
+    v-if="features.isStageModeActive && !features.isLocalStageOccupant"
+    mode="audience"
+  />
+  <p v-if="features.stageMessage" class="stageToast" role="status">{{ features.stageMessage }}</p>
+  <Transition name="fade">
+    <div
+      v-if="features.panel && features.panel !== 'whiteboard'"
+      class="panelBackdrop"
+      @click="features.panel = ''"
+    />
+  </Transition>
   <FooterBar>
     <SessionTools />
-    <StageButton />
     <IconButton
       :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
       :warning="local.cameraOff"
@@ -184,4 +199,45 @@ async function doLeave() {
 </template>
 
 <style scoped>
+.stageToast {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10060;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .stageToast {
+    top: 56px;
+  }
+}
+
+.panelBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.25);
+  z-index: 3999;
+  pointer-events: auto;
+  backdrop-filter: blur(2px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
+import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { encodeNotesForWire } from '@/utils/notesSync';
 import { useSessionFeaturesStore } from './sessionFeaturesStore';
@@ -141,15 +142,14 @@ describe('sessionFeaturesStore', () => {
   it('applies per-user access updates', () => {
     const features = useSessionFeaturesStore();
     features.applyAccessUpdate({
-      defaults: { notes: true, whiteboard: false, poll: false, stage: false },
+      defaults: { notes: true, whiteboard: false, poll: false },
     });
     expect(features.roomDefaults.notes).toBe(true);
     features.applyAccessUpdate({
       userId: 'u2',
-      grants: { poll: true, stage: true },
+      grants: { poll: true },
     });
     expect(features.grantsForUser('u2').poll).toBe(true);
-    expect(features.grantsForUser('u2').stage).toBe(true);
   });
 
   it('dedupes lobby waiters', () => {
@@ -466,5 +466,31 @@ describe('sessionFeaturesStore', () => {
     features.loadPersistedHostSettings('bg-only');
     expect(features.gridBackgroundUrl).toBe('data:bg-only');
     expect(features.notesTemplate).toBe('');
+  });
+
+  it('detects stage mode from occupant id, property fallback, or local onStage', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const conference = useConferenceStore();
+
+    expect(features.isStageModeActive).toBe(false);
+    expect(features.isLocalStageOccupant).toBe(false);
+
+    features.stageOccupantId = 'presenter';
+    expect(features.isStageModeActive).toBe(true);
+
+    local.setMyID('presenter');
+    expect(features.isLocalStageOccupant).toBe(true);
+
+    features.stageOccupantId = '';
+    local.onStage = true;
+    expect(features.isStageModeActive).toBe(true);
+    expect(features.isLocalStageOccupant).toBe(true);
+
+    local.onStage = false;
+    conference.addUser('remote');
+    conference.users.remote.properties = { onStage: 'true' };
+    expect(features.isStageModeActive).toBe(true);
+    expect(features.isLocalStageOccupant).toBe(false);
   });
 });

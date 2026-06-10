@@ -141,7 +141,7 @@ describe('PollPanel', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     const { wrapper } = await mountWithApp(PollPanel);
     expect(wrapper.text()).toContain('Ask the host for poll access');
 

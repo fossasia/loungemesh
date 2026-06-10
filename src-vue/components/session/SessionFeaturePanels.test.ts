@@ -122,17 +122,22 @@ describe('SessionFeaturePanels', () => {
     const { wrapper } = await mountPanels();
     await flushPromises();
     features.lobbyWaiting = [{ id: 'w1', name: 'Waiter' }];
-    const checkboxes = wrapper.findAll('input[type="checkbox"]');
-    await wrapper.find('.lobbyToggle input').setValue(true);
+    const roomToggles = wrapper.findAll('.roomToggle input');
+    await roomToggles[0].setValue(true);
     expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"enabled":true'));
-    await checkboxes[checkboxes.length - 1].setValue(true);
+    await roomToggles[1].setValue(true);
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"stagePromotionEnabled":true'));
     await wrapper.find('.lobbyRow .pill').trigger('click');
     const peerCard = wrapper
       .findAll('.participantCard')
       .find((row) => row.text().includes('Peer'));
     expect(peerCard).toBeTruthy();
-    await peerCard!.find('.pill.subtle').trigger('click');
-    await peerCard!.find('.pill.warn').trigger('click');
+    await peerCard!.find('.pill').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"promote"'));
+    const muteBtn = peerCard!.findAll('.pill.subtle').find((btn) => btn.text() === 'Mute');
+    const removeBtn = peerCard!.findAll('.pill.warn').find((btn) => btn.text() === 'Remove');
+    await muteBtn!.trigger('click');
+    await removeBtn!.trigger('click');
     const peerGrant = peerCard!.find('.grantCheck input');
     await peerGrant.setValue(true);
     expect(cmdSpy).toHaveBeenCalledWith('access', expect.stringContaining('"userId":"peer"'));
@@ -164,7 +169,7 @@ describe('SessionFeaturePanels', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     features.panel = 'notes';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountPanels();
@@ -241,9 +246,9 @@ describe('SessionFeaturePanels', () => {
     features.panel = 'moderator';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountPanels();
-    const checkboxes = wrapper.findAll('input[type="checkbox"]');
-    await checkboxes[0].setValue(true);
-    await checkboxes[1].setValue(true);
+    const grantChecks = wrapper.findAll('.grantTable .grantCheck input');
+    await grantChecks[0].setValue(true);
+    await grantChecks[1].setValue(true);
     expect(cmdSpy).toHaveBeenCalledWith(
       'access',
       expect.stringContaining('"notes":true'),
@@ -262,7 +267,7 @@ describe('SessionFeaturePanels', () => {
     features.setHost('host');
     features.panel = 'moderator';
     const { wrapper } = await mountPanels();
-    expect(wrapper.text()).toContain('Per participant');
+    expect(wrapper.text()).toContain('Participants');
     expect(wrapper.find('.lobbyBlock').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -360,6 +365,27 @@ describe('SessionFeaturePanels', () => {
     features.panel = 'poll';
     await flushPromises();
     expect(wrapper.find('.featureCard').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('blocks promotion when the stage is occupied', async () => {
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.stagePromotionEnabled = true;
+    features.stageOccupantId = 'on-stage';
+    conference.addUser('host', { _displayName: 'Host' } as never);
+    conference.addUser('peer', { _displayName: 'Peer' } as never);
+    features.panel = 'moderator';
+    const { wrapper } = await mountPanels();
+    await wrapper
+      .findAll('.participantCard')
+      .find((row) => row.text().includes('Peer'))!
+      .find('.pill')
+      .trigger('click');
+    expect(features.stageMessage).toContain('occupied');
     wrapper.unmount();
   });
 

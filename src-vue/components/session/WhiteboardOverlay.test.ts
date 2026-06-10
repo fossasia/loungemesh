@@ -169,7 +169,7 @@ describe('WhiteboardOverlay', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, stage: false };
+    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     features.panel = 'whiteboard';
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
     const { wrapper } = await mountWithApp(WhiteboardOverlay, {
