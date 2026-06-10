@@ -40,15 +40,21 @@ describe('stageLayout', () => {
   it('positions the pip for each corner and animates when requested', () => {
     const layout = defaultStageLayout();
     expect(pipStyleForLayout({ ...layout, pipCorner: 'tl' }, 400, 225, true).left).toBe('8px');
-    expect(pipStyleForLayout({ ...layout, pipCorner: 'tr' }, 400, 225, false).right).toBe('8px');
-    expect(pipStyleForLayout({ ...layout, pipCorner: 'bl' }, 400, 225, false).bottom).toBe('8px');
-    expect(
-      pipStyleForLayout(
-        { ...layout, pipCorner: 'br', pipOffset: { x: 4, y: -2 } },
-        400,
-        225,
-        false,
-      ).right,
-    ).toBe('4px');
+    expect(pipStyleForLayout({ ...layout, pipCorner: 'tl' }, 400, 225, true).top).toBe('8px');
+    
+    expect(pipStyleForLayout({ ...layout, pipCorner: 'tr' }, 400, 225, false).left).toBe('344px');
+    expect(pipStyleForLayout({ ...layout, pipCorner: 'tr' }, 400, 225, false).top).toBe('8px');
+    
+    expect(pipStyleForLayout({ ...layout, pipCorner: 'bl' }, 400, 225, false).left).toBe('8px');
+    expect(pipStyleForLayout({ ...layout, pipCorner: 'bl' }, 400, 225, false).top).toBe('169px');
+    
+    const style = pipStyleForLayout(
+      { ...layout, pipCorner: 'br', pipOffset: { x: 4, y: -2 } },
+      400,
+      225,
+      false,
+    );
+    expect(style.left).toBe('348px');
+    expect(style.top).toBe('167px');
   });
 });

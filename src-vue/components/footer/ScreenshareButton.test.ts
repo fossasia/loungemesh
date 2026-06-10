@@ -9,6 +9,14 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import ScreenshareButton from './ScreenshareButton.vue';
 
+vi.mock('@/utils/clearMediaElement', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/utils/clearMediaElement')>();
+  return {
+    ...original,
+    waitForMediaElementDetach: () => Promise.resolve(),
+  };
+});
+
 describe('ScreenshareButton', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
@@ -49,6 +57,36 @@ describe('ScreenshareButton', () => {
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
     expect(local.screenshare).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('toggles screensharing on, off, and on again', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const conf = getMediaEngineInstance().getConference()!;
+    const addSpy = vi.spyOn(getMediaEngineInstance(), 'addLocalTrack').mockResolvedValue(undefined);
+    const removeSpy = vi.spyOn(conf, 'removeTrack').mockResolvedValue(undefined);
+    
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+    
+    // Toggle On
+    await wrapper.find('button.ibtn').trigger('click');
+    await flushPromises();
+    expect(local.screenshare).toBeTruthy();
+    expect(addSpy).toHaveBeenCalledTimes(1);
+
+    // Toggle Off
+    await wrapper.find('button.ibtn').trigger('click');
+    await flushPromises();
+    expect(local.screenshare).toBeUndefined();
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+
+    // Toggle On Again
+    await wrapper.find('button.ibtn').trigger('click');
+    await flushPromises();
+    expect(local.screenshare).toBeTruthy();
+    expect(addSpy).toHaveBeenCalledTimes(2);
+
     wrapper.unmount();
   });
 

@@ -29,6 +29,9 @@ import {
   VideoOff,
   VolumeX,
   X,
+  LogOut,
+  UserMinus,
+  Info,
 } from '@lucide/vue';
 
 const props = withDefaults(
@@ -68,7 +71,10 @@ export type IconName =
   | 'user'
   | 'video'
   | 'video-off'
-  | 'volume-x';
+  | 'volume-x'
+  | 'log-out'
+  | 'user-minus'
+  | 'info';
 
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
@@ -99,6 +105,9 @@ const registry: Record<IconName, Component> = {
   video: Video,
   'video-off': VideoOff,
   'volume-x': VolumeX,
+  'log-out': LogOut,
+  'user-minus': UserMinus,
+  info: Info,
 };
 
 const icon = computed(() => registry[props.name]);

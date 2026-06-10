@@ -27,6 +27,7 @@ describe('playUiSound', () => {
       'leave',
       'success',
       'chatMessage',
+      'stageInvite',
     ];
     for (const id of ids) {
       expect(() => playUiSound(id)).not.toThrow();

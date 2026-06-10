@@ -120,7 +120,7 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
-  it('replaces the avatar tile with the compact stage preview when on stage', async () => {
+  it('does not replace the avatar tile with the compact stage preview when on stage, but shows presenting', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
     const features = useSessionFeaturesStore();
@@ -133,13 +133,14 @@ describe('LocalUser', () => {
 
     const { wrapper } = await mountWithApp(LocalUser);
     await flushPromises();
-    expect(wrapper.find('.stageTileHost').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="stage-presentation"].modeTile').exists()).toBe(true);
-    expect(wrapper.find('.videoContainer').exists()).toBe(false);
+    expect(wrapper.find('.stageTileHost').exists()).toBe(false);
+    expect(wrapper.find('.videoContainer').exists()).toBe(true);
+    expect(wrapper.find('.videoContainer').classes()).toContain('onStageOccupant');
+    expect(wrapper.findComponent({ name: 'UserBackdrop' }).props('onStage')).toBe(true);
     wrapper.unmount();
   });
 
-  it('shows mute control on the stage tile', async () => {
+  it('shows mute control while on stage', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
     const features = useSessionFeaturesStore();

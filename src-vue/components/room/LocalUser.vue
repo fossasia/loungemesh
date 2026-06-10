@@ -5,7 +5,6 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import UserBackdrop from './overlays/UserBackdrop.vue';
-import StagePresentation from '@/components/stage/StagePresentation.vue';
 import LocalAudioRing from './overlays/LocalAudioRing.vue';
 import LocalNameContainer from './LocalNameContainer.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
@@ -47,6 +46,7 @@ const style = computed(() => {
 const userId = computed(() => local.id || 'localUser');
 const hasVideo = computed(() => !!local.video);
 const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
+const showAvatar = computed(() => !showCameraVideo.value || isStageOccupant.value);
 const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
 const handUp = computed(() => features.handRaised);
 const isStageOccupant = computed(() => features.isLocalStageOccupant);
@@ -177,29 +177,19 @@ defineExpose({ attach, videoEl });
     >
       <LocalAudioRing />
       <div
-        v-if="isStageOccupant"
-        class="stageTileHost"
-        :class="{ speaking: local.speaking && !local.mute }"
-      >
-        <StagePresentation mode="tile" />
-        <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
-        <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
-        <span v-if="reaction" class="floatReact">{{ reaction }}</span>
-      </div>
-      <div
-        v-else
         class="videoContainer"
         :class="{
-          avatarTile: !showCameraVideo,
-          speaking: local.speaking && !local.mute && !showCameraVideo,
+          avatarTile: showAvatar,
+          speaking: local.speaking && !local.mute && showAvatar,
+          onStageOccupant: isStageOccupant,
         }"
       >
-        <UserBackdrop v-if="!showCameraVideo" />
+        <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
         <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
         <span v-if="reaction" class="floatReact">{{ reaction }}</span>
         <video
-          v-if="showCameraVideo"
+          v-if="!showAvatar"
           ref="videoEl"
           autoplay
           playsinline
@@ -207,7 +197,7 @@ defineExpose({ attach, videoEl });
           disablePictureInPicture
           :class="[
             'vid',
-            { speaking: local.speaking && !local.mute && showCameraVideo },
+            { speaking: local.speaking && !local.mute && !showAvatar },
           ]"
         />
       </div>

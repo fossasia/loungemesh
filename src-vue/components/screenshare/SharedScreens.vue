@@ -215,7 +215,7 @@ const popIn = (id: string) => {
 .sharedScreensBox {
   position: fixed;
   left: 32px;
-  top: 80px;
+  top: 104px;
   width: 300px;
   max-height: calc(100vh - 200px);
   z-index: 4000; /* below footer, above room items */

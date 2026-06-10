@@ -4,7 +4,7 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { bindScreenshareEndWatch } from '@/utils/screenshareDesktopWatch';
-import { stopLocalScreenshare } from '@/utils/localScreenshare';
+import { stopLocalScreenshare, toggleLocalScreenshare } from '@/utils/localScreenshare';
 import { shouldAllowScreenshare } from '@/utils/sessionStage';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
@@ -37,32 +37,12 @@ async function finishShare() {
   await stopLocalScreenshare();
 }
 
-async function startShare() {
-  const conf = engine.getConference()!;
-  const tracks = await engine.createLocalTracks(['desktop']);
-  const newTrack = tracks.find((t) => t.getType?.() === 'video') ?? tracks[0];
-  if (!newTrack || newTrack.videoType !== 'desktop') return;
-
-  await engine.addLocalTrack(newTrack);
-  local.screenshare = newTrack;
-  sharing.value = true;
-  bindDesktopEndWatch();
-}
-
-async function stopShare() {
-  await finishShare();
-}
-
 async function toggleShare() {
   if (screenshareBlocked.value) return;
   const conf = engine.getConference();
   if (!conf) return;
-  if (local.screenshare || sharing.value) {
-    await stopShare();
-    return;
-  }
   try {
-    await startShare();
+    await toggleLocalScreenshare(engine);
   } catch {
     sharing.value = false;
   }

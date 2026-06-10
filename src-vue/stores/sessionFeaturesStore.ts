@@ -88,6 +88,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     stageOccupantId: '',
     stageLayout: defaultStageLayout(),
     stageMessage: '',
+    stageInvitationPending: false,
+    invitedStageUserId: '',
   }),
   getters: {
     hasUnreadNotes(): boolean {

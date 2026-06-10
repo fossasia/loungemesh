@@ -60,7 +60,7 @@ describe('pan constants', () => {
 
   it('clampScale respects bounds', () => {
     expect(clampScale(0.1)).toBe(0.35);
-    expect(clampScale(10)).toBe(2.5);
+    expect(clampScale(10)).toBe(1.4);
     expect(clampScale(1)).toBe(1);
   });
 

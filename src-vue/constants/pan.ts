@@ -20,10 +20,10 @@ export const viewportChrome = { top: 56, bottom: 88, left: 32, right: 32 };
 
 /** Extra horizontal inset for the full-screen whiteboard overlay. */
 export const whiteboardChrome = {
-  top: viewportChrome.top,
-  bottom: viewportChrome.bottom,
-  left: 56,
-  right: 56,
+  top: viewportChrome.top + 12,
+  bottom: viewportChrome.bottom + 12,
+  left: 80,
+  right: 80,
 };
 
 /** Smallest whiteboard panel as a fraction of the available chrome bounds. */
@@ -156,7 +156,7 @@ export function spreadInitialUserPosition(existing: PanVec[]): PanVec {
 
 /** Keep zoom within a range where the room stays navigable (not tiny or selfie-only). */
 export const minScale = 0.35;
-export const maxScale = 2.5;
+export const maxScale = 1.4;
 export const defaultScale = 0.65;
 
 /** Visible area inside the session UI (below header, above footer). */

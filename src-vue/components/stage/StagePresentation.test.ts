@@ -135,15 +135,6 @@ describe('StagePresentation', () => {
     await vi.runAllTimersAsync();
 
 
-    const corners = wrapper.findAll('.cornerBtn');
-    await corners[0]!.trigger('click');
-    expect(features.stageLayout.pipCorner).toBe('tl');
-    await corners[1]!.trigger('click');
-    expect(features.stageLayout.pipCorner).toBe('tr');
-    await corners[2]!.trigger('click');
-    expect(features.stageLayout.pipCorner).toBe('bl');
-    await corners[3]!.trigger('click');
-    expect(features.stageLayout.pipCorner).toBe('br');
 
     const pip = wrapper.find('.pipCamera');
     pip.element.dispatchEvent(

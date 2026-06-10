@@ -17,6 +17,7 @@ import {
   nearestPipCorner,
   pipStyleForLayout,
   scaleFromResizeDelta,
+  pipSizeForContainer,
 } from '@/utils/stageLayout';
 import type { StageLayout, StagePipCorner } from '@/stores/sessionFeaturesStore';
 
@@ -96,13 +97,21 @@ const presentationStyle = computed(() => {
 });
 
 const pipStyle = computed(() =>
-  pipStyleForLayout(layout.value, containerWidth.value, containerHeight.value, layoutAnimating.value),
+  pipStyleForLayout(layout.value, containerWidth.value, containerHeight.value, layoutAnimating.value && !draggingPip.value),
 );
 
 const occupantName = computed(() => stageDisplayName(occupantId.value));
+const isOccupantSpeaking = computed(() => {
+  if (!occupantId.value) return false;
+  if (occupantId.value === local.id) {
+    return local.speaking && !local.mute;
+  }
+  const remote = conference.users[occupantId.value];
+  return !!remote?.speaking && !remote?.mute;
+});
 const stageLabel = computed(() => {
   if (isTileMode.value) return 'On stage';
-  return isLocalOccupant.value ? 'You are on stage' : `${occupantName.value} on stage`;
+  return isLocalOccupant.value ? 'You' : occupantName.value;
 });
 
 const rootClass = computed(() => ({
@@ -282,15 +291,33 @@ function onResetLayout() {
 let dragStartX = 0;
 let dragStartY = 0;
 let dragStartOffset = { x: 0, y: 0 };
-let draggingPip = false;
+const draggingPip = ref(false);
+let broadcastThrottle: ReturnType<typeof setTimeout> | undefined;
+
+function throttledBroadcast(patch: Partial<StageLayout>) {
+  if (broadcastThrottle) clearTimeout(broadcastThrottle);
+  broadcastThrottle = setTimeout(() => {
+    if (canEditLayout.value) {
+      broadcastStageLayout(engine, patch);
+    }
+  }, 100);
+}
 
 function onPipPointerDown(e: PointerEvent) {
   if (!canEditLayout.value || !showPip.value) return;
   if (e.button !== 0) return;
-  draggingPip = true;
+  draggingPip.value = true;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
-  dragStartOffset = { ...layout.value.pipOffset };
+  
+  const rect = containerRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  const pipRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  
+  const curLeft = pipRect.left - rect.left;
+  const curTop = pipRect.top - rect.top;
+  dragStartOffset = { x: curLeft, y: curTop };
+  
   const target = e.currentTarget as HTMLElement;
   target.setPointerCapture(e.pointerId);
   target.addEventListener('pointermove', onPipPointerMove);
@@ -299,33 +326,80 @@ function onPipPointerDown(e: PointerEvent) {
 }
 
 function onPipPointerMove(e: PointerEvent) {
-  if (!draggingPip) return;
+  if (!draggingPip.value) return;
   const dx = e.clientX - dragStartX;
   const dy = e.clientY - dragStartY;
-  throttledLayout({
-    pipOffset: { x: dragStartOffset.x + dx, y: dragStartOffset.y + dy },
+  
+  const newLeft = dragStartOffset.x + dx;
+  const newTop = dragStartOffset.y + dy;
+  
+  const size = pipSizeForContainer(containerWidth.value);
+  const padding = 8;
+  const usableWidth = containerWidth.value - size - padding * 2;
+  const usableHeight = containerHeight.value - size - padding * 2;
+  
+  const rx = usableWidth > 0 ? Math.max(0, Math.min(1, (newLeft - padding) / usableWidth)) : 0;
+  const ry = usableHeight > 0 ? Math.max(0, Math.min(1, (newTop - padding) / usableHeight)) : 0;
+  
+  // Update local store state immediately!
+  features.stageLayout.pipCorner = 'tl';
+  features.stageLayout.pipOffset = { x: rx, y: ry };
+  
+  // Throttled network updates
+  throttledBroadcast({
+    pipCorner: 'tl',
+    pipOffset: { x: rx, y: ry },
   });
 }
 
 function onPipPointerUp(e: PointerEvent) {
-  if (!draggingPip) return;
-  draggingPip = false;
+  if (!draggingPip.value) return;
+  draggingPip.value = false;
   const target = e.currentTarget as HTMLElement;
-  target.releasePointerCapture(e.pointerId);
+  try {
+    target.releasePointerCapture(e.pointerId);
+  } catch { /* ignore */ }
   target.removeEventListener('pointermove', onPipPointerMove);
   target.removeEventListener('pointerup', onPipPointerUp);
   target.removeEventListener('pointercancel', onPipPointerUp);
+  
+  if (broadcastThrottle) {
+    clearTimeout(broadcastThrottle);
+    broadcastThrottle = undefined;
+  }
+  
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return;
   const pipRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const centerX = pipRect.left + pipRect.width / 2 - rect.left;
-  const centerY = pipRect.top + pipRect.height / 2 - rect.top;
-  const corner = nearestPipCorner(centerX, centerY, rect.width, rect.height);
-  syncLayout({ pipCorner: corner, pipOffset: { x: 0, y: 0 } });
+  
+  const newLeft = pipRect.left - rect.left;
+  const newTop = pipRect.top - rect.top;
+  
+  const size = pipSizeForContainer(containerWidth.value);
+  const padding = 8;
+  const usableWidth = containerWidth.value - size - padding * 2;
+  const usableHeight = containerHeight.value - size - padding * 2;
+  
+  const rx = usableWidth > 0 ? Math.max(0, Math.min(1, (newLeft - padding) / usableWidth)) : 0;
+  const ry = usableHeight > 0 ? Math.max(0, Math.min(1, (newTop - padding) / usableHeight)) : 0;
+  
+  syncLayout({
+    pipCorner: 'tl',
+    pipOffset: { x: rx, y: ry },
+  });
 }
 
 function setPipCorner(corner: StagePipCorner) {
-  syncLayout({ pipCorner: corner, pipOffset: { x: 0, y: 0 } });
+  let rx = 0;
+  let ry = 0;
+  if (corner === 'tr') {
+    rx = 1; ry = 0;
+  } else if (corner === 'bl') {
+    rx = 0; ry = 1;
+  } else if (corner === 'br') {
+    rx = 1; ry = 1;
+  }
+  syncLayout({ pipCorner: 'tl', pipOffset: { x: rx, y: ry } });
 }
 
 const audienceWindowStyle = computed(() => {
@@ -405,7 +479,10 @@ onBeforeUnmount(() => {
     data-testid="stage-presentation"
   >
       <div class="stageToolbar" @pointerdown="onDragStart">
-        <span class="stageLabel">{{ stageLabel }}</span>
+        <div class="stageHeaderLeft">
+          <span class="stageLabel">{{ stageLabel }}</span>
+          <span v-if="canEditLayout && showPip" class="dragNotice">Drag avatar to reposition</span>
+        </div>
         <div class="toolbarActions">
           <button type="button" class="toolBtn" title="Expand" @click.stop="toggleExpanded">
             <AppIcon :name="isExpanded ? 'minimize' : 'maximize'" />
@@ -422,39 +499,34 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div ref="containerRef" class="stageCanvas" :style="presentationStyle">
-        <div class="primaryContent">
-          <ScreenshareVideo v-if="hasScreenshare" :track="screenshareTrack!" fill />
-          <StageVideoAttach
-            v-else-if="cameraTrack"
-            :track="cameraTrack"
-            :mirrored="isLocalOccupant"
-            fill
+      <div class="stageContent">
+        <div ref="containerRef" class="stageCanvas" :style="presentationStyle">
+          <div class="primaryContent">
+            <ScreenshareVideo v-if="hasScreenshare" :track="screenshareTrack!" fill />
+            <StageVideoAttach
+              v-else-if="cameraTrack"
+              :track="cameraTrack"
+              :mirrored="isLocalOccupant"
+              fill
+            />
+          </div>
+
+          <div
+            v-if="showPip"
+            class="pipCamera"
+            :class="{ draggable: canEditLayout, dragging: draggingPip, speaking: isOccupantSpeaking }"
+            :style="pipStyle"
+            @pointerdown.stop="onPipPointerDown"
+          >
+            <StageVideoAttach :track="cameraTrack" :mirrored="isLocalOccupant" fill />
+          </div>
+
+          <div
+            v-if="!isTileMode"
+            class="resizeHandle"
+            title="Resize presentation"
+            @pointerdown.stop="onResizeStart"
           />
-        </div>
-
-        <div
-          v-if="showPip"
-          class="pipCamera"
-          :class="{ draggable: canEditLayout }"
-          :style="pipStyle"
-          @pointerdown.stop="onPipPointerDown"
-        >
-          <StageVideoAttach :track="cameraTrack" :mirrored="isLocalOccupant" fill />
-        </div>
-
-        <div
-          v-if="!isTileMode"
-          class="resizeHandle"
-          title="Resize presentation"
-          @pointerdown.stop="onResizeStart"
-        />
-
-        <div v-if="canEditLayout && showPip && !isTileMode" class="cornerPresets">
-          <button type="button" class="cornerBtn" title="Top left" @click.stop="setPipCorner('tl')">TL</button>
-          <button type="button" class="cornerBtn" title="Top right" @click.stop="setPipCorner('tr')">TR</button>
-          <button type="button" class="cornerBtn" title="Bottom left" @click.stop="setPipCorner('bl')">BL</button>
-          <button type="button" class="cornerBtn" title="Bottom right" @click.stop="setPipCorner('br')">BR</button>
         </div>
       </div>
   </div>
@@ -468,20 +540,143 @@ onBeforeUnmount(() => {
   pointer-events: auto;
 }
 
-.stagePresentationRoot.modeAudience {
-  position: fixed;
-  z-index: 10040;
+.stagePresentationRoot.modeAudience:not(.expanded) {
+  position: fixed !important;
+  left: 32px !important;
+  top: 104px !important;
+  width: 300px !important;
+  max-height: calc(100vh - 200px) !important;
+  z-index: 4000 !important;
+  background: rgba(245, 247, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
   user-select: none;
-  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease;
 }
 
-.stagePresentationRoot.modeAudience.is-dragging,
-.stagePresentationRoot.modeAudience.is-resizing {
+.stagePresentationRoot.modeAudience.expanded {
+  position: fixed;
+  z-index: 4100; /* above the sidebar (4000) */
+  background: rgba(245, 247, 255, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, box-shadow 0.2s;
+  user-select: none;
+}
+
+.stagePresentationRoot.modeAudience.expanded.is-dragging,
+.stagePresentationRoot.modeAudience.expanded.is-resizing {
   transition: none !important;
 }
 
-.modeAudience .stageToolbar {
+.stagePresentationRoot.modeAudience:active {
+  box-shadow: 0 20px 60px 0 rgba(31, 38, 135, 0.3);
+}
+
+.stageHeaderLeft {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.modeAudience:not(.expanded) .stageToolbar {
+  padding: 12px 16px;
+  background: transparent;
+  color: var(--color-text-default);
+  border-bottom: 1px solid var(--line-light);
+  cursor: default;
+}
+
+.modeAudience.expanded .stageToolbar {
+  padding: 8px 12px;
+  background: rgba(220, 225, 245, 0.5);
+  border-bottom: 1px solid var(--line-light);
   cursor: move;
+  color: var(--color-text-default);
+}
+
+.modeAudience .stageLabel {
+  font-weight: var(--fw-medium);
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  color: var(--color-text-default);
+}
+
+.modeAudience.expanded .stageLabel {
+  font-size: var(--fs-small);
+}
+
+.modeAudience:not(.expanded) .stageContent {
+  padding: 12px;
+}
+
+.modeAudience.expanded .stageContent {
+  padding: 0;
+  flex: 1;
+}
+
+.modeAudience .toolBtn {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-mono30);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+  width: auto;
+  height: auto;
+}
+
+.modeAudience .toolBtn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-default);
+}
+
+.modeAudience .resetBtn {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: var(--font-body);
+}
+
+.dragNotice {
+  font-size: 11px;
+  color: var(--color-text-light);
+}
+
+.modeAudience:not(.expanded) .resizeHandle {
+  display: none;
+}
+
+.modeAudience.expanded .resizeHandle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--color-blue100) 50%);
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  z-index: 10;
+  display: block;
+}
+
+.modeAudience.expanded .resizeHandle:hover {
+  opacity: 1;
 }
 
 .stagePresentationRoot.modeTile {
@@ -587,6 +782,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   z-index: 2;
   touch-action: none;
+  transition: border-color 0.2s ease;
 }
 
 .pipCamera.draggable {
@@ -602,6 +798,17 @@ onBeforeUnmount(() => {
   height: 100%;
   max-height: none;
   object-fit: cover;
+  border-radius: 50%;
+}
+
+.pipCamera.speaking {
+  border-color: var(--color-blue100);
+  animation: speakPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes speakPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.65); }
+  50%       { box-shadow: 0 0 0 14px rgba(79, 110, 247, 0.28); }
 }
 
 .resizeHandle {
@@ -615,23 +822,16 @@ onBeforeUnmount(() => {
   z-index: 3;
 }
 
-.cornerPresets {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  display: flex;
-  gap: 4px;
-  z-index: 3;
+.pipCamera.dragging {
+  cursor: grabbing !important;
+  transition: none !important;
 }
 
-.cornerBtn {
-  border: none;
-  border-radius: var(--radius-round);
-  padding: 2px 5px;
-  font-size: 9px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  cursor: pointer;
+.dragNotice {
+  font-size: 11px;
+  color: var(--color-mono50);
+  margin-right: 8px;
+  align-self: center;
 }
 
 @media (max-width: 768px) {
@@ -644,10 +844,6 @@ onBeforeUnmount(() => {
   .stagePresentationRoot.modeAudience.expanded {
     width: calc(100vw - 16px) !important;
     left: 8px !important;
-  }
-
-  .cornerPresets {
-    display: none;
   }
 }
 </style>
