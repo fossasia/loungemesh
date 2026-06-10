@@ -48,4 +48,14 @@ describe('IconButton', () => {
     });
     expect(wrapper.classes()).toContain('hasActivityDot');
   });
+
+  it('does not trigger click behavior when disabled is true', async () => {
+    const { playUiSound } = await import('@/utils/uiSounds');
+    const wrapper = mount(IconButton, {
+      props: { label: 'Disabled Button', disabled: true },
+      slots: { icon: '<span class="ico">x</span>' },
+    });
+    (wrapper.vm as any).onClick();
+    expect(playUiSound).not.toHaveBeenCalled();
+  });
 });

@@ -750,6 +750,35 @@ describe('wireStoreSync', () => {
     expect(features.stageOccupantId).toBe('');
   });
 
+  it('syncs stage occupant and sets local stage state when participant is local', async () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    
+    const localId = 'my-local-id';
+    local.setMyID(localId);
+    conference.addUser(localId);
+
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: localId,
+      _properties: { onStage: true },
+    });
+    expect(local.onStage).toBe(true);
+
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: localId,
+      _properties: { onStage: false },
+    });
+    expect(local.onStage).toBe(false);
+  });
+
   it('handles trackRemoved for audio when disconnectParticipantAudio is absent', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();

@@ -8,6 +8,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
 import ScreenshareButton from './ScreenshareButton.vue';
+import IconButton from '@/components/ui/IconButton.vue';
 
 vi.mock('@/utils/clearMediaElement', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/utils/clearMediaElement')>();
@@ -180,6 +181,49 @@ describe('ScreenshareButton', () => {
     await connectAndJoinTestConference();
     const { wrapper } = await mountWithApp(ScreenshareButton);
     (wrapper.vm as { sharing: boolean }).sharing = true;
+    wrapper.unmount();
+  });
+
+  it('stops screenshare when another user goes on stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('me');
+    const desktop = makeTrack('desktop');
+    local.screenshare = desktop;
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+    features.stageOccupantId = 'someone-else';
+    await flushPromises();
+    expect(local.screenshare).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('covers remaining branches in watch and toggleShare', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('me');
+
+    const { wrapper } = await mountWithApp(ScreenshareButton);
+
+    // 1. Trigger click when blocked to cover line 41
+    features.stageOccupantId = 'someone-else';
+    await flushPromises();
+    await wrapper.findComponent(IconButton).vm.$emit('click');
+    await flushPromises();
+
+    // 2. Watcher branch: occupantId is falsy
+    features.stageOccupantId = '';
+    await flushPromises();
+
+    // 3. Watcher branch: occupantId is local.id
+    features.stageOccupantId = 'me';
+    await flushPromises();
+
+    // 4. Watcher branch: remote occupantId, but not sharing
+    features.stageOccupantId = 'someone-else';
+    await flushPromises();
+
     wrapper.unmount();
   });
 });

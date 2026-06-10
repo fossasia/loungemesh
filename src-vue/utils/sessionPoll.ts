@@ -72,17 +72,17 @@ export function mergePolls(incoming: ActivePoll, current: ActivePoll | null): Ac
   if (!current || current.id !== next.id) return next;
   const prev = normalizePoll(current);
 
-  const tracksVoters = [...next.options, ...prev.options].some((option) => option.voters.length > 0);
+  const tracksVoters = [...next.options, ...prev.options].some((option) => option.voters!.length > 0);
 
   if (tracksVoters) {
     const voterChoice = new Map<string, string>();
     for (const option of prev.options) {
-      for (const voterId of option.voters) {
+      for (const voterId of option.voters!) {
         voterChoice.set(voterId, option.id);
       }
     }
     for (const option of next.options) {
-      for (const voterId of option.voters) {
+      for (const voterId of option.voters!) {
         voterChoice.set(voterId, option.id);
       }
     }
@@ -135,7 +135,7 @@ function pollSignature(poll: ActivePoll): string {
     options: normalized.options.map((option) => ({
       id: option.id,
       votes: option.votes,
-      voters: [...option.voters].sort(),
+      voters: [...option.voters!].sort(),
     })),
   });
 }

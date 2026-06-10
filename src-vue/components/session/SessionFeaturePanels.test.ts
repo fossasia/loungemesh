@@ -401,4 +401,71 @@ describe('SessionFeaturePanels', () => {
     expect(wrapper.text()).toContain('plain-id');
     wrapper.unmount();
   });
+
+  it('allows the host to demote stage user or cancel invite', async () => {
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    conference.addUser('host', { _displayName: 'Host' } as never);
+    conference.addUser('peer', { _displayName: 'Peer' } as never);
+    features.panel = 'moderator';
+    features.stageOccupantId = 'peer';
+
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountPanels();
+    await flushPromises();
+
+    const peerCard = wrapper
+      .findAll('.participantCard')
+      .find((row) => row.text().includes('Peer'));
+    expect(peerCard).toBeTruthy();
+    
+    const demoteBtn = peerCard!.find('.pill.subtle');
+    expect(demoteBtn.text()).toBe('Remove from stage');
+    await demoteBtn.trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"demote"'));
+
+    wrapper.unmount();
+  });
+
+  it('covers remaining edge case branches of SessionFeaturePanels.vue', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.panel = 'notes';
+
+    const { wrapper } = await mountPanels();
+    await flushPromises();
+
+    // 1. Cover line 51 (notesDirty is true, then external notes change)
+    const ta = wrapper.find('.notesTa');
+    await ta.setValue('local change'); // notesDirty = true
+    features.sharedNotes = 'external change'; // triggers watch, notesDirty is true -> skips notesEditBase update
+    await flushPromises();
+
+    // 2. Cover watch(panel) when panel is not notes
+    features.panel = 'moderator';
+    await flushPromises();
+
+    // 3. Cover promoteUser branches on line 170
+    // Get the vm instance
+    const vm = wrapper.vm as any;
+    // We want result.ok is true
+    features.stageOccupantId = '';
+    features.stagePromotionEnabled = true;
+    const conference = useConferenceStore();
+    conference.addUser('peer1', { _displayName: 'Peer 1' } as never);
+    await flushPromises();
+    vm.promoteUser('peer1');
+
+    // We want result.ok is false (stage is already occupied)
+    features.stageOccupantId = 'peer1';
+    vm.promoteUser('peer2');
+    expect(features.stageMessage).toContain('occupied');
+
+    wrapper.unmount();
+  });
 });

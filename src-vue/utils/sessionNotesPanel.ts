@@ -23,7 +23,7 @@ export function featureCardStyleForPanel(
   if (panel === 'poll') {
     return {
       ...base,
-      width: layout.pollWidth,
+      width: layout.pollWidth ?? '',
       maxHeight: layout.height,
     };
   }

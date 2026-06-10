@@ -7,15 +7,19 @@ import {
   STAGE_OCCUPIED_MESSAGE,
   applyStagePromote,
   applyStageInvite,
+  applyStageDemote,
   broadcastStageLayout,
   canDemoteFromStage,
   canPromoteToStage,
   clearStageIfParticipantLeft,
   demoteFromStage,
+  goLiveOnStage,
   isStageModeActive,
   promoteToStage,
   resetStageLayout,
   shouldAllowScreenshare,
+  syncStagePromotionEnabled,
+  stageDisplayName,
 } from './sessionStage';
 
 describe('sessionStage', () => {
@@ -159,5 +163,75 @@ describe('sessionStage', () => {
 
     promoteToStage(engine, 'host');
     expect(features.stageInvitationPending).toBe(true);
+  });
+
+  it('covers remaining edge cases and branches in sessionStage', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+
+    // 1. applyStageInvite with self when already occupant
+    local.setMyID('me');
+    features.stageOccupantId = 'me';
+    features.stageInvitationPending = false;
+    applyStageInvite(engine, 'me');
+    expect(features.stageInvitationPending).toBe(false);
+
+    // 1b. applyStageInvite with self when not occupant (covers line 80)
+    features.stageOccupantId = 'someone-else';
+    applyStageInvite(engine, 'me');
+    expect(features.stageInvitationPending).toBe(true);
+
+    // 1c. applyStageInvite with remote user target (covers line 83)
+    applyStageInvite(engine, 'remote-user');
+    expect(features.invitedStageUserId).toBe('remote-user');
+
+    // 2. applyStagePromote with wasLocalOccupant = true
+    local.onStage = true;
+    features.stageOccupantId = 'me';
+    features.stageMessage = 'existing message';
+    applyStagePromote('me');
+    // should not overwrite stageMessage
+    expect(features.stageMessage).toBe('existing message');
+
+    // 2b. goLiveOnStage (covers lines 104-105)
+    goLiveOnStage(engine, 'me');
+
+    // 3. syncStagePromotionEnabled
+    // isHost = false
+    features.setHost('someone-else');
+    features.stagePromotionEnabled = false;
+    cmdSpy.mockClear();
+    syncStagePromotionEnabled(engine, true);
+    expect(features.stagePromotionEnabled).toBe(false);
+    expect(cmdSpy).not.toHaveBeenCalled();
+
+    // isHost = true
+    features.setHost('me');
+    syncStagePromotionEnabled(engine, true);
+    expect(features.stagePromotionEnabled).toBe(true);
+    expect(cmdSpy).toHaveBeenCalled();
+
+    // 4. stageDisplayName
+    expect(stageDisplayName('')).toBe('Vacant');
+    expect(stageDisplayName('non-existent')).toBe('Friendly Sphere');
+
+    // 5. applyStageDemote when local.id !== id (covers line 118 branch)
+    applyStageDemote('someone-else');
+    applyStageDemote('me');
+
+    // 6. demoteFromStage when canDemoteFromStage returns false (covers line 150 early return)
+    features.setHost('someone-else');
+    local.setMyID('me');
+    features.stageOccupantId = 'someone-else';
+    cmdSpy.mockClear();
+    demoteFromStage(engine, 'someone-else');
+    expect(cmdSpy).not.toHaveBeenCalled();
+
+    // 7. promoteToStage when canPromoteToStage returns false (covers line 136 early return)
+    features.setHost('someone-else');
+    const promoteFail = promoteToStage(engine, 'me');
+    expect(promoteFail.ok).toBe(false);
   });
 });

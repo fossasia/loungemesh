@@ -122,4 +122,14 @@ describe('WhiteboardPenToolbar', () => {
     expect(wrapper.find('.wbPenMenu').exists()).toBe(true);
     wrapper.unmount();
   });
+
+  it('closes the pen menu when opening the color panel', async () => {
+    const wrapper = await mountToolbar();
+    await flushPromises();
+    await wrapper.find('.wbPenTrigger').trigger('click');
+    await wrapper.find('.wbColorTrigger').trigger('click');
+    expect(wrapper.find('.wbPenMenu').exists()).toBe(false);
+    expect(wrapper.find('.wbColorPanel').exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

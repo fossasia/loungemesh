@@ -38,6 +38,12 @@ describe('sessionNotesPanel', () => {
       width: '400px',
       maxHeight: '480px',
     });
+    expect(featureCardStyleForPanel('poll', { ...layout, pollWidth: undefined })).toEqual({
+      right: '16px',
+      bottom: '88px',
+      width: '',
+      maxHeight: '480px',
+    });
   });
 
   it('applies remote notes only when there are no local edits', () => {

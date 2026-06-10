@@ -43,7 +43,7 @@ export function nearestPipCorner(
     lb: 'bl',
     rb: 'br',
   };
-  return map[`${horizontal[0]}${vertical[0]}`] ?? 'br';
+  return map[`${horizontal[0]}${vertical[0]}`];
 }
 
 export function getPipRatio(

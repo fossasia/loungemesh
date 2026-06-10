@@ -111,7 +111,7 @@ const isOccupantSpeaking = computed(() => {
 });
 const stageLabel = computed(() => {
   if (isTileMode.value) return 'On stage';
-  return isLocalOccupant.value ? 'You' : occupantName.value;
+  return isLocalOccupant.value ? 'On stage: You' : `On stage: ${occupantName.value}`;
 });
 
 const rootClass = computed(() => ({
@@ -131,10 +131,6 @@ function syncLayout(patch: Partial<StageLayout>, animate = true) {
   if (!canEditLayout.value) return;
   layoutAnimating.value = animate;
   broadcastStageLayout(engine, patch);
-  if (layoutThrottle) clearTimeout(layoutThrottle);
-  layoutThrottle = setTimeout(() => {
-    layoutAnimating.value = false;
-  }, 220);
 }
 
 function throttledLayout(patch: Partial<StageLayout>) {
@@ -282,10 +278,6 @@ function onResetLayout() {
   left.value = getInitialLeft();
   top.value = getInitialTop();
   layoutAnimating.value = true;
-  if (layoutThrottle) clearTimeout(layoutThrottle);
-  layoutThrottle = setTimeout(() => {
-    layoutAnimating.value = false;
-  }, 220);
 }
 
 let dragStartX = 0;

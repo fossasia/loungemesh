@@ -67,7 +67,7 @@ export function encodeGridBackgroundForSync(
     limits;
 
   for (
-    let maxDim = maxDimension;
+    let maxDim: number = maxDimension;
     maxDim >= minSyncDimension;
     maxDim = Math.max(minSyncDimension, Math.round(maxDim * syncDimensionScale))
   ) {

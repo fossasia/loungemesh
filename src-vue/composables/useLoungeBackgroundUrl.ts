@@ -1,8 +1,8 @@
-import { computed, ref, watch, type MaybeRef, toValue } from 'vue';
+import { computed, ref, watch, type MaybeRefOrGetter, toValue } from 'vue';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 /** Host wallpaper plus optional Eventyay event background. */
-export function useLoungeBackgroundUrl(eventIdentifier?: MaybeRef<string | undefined>) {
+export function useLoungeBackgroundUrl(eventIdentifier?: MaybeRefOrGetter<string | undefined>) {
   const features = useSessionFeaturesStore();
   const eventBackgroundUrl = ref('');
 

@@ -32,5 +32,6 @@ describe('getStageOccupantId', () => {
     expect(isParticipantOnStage('off', '', users)).toBe(false);
     expect(isParticipantOnStage('on', 'store-id', users)).toBe(false);
     expect(isParticipantOnStage('store-id', 'store-id', users)).toBe(true);
+    expect(isParticipantOnStage('', '', users)).toBe(false);
   });
 });

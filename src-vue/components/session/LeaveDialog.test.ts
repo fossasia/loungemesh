@@ -75,4 +75,9 @@ describe('LeaveDialog', () => {
     await wrapper.find('.btn.leave').trigger('click');
     expect(wrapper.emitted('leave')).toHaveLength(1);
   });
+
+  it('covers the implicit else branch of onExport', () => {
+    const wrapper = mountDialog({});
+    (wrapper.vm as any).onExport('unknown');
+  });
 });

@@ -566,8 +566,7 @@ describe('ChatPanel', () => {
   });
 
   it('shows an activity dot and plays a sound for remote messages while closed', async () => {
-    vi.mock('@/utils/uiSounds', () => ({ playUiSound: vi.fn() }));
-    const { playUiSound } = await import('@/utils/uiSounds');
+    const soundSpy = vi.spyOn(uiSounds, 'playUiSound').mockImplementation(() => {});
     const conference = useConferenceStore();
     conference.conferenceObject = {} as never;
     const local = useLocalStore();
@@ -577,11 +576,11 @@ describe('ChatPanel', () => {
     expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(true);
     conference.messages.push({ id: 'remote-2', text: 'again', nr: 2 });
     await flushPromises();
-    expect(playUiSound).toHaveBeenCalledWith('chatMessage');
+    expect(soundSpy).toHaveBeenCalledWith('chatMessage');
     await wrapper.find('button.ibtn').trigger('click');
     expect(wrapper.find('button.ibtn.hasActivityDot').exists()).toBe(false);
+    soundSpy.mockRestore();
     wrapper.unmount();
-    vi.doUnmock('@/utils/uiSounds');
   });
 
   it('skips incoming message sound when notifications are muted', async () => {
@@ -645,5 +644,107 @@ describe('ChatPanel', () => {
 
     vi.spyOn(engine, 'isJoined').mockReturnValue(true);
     engine.emit('conferenceError', 'err');
+  });
+
+  it('covers additional saveEdit and stage occupant watch branches', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('me');
+    features.setHost('me');
+    conference.conferenceObject = {} as never;
+    conference.isJoined = true;
+
+    // Msg with nr < 0 to cover the undefined branch of message.nr
+    conference.messages = [
+      { id: 'me', text: 'no-nr-msg', nr: -1, messageId: 'm1' }
+    ];
+
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+    const editBtn = wrapper.find('.msgActions .linkBtn');
+    await editBtn.trigger('click');
+    await wrapper.find('.editTa').setValue('new text');
+    await wrapper.find('.editActions .linkBtn').trigger('click');
+    expect(conference.messages[0].text).toBe('new text');
+
+    // Trigger stage occupant watch with isStageUser = false, wasStageUser = true/false
+    features.stageOccupantId = 'other';
+    await nextTick();
+    features.stageOccupantId = 'me';
+    await nextTick();
+    // wasStageUser = true, isStageUser = true (setting to same id)
+    features.stageOccupantId = 'me';
+    await nextTick();
+
+    wrapper.unmount();
+  });
+
+  it('covers ChatPanel.vue edge case branches', async () => {
+    const { conference } = await connectAndJoinTestConference();
+    const { wrapper } = await mountWithApp(ChatPanel);
+    const vm = wrapper.vm as any;
+
+    // 1. Cover line 177: onChatPanelOpen(false)
+    await vm.onChatPanelOpen(false);
+
+    // 2. Cover line 185: onIncomingMessages with nextCount <= prevCount
+    vm.onIncomingMessages(2, 2);
+    vm.onIncomingMessages(1, 2);
+
+    // 3. Cover line 186: onIncomingMessages with open.value false (already false on mount)
+    // Let's create an incoming message from another user to trigger playUiSound when open is false
+    const local = useLocalStore();
+    local.setMyID('me');
+    // mock a message
+    conference.messages.push({
+      id: 'someone-else',
+      senderId: 'someone-else',
+      text: 'hello',
+      time: Date.now(),
+      messageId: 'msg-1',
+      nr: 0,
+      avatar: '',
+      displayName: 'Someone Else'
+    } as any);
+    vm.onIncomingMessages(1, 0);
+
+    // 4. Cover line 214: chatReady() returning true/false in watch
+    // Trigger the watcher by modifying conference.isJoined
+    conference.isJoined = true;
+    await flushPromises();
+
+    // 5. Cover line 110: saveEdit early returns
+    vm.saveEdit('non-existent-id');
+    vm.saveEdit('msg-1');
+
+    // 6. Cover line 145: e.key === 'Enter' && !e.shiftKey in edit mode
+    // Let's mount another ChatPanel, open it, add a message, start edit, and trigger keydown Enter
+    const { wrapper: editWrapper } = await mountWithApp(ChatPanel);
+    await editWrapper.find('button.ibtn').trigger('click'); // open panel
+    // Add a message
+    conference.messages.push({
+      id: 'me',
+      senderId: 'me',
+      text: 'original',
+      time: Date.now(),
+      messageId: 'edit-msg-1',
+      nr: 0,
+      avatar: '',
+      displayName: 'Me'
+    } as any);
+    await flushPromises();
+    const editBtn = editWrapper.find('.linkBtn.subtle');
+    await editBtn.trigger('click');
+    const editTa = editWrapper.find('.editTa');
+    await editTa.setValue('new keyboard save');
+    editTa.element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+    await flushPromises();
+    expect(conference.messages.find(m => m.messageId === 'edit-msg-1')!.text).toBe('new keyboard save');
+
+    editWrapper.unmount();
+    wrapper.unmount();
   });
 });

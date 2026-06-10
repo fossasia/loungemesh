@@ -362,6 +362,45 @@ describe('handleSessionCommand', () => {
     }
   });
 
+  it('covers defensive checks for empty first value in stage command cache pruning', () => {
+    const local = useLocalStore();
+    local.setMyID('guest');
+    
+    // Flood with 101 items first
+    for (let i = 0; i < 101; i++) {
+      handleSessionCommand('stage', {
+        value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true, _cmdId: `prune-flood-${i}` }),
+      });
+    }
+    
+    // Now mock Set.prototype.values to return undefined
+    vi.spyOn(Set.prototype, 'values').mockImplementationOnce(function (this: any) {
+      return {
+        next: () => ({ done: true, value: undefined }),
+        [Symbol.iterator]() { return this; }
+      } as any;
+    });
+    
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'settings', stagePromotionEnabled: true, _cmdId: 'prune-trigger' }),
+    });
+  });
+
+  it('skips applying stage layout command when local user is the stage occupant', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('occupant-id');
+    features.stageOccupantId = 'occupant-id';
+    
+    features.stageLayout.scale = 1.0;
+    
+    handleSessionCommand('stage', {
+      value: JSON.stringify({ action: 'layout', layout: { scale: 1.5, expanded: true } }),
+    });
+    
+    expect(features.stageLayout.scale).toBe(1.0);
+  });
+
   it('handles unknown command names', () => {
     handleSessionCommand('unknown', { value: '{}' });
   });

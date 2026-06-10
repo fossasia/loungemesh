@@ -318,4 +318,57 @@ describe('sessionPoll', () => {
     });
     expect(text).toContain('2 votes');
   });
+
+  it('covers missing branches and nullish fallbacks in mergePolls and signature', () => {
+    // 1. tracksVoters = false (no options have any voters)
+    const pollNoVoters1 = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 1, voters: undefined }],
+      open: true,
+    };
+    const pollNoVoters2 = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 2, voters: [] }],
+      open: true,
+    };
+    const mergedNoVoters = mergePolls(pollNoVoters1, pollNoVoters2);
+    // When tracksVoters is false, it merges legacy style (takes max votes)
+    expect(mergedNoVoters.options[0].votes).toBe(2);
+
+    // 2. tracksVoters = true, but option.voters is undefined/null in loops
+    // In prev options:
+    const prevPoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 0, voters: undefined }],
+      open: true,
+    };
+    // In next options: (at least one has a voter to make tracksVoters true)
+    const nextPoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [
+        { id: 'a', label: 'A', votes: 1, voters: ['u1'] },
+        { id: 'b', label: 'B', votes: 0, voters: undefined }
+      ],
+      open: true,
+    };
+    const mergedWithUndefinedVoters = mergePolls(nextPoll, prevPoll);
+    expect(mergedWithUndefinedVoters.options.find(o => o.id === 'a')?.votes).toBe(1);
+
+    // 3. pollActivityChanged with pollSignature hitting option.voters = undefined fallback (line 138)
+    const signaturePoll = {
+      id: 'p1',
+      question: 'Q',
+      options: [{ id: 'a', label: 'A', votes: 0, voters: undefined }],
+      open: true,
+    };
+    const activityResult = pollActivityChanged(signaturePoll, {
+      ...signaturePoll,
+      question: 'New Q'
+    });
+    expect(activityResult).toBe(true);
+  });
 });

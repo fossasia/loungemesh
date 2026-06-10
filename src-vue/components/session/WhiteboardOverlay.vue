@@ -93,7 +93,7 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
       <div
         class="wbResize"
         role="separator"
-        aria-orientation="both"
+        :aria-orientation="'both' as any"
         aria-label="Resize whiteboard"
         title="Drag to resize"
         @pointerdown="onResizeDown"

@@ -1529,4 +1529,36 @@ describe('JitsiAdapter', () => {
     await adapter.addLocalTrack(track2);
     expect(mock.conference.addTrack).toHaveBeenCalledTimes(2);
   });
+
+  it('reverts tracking set when addLocalTrack or replaceLocalTrack throws an error', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+
+    const track1 = { getType: () => 'video', isLocal: () => true } as any;
+    const track2 = { getType: () => 'video', isLocal: () => true } as any;
+
+    // 1. addLocalTrack throws error
+    mock.conference.addTrack.mockRejectedValueOnce(new Error('add failed'));
+    await expect(adapter.addLocalTrack(track1)).rejects.toThrow('add failed');
+    // Verify it was deleted from addedLocalTracks by adding it again successfully
+    mock.conference.addTrack.mockResolvedValueOnce(undefined);
+    await adapter.addLocalTrack(track1);
+
+    // 2. replaceLocalTrack throws error
+    mock.conference.replaceTrack.mockRejectedValueOnce(new Error('replace failed'));
+    await expect(adapter.replaceLocalTrack(track1, track2)).rejects.toThrow('replace failed');
+    // Verify track1 is still tracked (adding it again should be ignored)
+    mock.conference.addTrack.mockClear();
+    await adapter.addLocalTrack(track1);
+    expect(mock.conference.addTrack).not.toHaveBeenCalled();
+  });
+
+  it('disconnects participant audio', () => {
+    const removeSpy = vi.spyOn(adapter, 'removeParticipantAudio').mockImplementation(() => {});
+    adapter.disconnectParticipantAudio('user-1');
+    expect(removeSpy).toHaveBeenCalledWith('user-1');
+    removeSpy.mockRestore();
+  });
 });

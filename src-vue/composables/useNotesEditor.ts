@@ -127,7 +127,7 @@ export function applyRemoteNotesContent(
   editor.value.commands.setContent(next, { emitUpdate: false });
 }
 
-type NotesEditorOptions = {
+export type NotesEditorOptions = {
   model: Ref<string>;
   readonly: Ref<boolean>;
   placeholder: string;

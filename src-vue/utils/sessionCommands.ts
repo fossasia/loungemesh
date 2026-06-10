@@ -15,7 +15,7 @@ import {
   type StageCommand,
 } from '@/utils/sessionStage';
 
-type CommandPayload = { value: string };
+export type CommandPayload = { value: string };
 
 const processedStageCommandIds = new Set<string>();
 
@@ -102,7 +102,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
     }
     case 'notes': {
       const data = parse<
-        import('@/utils/notesSync').NotesCommand & { text?: string }
+        import('@/utils/notesSync').NotesCommand | { text?: string }
       >(payload);
       if (!data) break;
       if ('action' in data && data.action) {
@@ -117,7 +117,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
     }
     case 'room': {
       const data = parse<
-        import('@/utils/roomBackgroundSync').RoomBackgroundCommand & {
+        import('@/utils/roomBackgroundSync').RoomBackgroundCommand | {
           gridBackgroundUrl?: string | null;
         }
       >(payload);

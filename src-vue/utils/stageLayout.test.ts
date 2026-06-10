@@ -7,6 +7,7 @@ import {
   pipSizeForContainer,
   pipStyleForLayout,
   scaleFromResizeDelta,
+  getPipRatio,
 } from './stageLayout';
 
 describe('stageLayout', () => {
@@ -56,5 +57,45 @@ describe('stageLayout', () => {
     );
     expect(style.left).toBe('348px');
     expect(style.top).toBe('167px');
+  });
+
+  it('covers remaining branches in getPipRatio and nearestPipCorner', () => {
+    const layout = defaultStageLayout();
+
+    // 1. getPipRatio when offset is 0
+    expect(getPipRatio({ ...layout, pipCorner: 'tl', pipOffset: { x: 0, y: 0 } }, 400, 300)).toEqual({ x: 0, y: 0 });
+    expect(getPipRatio({ ...layout, pipCorner: 'tr', pipOffset: { x: 0, y: 0 } }, 400, 300)).toEqual({ x: 1, y: 0 });
+    expect(getPipRatio({ ...layout, pipCorner: 'bl', pipOffset: { x: 0, y: 0 } }, 400, 300)).toEqual({ x: 0, y: 1 });
+    expect(getPipRatio({ ...layout, pipCorner: 'br', pipOffset: { x: 0, y: 0 } }, 400, 300)).toEqual({ x: 1, y: 1 });
+
+    // 2. getPipRatio with absolute pixels (> 1) and other corners
+    // tl corner
+    expect(getPipRatio({ ...layout, pipCorner: 'tl', pipOffset: { x: 10, y: 10 } }, 400, 300)).toEqual(expect.objectContaining({
+      x: expect.any(Number),
+      y: expect.any(Number)
+    }));
+    // tr corner
+    expect(getPipRatio({ ...layout, pipCorner: 'tr', pipOffset: { x: 10, y: 10 } }, 400, 300)).toEqual(expect.objectContaining({
+      x: expect.any(Number),
+      y: expect.any(Number)
+    }));
+    // bl corner
+    expect(getPipRatio({ ...layout, pipCorner: 'bl', pipOffset: { x: 10, y: 10 } }, 400, 300)).toEqual(expect.objectContaining({
+      x: expect.any(Number),
+      y: expect.any(Number)
+    }));
+
+    // 3. getPipRatio when usableWidth <= 0 and usableHeight <= 0
+    // size for container width 10 is 48. padding is 8.
+    // usableWidth = 10 - 48 - 16 = -54 <= 0
+    expect(getPipRatio({ ...layout, pipCorner: 'tl', pipOffset: { x: 10, y: 10 } }, 10, 10)).toEqual({ x: 0, y: 0 });
+
+    // 4. getPipRatio branch combinations for Math.abs(rx) > 1 || Math.abs(ry) > 1
+    // both false: rx = 0.5, ry = 0.5
+    expect(getPipRatio({ ...layout, pipCorner: 'tl', pipOffset: { x: 0.5, y: 0.5 } }, 400, 300)).toEqual({ x: 0.5, y: 0.5 });
+    // rx true, ry false: rx = 10, ry = 0.5
+    expect(getPipRatio({ ...layout, pipCorner: 'tl', pipOffset: { x: 10, y: 0.5 } }, 400, 300).x).toBeGreaterThan(0);
+    // rx false, ry true: rx = 0.5, ry = 10
+    expect(getPipRatio({ ...layout, pipCorner: 'tl', pipOffset: { x: 0.5, y: 10 } }, 400, 300).y).toBeGreaterThan(0);
   });
 });

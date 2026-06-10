@@ -79,4 +79,26 @@ describe('useSessionRecording', () => {
     await controls.downloadRecording();
     expect(exportFn).not.toHaveBeenCalled();
   });
+
+  it('handles error in ensureRecordingMp4 during downloadRecording', async () => {
+    const { ensureRecordingMp4 } = await import('@/utils/recordingToMp4');
+    vi.mocked(ensureRecordingMp4).mockRejectedValueOnce(new Error('encoding failed'));
+    
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    
+    const blob = new Blob(['v']);
+    const rec = fakeRecorder(true, blob);
+    const exportFn = vi.fn();
+    const controls = useSessionRecording(rec, exportFn);
+    
+    await controls.downloadRecording();
+    
+    expect(alertSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(exportFn).not.toHaveBeenCalled();
+    
+    alertSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
 });

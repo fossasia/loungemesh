@@ -79,6 +79,13 @@ Object.defineProperty(window, 'innerHeight', { value: 720, writable: true, confi
 HTMLElement.prototype.setPointerCapture = vi.fn();
 HTMLElement.prototype.releasePointerCapture = vi.fn();
 
+// jsdom's play()/pause() only log "Not implemented" and return undefined. Stub silently
+// so coverage paths stay the same as the real jsdom behavior.
+HTMLMediaElement.prototype.play = function play() {
+  return undefined as unknown as Promise<void>;
+};
+HTMLMediaElement.prototype.pause = function pause() {};
+
 if (!document.elementFromPoint) {
   document.elementFromPoint = () => null;
 }

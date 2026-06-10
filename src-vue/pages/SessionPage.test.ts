@@ -15,8 +15,106 @@ vi.mock('@/utils/uiSounds', () => ({
 }));
 
 vi.mock('@/components/screenshare/SharedScreens.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'SharedScreens',
+  __name: 'SharedScreens',
   default: {
+    name: 'SharedScreens',
     template: '<div class="shared-screens-mock" />',
+  },
+}));
+
+vi.mock('@/components/chat/ChatPanel.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'ChatPanel',
+  __name: 'ChatPanel',
+  default: {
+    name: 'ChatPanel',
+    template: '<div class="chat-stub" />',
+  },
+}));
+
+vi.mock('@/components/stage/StagePresentation.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'StagePresentation',
+  __name: 'StagePresentation',
+  default: {
+    name: 'StagePresentation',
+    template: '<div class="stage-presentation-stub" />',
+  },
+}));
+
+vi.mock('@/components/session/SessionTools.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'SessionTools',
+  __name: 'SessionTools',
+  default: {
+    name: 'SessionTools',
+    template: '<div class="session-tools-stub" />',
+  },
+}));
+
+vi.mock('@/components/session/SessionFeaturePanels.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'SessionFeaturePanels',
+  __name: 'SessionFeaturePanels',
+  default: {
+    name: 'SessionFeaturePanels',
+    template: '<div class="session-panels-stub" />',
+  },
+}));
+
+vi.mock('@/components/session/LobbyOverlay.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'LobbyOverlay',
+  __name: 'LobbyOverlay',
+  default: {
+    name: 'LobbyOverlay',
+    template: '<div />',
+  },
+}));
+
+vi.mock('@/components/session/WhiteboardOverlay.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'WhiteboardOverlay',
+  __name: 'WhiteboardOverlay',
+  default: {
+    name: 'WhiteboardOverlay',
+    template: '<div />',
+  },
+}));
+
+vi.mock('@/components/stage/StagePreviewDialog.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'StagePreviewDialog',
+  __name: 'StagePreviewDialog',
+  default: {
+    name: 'StagePreviewDialog',
+    template: '<button class="stage-preview-dialog-stub" @click="$emit(\'close\')">Close Dialog</button>',
   },
 }));
 
@@ -28,7 +126,6 @@ const sessionStubs = {
   Room: { template: '<div><slot /></div>' },
   RemoteUsers: { template: '<div />' },
   LocalUser: { template: '<div />' },
-  FooterBar: { template: '<div><slot /><slot name="right" /></div>' },
   ScreenshareButton: { template: '<div />' },
   StagePresentation: { template: '<div class="stage-presentation-stub" />' },
   ZoomControls: { template: '<div class="zoom-stub" />' },
@@ -444,4 +541,176 @@ describe('SessionPage', () => {
     vi.useRealTimers();
     wrapper.unmount();
   });
+
+  it('renders stageToast when stageMessage is set', async () => {
+    const features = useSessionFeaturesStore();
+    features.stageMessage = 'Stage message toast text';
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    const toast = wrapper.find('.stageToast');
+    expect(toast.exists()).toBe(true);
+    expect(toast.text()).toBe('Stage message toast text');
+    
+    // Clear it
+    features.stageMessage = '';
+    await flushPromises();
+    expect(wrapper.find('.stageToast').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('loads async components when not stubbed', async () => {
+    const features = useSessionFeaturesStore();
+    // Enable stage presentation, whiteboard, and stage preview dialog to trigger all loaders
+    features.stageOccupantId = 'someone';
+    features.panel = 'whiteboard';
+    features.stageInvitationPending = true;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: {
+        stubs: {
+          LocalStoreLogic: true,
+          JitsiConnection: true,
+          PanWrapper: true,
+          Room: true,
+          RemoteUsers: true,
+          LocalUser: true,
+          ScreenshareButton: true,
+          ChatPanel: true,
+        }
+      }
+    });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('covers all LeaveDialog event handlers and stageBtn toggle on SessionPage', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('host');
+    features.setHost('host');
+
+    // Mock URL object creation APIs
+    const createObjectURL = window.URL.createObjectURL;
+    const revokeObjectURL = window.URL.revokeObjectURL;
+    window.URL.createObjectURL = vi.fn(() => 'blob:url');
+    window.URL.revokeObjectURL = vi.fn();
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    // 1. Trigger stageBtn click
+    features.stageInvitationPending = true;
+    await flushPromises();
+    expect(wrapper.vm.showStagePreviewDialog).toBe(true);
+    await wrapper.find('.stageBtn').trigger('click');
+    expect(wrapper.vm.showStagePreviewDialog).toBe(false);
+    await wrapper.find('.stageBtn').trigger('click');
+    expect(wrapper.vm.showStagePreviewDialog).toBe(true);
+
+    // 2. Show LeaveDialog
+    await wrapper.find('.btn-leave-call').trigger('click');
+    await flushPromises();
+
+    const leaveDialog = wrapper.findComponent({ name: 'LeaveDialog' });
+    expect(leaveDialog.exists()).toBe(true);
+
+    // 3. Emit all event handlers
+    leaveDialog.vm.$emit('export-notes');
+    leaveDialog.vm.$emit('export-whiteboard');
+    leaveDialog.vm.$emit('export-recording');
+    leaveDialog.vm.$emit('toggle-recording', '720p');
+    leaveDialog.vm.$emit('update:quality', '480p');
+    leaveDialog.vm.$emit('cancel');
+
+    await flushPromises();
+    wrapper.unmount();
+
+    // Restore URL mocks
+    window.URL.createObjectURL = createObjectURL;
+    window.URL.revokeObjectURL = revokeObjectURL;
+  });
+
+  it('covers remaining template logic (StagePreviewDialog close, stage presentation, panel backdrop click, and record settings)', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+
+    // Set up state. stageInvitationPending=true with isLocalStageOccupant=false triggers showStagePreviewDialog=true.
+    local.setMyID('host');
+    features.setHost('host');
+    local.onStage = false;
+    features.stageOccupantId = '';
+    features.stageInvitationPending = false;
+    features.panel = 'moderator'; // renders panelBackdrop
+
+    // Mock MediaRecorder support for SessionRecordButton
+    const savedRecorder = (globalThis as { MediaRecorder?: unknown }).MediaRecorder;
+    const savedCapture = HTMLCanvasElement.prototype.captureStream;
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = function MockRecorder() {} as never;
+    HTMLCanvasElement.prototype.captureStream = function () {
+      return {} as MediaStream;
+    } as never;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: {
+        stubs: {
+          ...sessionStubs,
+          StagePreviewDialog: {
+            template: '<button class="stage-preview-dialog-stub" @click="$emit(\'close\')">Close Dialog</button>'
+          }
+        }
+      },
+    });
+    await flushPromises();
+
+    // Trigger watcher to show StagePreviewDialog
+    features.stageInvitationPending = true;
+    await flushPromises();
+
+    // Verify backdrop exists and click it to dismiss panel
+    const backdrop = wrapper.find('.panelBackdrop');
+    expect(backdrop.exists()).toBe(true);
+    await backdrop.trigger('click');
+    expect(features.panel).toBe('');
+
+    // Click close on StagePreviewDialog stub to emit close event
+    const dialogCloseBtn = wrapper.find('.stage-preview-dialog-stub');
+    expect(dialogCloseBtn.exists()).toBe(true);
+    await dialogCloseBtn.trigger('click');
+    expect(wrapper.vm.showStagePreviewDialog).toBe(false);
+
+    // Set stage mode active to render StagePresentation
+    local.onStage = true;
+    features.stageOccupantId = 'host';
+    await flushPromises();
+    expect(wrapper.find('.stage-presentation-stub').exists()).toBe(true);
+
+    // Verify SessionRecordButton is rendered and interact with it
+    const recordBtn = wrapper.find('[aria-label="Record session"]');
+    expect(recordBtn.exists()).toBe(true);
+    await recordBtn.trigger('click'); // triggers @toggle
+
+    const select = wrapper.find('.qualityPicker');
+    expect(select.exists()).toBe(true);
+    (select.element as HTMLSelectElement).value = '480p';
+    await select.trigger('change'); // triggers v-model update
+    expect(wrapper.vm.selectedQuality).toBe('480p');
+
+    wrapper.unmount();
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = savedRecorder;
+    if (savedCapture) HTMLCanvasElement.prototype.captureStream = savedCapture;
+    else delete (HTMLCanvasElement.prototype as { captureStream?: unknown }).captureStream;
+  });
 });
+

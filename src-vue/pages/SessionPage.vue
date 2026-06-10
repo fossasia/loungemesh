@@ -234,9 +234,7 @@ onBeforeUnmount(() => {
         :active="features.panel === 'moderator'"
         sound="panel"
         @click="features.togglePanel('moderator')"
-      >
-        <template #icon><AppIcon name="more-vertical" /></template>
-      </IconButton>
+      ><template #icon><AppIcon name="more-vertical" /></template></IconButton>
       <ChatPanel />
     </template>
   </FooterBar>

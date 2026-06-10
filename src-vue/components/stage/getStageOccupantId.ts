@@ -1,6 +1,6 @@
 import { isOnStage } from '@/components/stage/isOnStage';
 
-type ConferenceUser = {
+export type ConferenceUser = {
   properties?: { onStage?: unknown };
 };
 

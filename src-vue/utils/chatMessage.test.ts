@@ -4,6 +4,7 @@ import {
   canApplyChatEdit,
   canEditChatMessage,
   chatAuthorHue,
+  chatAuthorStyle,
   createChatMessage,
   formatEditedAt,
 } from './chatMessage';
@@ -28,6 +29,7 @@ describe('chatMessage', () => {
     });
     expect(formatEditedAt(0)).toBe('Jan 1, 2025, 3:00 PM');
     expect(chatAuthorHue('abc')).toBeGreaterThanOrEqual(0);
+    expect(chatAuthorStyle('abc')).toEqual({ color: expect.stringContaining('hsl') });
     expect(canEditChatMessage(createChatMessage('u1', 'x', 1), 'u1')).toBe(true);
     expect(canEditChatMessage(createChatMessage('u1', 'x', 1), 'u2')).toBe(false);
     expect(canEditChatMessage(createChatMessage('u1', 'x', 1), '')).toBe(false);
@@ -38,5 +40,13 @@ describe('chatMessage', () => {
     expect(canApplyChatEdit(messages, 'missing', 'u1')).toBe(false);
     expect(canApplyChatEdit(messages, 'sender-uuid', 'u1', 1)).toBe(true);
     expect(canApplyChatEdit(messages, 'sender-uuid', 'u2', 1)).toBe(false);
+  });
+
+  it('handles idx < 0 branch in applyChatEdit', () => {
+    const msg = createChatMessage('u1', 'hello', 1, 'm1');
+    const messages = [msg];
+    // Mock messages.indexOf to return -1 to simulate defensive fallback
+    Object.defineProperty(messages, 'indexOf', { value: () => -1 });
+    expect(applyChatEdit(messages, { messageId: 'm1' }, 'new text', 1000)).toBe(messages);
   });
 });

@@ -493,4 +493,36 @@ describe('sessionFeaturesStore', () => {
     expect(features.isStageModeActive).toBe(true);
     expect(features.isLocalStageOccupant).toBe(false);
   });
+
+  it('manages stage message and its timeout', () => {
+    const features = useSessionFeaturesStore();
+    
+    // Empty message does not start timeout
+    features.setStageMessage('');
+    expect(features.stageMessage).toBe('');
+    
+    // Setting message starts timeout
+    features.setStageMessage('Hello Stage');
+    expect(features.stageMessage).toBe('Hello Stage');
+    
+    // Wait less than 4000ms
+    vi.advanceTimersByTime(2000);
+    expect(features.stageMessage).toBe('Hello Stage');
+    
+    // Wait the rest, it should clear
+    vi.advanceTimersByTime(2000);
+    expect(features.stageMessage).toBe('');
+    
+    // Setting message and overriding it before timeout
+    features.setStageMessage('Msg 1');
+    vi.advanceTimersByTime(2000);
+    features.setStageMessage('Msg 2');
+    // After another 2000ms (original 4000ms mark), Msg 2 should still be there because message !== original message
+    vi.advanceTimersByTime(2000);
+    expect(features.stageMessage).toBe('Msg 2');
+    
+    // Wait remaining for second message
+    vi.advanceTimersByTime(2000);
+    expect(features.stageMessage).toBe('');
+  });
 });

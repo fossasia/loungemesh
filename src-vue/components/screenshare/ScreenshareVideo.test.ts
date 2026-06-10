@@ -91,4 +91,21 @@ describe('ScreenshareVideo', () => {
     wrapper.unmount();
     await flushPromises();
   });
+
+  it('covers watch(videoEl) branch when track is undefined', async () => {
+    const { wrapper } = await mountWithApp(ScreenshareVideo, { props: { track: undefined as any } });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('covers detachTrack when videoEl is null', async () => {
+    const track1 = makeTrack('desktop');
+    const track2 = makeTrack('desktop');
+    const { wrapper } = await mountWithApp(ScreenshareVideo, { props: { track: track1 } });
+    await flushPromises();
+    (wrapper.vm as any).videoEl = null;
+    await wrapper.setProps({ track: track2 });
+    await flushPromises();
+    wrapper.unmount();
+  });
 });

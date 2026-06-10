@@ -46,7 +46,7 @@ function getAudioContext(): AudioContext | undefined {
   return audioContext;
 }
 
-type ToneOptions = {
+export type ToneOptions = {
   freq: number;
   endFreq?: number;
   at?: number;

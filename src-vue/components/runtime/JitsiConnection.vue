@@ -26,9 +26,8 @@ function syncSession() {
     conferenceOptions,
     resetSessionForJoin: () => {
       const features = useSessionFeaturesStore();
-      const sessionId = String(route.params.id ?? '');
       features.resetHostForJoin();
-      features.loadPersistedHostSettings(sessionId);
+      features.loadPersistedHostSettings(roomId);
     },
   });
 }
