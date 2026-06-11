@@ -338,10 +338,26 @@ write_caddyfile() {
   local app_host="$1" jitsi_host="$2" email_line=""
   [[ -n "$CADDY_EMAIL" ]] && email_line=$'\temail '"$CADDY_EMAIL"
 
+  local redir_block=""
+  if [[ "$app_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$app_host" == "localhost" ]]; then
+    :
+  elif [[ "$app_host" == www.* ]]; then
+    local other_host="${app_host#www.}"
+    redir_block=$'\n'"${other_host} {
+	redir https://${app_host}{uri}
+}"
+  else
+    local other_host="www.${app_host}"
+    redir_block=$'\n'"${other_host} {
+	redir https://${app_host}{uri}
+}"
+  fi
+
   sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
 {
 ${email_line}
 }
+${redir_block}
 
 ${app_host} {
 	route {
