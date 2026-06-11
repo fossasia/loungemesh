@@ -28,7 +28,6 @@ COMMAND="${1:-dev}"
 shift || true
 
 APP_HOST=""
-JITSI_HOST=""
 PUBLIC_IP=""
 CADDY_EMAIL=""
 SKIP_SYSTEM=0
@@ -40,7 +39,6 @@ AUTO_IP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app-host=*)      APP_HOST="${1#*=}" ;;
-    --jitsi-host=*)    JITSI_HOST="${1#*=}" ;;
     --public-ip=*)     PUBLIC_IP="${1#*=}" ;;
     --email=*)         CADDY_EMAIL="${1#*=}" ;;
     --skip-system)     SKIP_SYSTEM=1 ;;
@@ -117,7 +115,6 @@ merge_env() {
     [[ ${#extra[@]} -gt 0 ]] && prod_extra+=("${extra[@]}")
     # Bootstrap may still have host/IP in shell vars when deploy runs immediately after.
     [[ -n "$PUBLIC_IP" ]] && prod_extra+=(--public-ip="$PUBLIC_IP")
-    [[ -n "$JITSI_HOST" ]] && prod_extra+=(--jitsi-host="$(strip_proto "$JITSI_HOST")")
     [[ -n "$APP_HOST" ]] && prod_extra+=(--app-host="$(strip_proto "$APP_HOST")")
     node scripts/setup-env.mjs production "${prod_extra[@]}" $FORCE_FLAGS
   else
@@ -353,6 +350,42 @@ write_caddyfile() {
 }"
   fi
 
+  local jitsi_block=""
+  if [[ "$app_host" != "$jitsi_host" ]]; then
+    jitsi_block=$'\n'"${jitsi_host} {
+	route {
+		handle /xmpp-websocket* {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+				}
+				stream_timeout 24h
+			}
+		}
+		handle /http-bind* {
+			reverse_proxy 127.0.0.1:8001
+		}
+		handle /colibri-ws* {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+				}
+				stream_timeout 24h
+			}
+		}
+		handle {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+					keepalive 30s
+				}
+				stream_timeout 24h
+			}
+		}
+	}
+}"
+  fi
+
   sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
 {
 ${email_line}
@@ -386,39 +419,7 @@ ${app_host} {
 		}
 	}
 }
-
-${jitsi_host} {
-	route {
-		handle /xmpp-websocket* {
-			reverse_proxy 127.0.0.1:8001 {
-				transport http {
-					versions 1.1
-				}
-				stream_timeout 24h
-			}
-		}
-		handle /http-bind* {
-			reverse_proxy 127.0.0.1:8001
-		}
-		handle /colibri-ws* {
-			reverse_proxy 127.0.0.1:8001 {
-				transport http {
-					versions 1.1
-				}
-				stream_timeout 24h
-			}
-		}
-		handle {
-			reverse_proxy 127.0.0.1:8001 {
-				transport http {
-					versions 1.1
-					keepalive 30s
-				}
-				stream_timeout 24h
-			}
-		}
-	}
-}
+${jitsi_block}
 EOF
   sudo systemctl enable --now caddy
   sudo systemctl reload caddy || sudo systemctl restart caddy
@@ -535,8 +536,8 @@ cmd_deploy() {
 }
 
 cmd_bootstrap() {
-  [[ -n "$JITSI_HOST" ]] || {
-    echo "Usage: ./scripts/loungemesh.sh bootstrap --app-host=... --jitsi-host=... [--public-ip=...] [--email=...] [--deploy]"
+  [[ -n "$APP_HOST" ]] || {
+    echo "Usage: ./scripts/loungemesh.sh bootstrap --app-host=... [--public-ip=...] [--email=...] [--deploy]"
     echo "  --public-ip is optional; omit to auto-detect the server's public IP."
     exit 1
   }
@@ -574,7 +575,7 @@ cmd_bootstrap() {
       sudo apt-get install -y docker-compose-plugin
       echo ""
       echo "Docker installed. Log out and back in (docker group), then re-run:"
-      echo "  ./scripts/loungemesh.sh bootstrap --skip-system --app-host=${APP_HOST} --jitsi-host=${JITSI_HOST} --public-ip=${PUBLIC_IP} --deploy"
+      echo "  ./scripts/loungemesh.sh bootstrap --skip-system --app-host=${APP_HOST} --public-ip=${PUBLIC_IP} --deploy"
       exit 0
     fi
     sudo apt-get install -y docker-compose-plugin
@@ -585,12 +586,10 @@ cmd_bootstrap() {
 
   echo "==> Production .env"
   ensure_node
-  local ah jh
-  ah=$(strip_proto "${APP_HOST:-$JITSI_HOST}")
-  jh=$(strip_proto "$JITSI_HOST")
+  local ah
+  ah=$(strip_proto "$APP_HOST")
   node scripts/setup-env.mjs production \
     --app-host="$ah" \
-    --jitsi-host="$jh" \
     --public-ip="$PUBLIC_IP" \
     $FORCE_FLAGS
 
@@ -598,7 +597,7 @@ cmd_bootstrap() {
 
   if [[ "$UPDATE_CADDY" -eq 1 || ! -f /etc/caddy/Caddyfile || "$DEPLOY_NOW" -eq 1 ]]; then
     echo "==> Writing Caddyfile"
-    write_caddyfile "$ah" "$jh"
+    write_caddyfile "$ah" "$ah"
   else
     echo "==> Caddyfile unchanged (pass --update-caddy to rewrite)"
     sudo systemctl enable --now caddy 2>/dev/null || true
@@ -645,12 +644,11 @@ cmd_fix_jvb() {
     exit 1
   fi
 
-  local app_host jitsi_host
+  local app_host
   app_host=$(strip_proto "${LOUNGEMESH_PUBLIC_URL:-${LOUNGEMESH_APP_HOST:-}}")
-  jitsi_host=$(strip_proto "${PUBLIC_URL:-}")
 
-  [[ -n "$app_host" && -n "$jitsi_host" ]] || {
-    echo "Set LOUNGEMESH_PUBLIC_URL and PUBLIC_URL in .env first."
+  [[ -n "$app_host" ]] || {
+    echo "Set LOUNGEMESH_PUBLIC_URL in .env first."
     exit 1
   }
 
@@ -658,7 +656,6 @@ cmd_fix_jvb() {
   ensure_node
   node scripts/setup-env.mjs production \
     --app-host="$app_host" \
-    --jitsi-host="$jitsi_host" \
     --public-ip="$PUBLIC_IP"
 
   # Ensure JVB_ADVERTISE_IPS is explicitly set
