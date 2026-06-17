@@ -43,7 +43,7 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
-    "@lucide/vue": "^1.16.0",
+    "@lucide/vue": "^1.20.0",
     "@tiptap/extension-placeholder": "^3.25.0",
     "@tiptap/pm": "^3.25.0",
     "@tiptap/starter-kit": "^3.25.0",
