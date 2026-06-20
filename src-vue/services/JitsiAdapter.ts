@@ -297,6 +297,7 @@ export class JitsiAdapter implements MediaService {
       'access',
       'chat',
       'stage',
+      'config',
     ] as const;
     for (const cmd of sessionCommands) {
       conference.addCommandListener(cmd, (payload: { value: string }) => {
@@ -326,10 +327,20 @@ export class JitsiAdapter implements MediaService {
       });
     }
     const av = devices.filter((d): d is 'audio' | 'video' => d === 'audio' || d === 'video');
-    return this.jsMeet!.createLocalTracks({
+    const trackOptions: any = {
       devices: av.length ? av : ['video'],
       ...options,
-    });
+    };
+    if (devices.includes('audio')) {
+      trackOptions.constraints = {
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        }
+      };
+    }
+    return this.jsMeet!.createLocalTracks(trackOptions);
   }
 
   async addLocalTrack(track: JitsiTrack): Promise<void> {
