@@ -85,6 +85,16 @@ const selectedQuality = ref<'720p' | '480p'>('720p');
 
 const showLeaveDialog = ref(false);
 
+function approve(entryId: string) {
+  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId }));
+  features.approveLobby(entryId);
+}
+
+function reject(entryId: string) {
+  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId }));
+  features.rejectLobby(entryId);
+}
+
 function requestLeave() {
   playUiSound('tap');
   if (features.isHost) {
@@ -177,6 +187,25 @@ onBeforeUnmount(() => {
     mode="audience"
   />
   <p v-if="features.stageMessage" class="stageToast" role="status">{{ features.stageMessage }}</p>
+  <div v-if="(features.isHost || features.isModerator) && features.lobbyWaiting.length > 0" class="lobbyNotificationBanner">
+    <div class="bannerHeader">
+      <AppIcon name="user" :size="16" />
+      <span>{{ features.lobbyWaiting.length === 1 ? '1 person wants to join' : `${features.lobbyWaiting.length} people want to join` }}</span>
+    </div>
+    <div class="bannerBody">
+      <div v-for="w in features.lobbyWaiting" :key="w.id" class="bannerRow">
+        <div class="bannerUser">
+          <strong class="bannerName">{{ w.name }}</strong>
+          <span v-if="w.email" class="bannerEmail" :title="w.email">{{ w.email }}</span>
+          <span v-if="w.reason" class="bannerReason">"{{ w.reason }}"</span>
+        </div>
+        <div class="bannerActions">
+          <button type="button" class="btnAdmit" @click="approve(w.id)">Admit</button>
+          <button type="button" class="btnDeny" @click="reject(w.id)">Deny</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <Transition name="fade">
     <div
       v-if="features.panel && features.panel !== 'whiteboard' && features.panel !== 'notes' && features.panel !== 'chat'"
@@ -209,7 +238,7 @@ onBeforeUnmount(() => {
     <ScreenshareButton />
     <IconButton
       v-if="features.stageInvitationPending || features.isLocalStageOccupant"
-      label="Stage Settings"
+      label="Presenter Settings"
       :active="showStagePreviewDialog"
       :warning="features.stageInvitationPending"
       class="stageBtn"
@@ -221,7 +250,7 @@ onBeforeUnmount(() => {
       </template>
     </IconButton>
     <SessionRecordButton
-      v-if="features.isHost && recorder.isSupported"
+      v-if="(features.isHost || features.isModerator || features.allowParticipantRecording) && recorder.isSupported"
       :is-recording="recorder.isRecording.value"
       v-model:quality="selectedQuality"
       @toggle="recording.toggleRecording(selectedQuality)"
@@ -229,12 +258,12 @@ onBeforeUnmount(() => {
     <button type="button" class="btn-leave-call" title="Leave call" @click="requestLeave">Leave Call</button>
     <template #right>
       <IconButton
-        v-if="features.isHost"
+        v-if="features.isHost || features.isModerator"
         label="Moderator"
         :active="features.panel === 'moderator'"
         sound="panel"
         @click="features.togglePanel('moderator')"
-      ><template #icon><AppIcon name="more-vertical" /></template></IconButton>
+      ><template #icon><AppIcon name="settings" /></template></IconButton>
       <ChatPanel />
     </template>
   </FooterBar>
@@ -271,6 +300,131 @@ onBeforeUnmount(() => {
   font-weight: var(--fw-medium);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .stageToast {
+    top: 56px;
+  }
+}
+
+.lobbyNotificationBanner {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10050;
+  width: min(400px, calc(100vw - 32px));
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(79, 110, 247, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(30, 34, 64, 0.25), 0 5px 15px -3px rgba(30, 34, 64, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 14px;
+  box-sizing: border-box;
+  animation: bannerSlideDown 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes bannerSlideDown {
+  from { opacity: 0; transform: translate(-50%, -20px) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.bannerHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4f6ef7;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(79, 110, 247, 0.1);
+  padding-bottom: 8px;
+}
+
+.bannerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.bannerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.bannerUser {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.bannerName {
+  font-size: 14px;
+  color: #1e2240;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.bannerEmail {
+  font-size: 11px;
+  color: #6970a0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.bannerReason {
+  font-size: 11px;
+  color: #6970a0;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.bannerActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btnAdmit {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btnAdmit:hover {
+  background: #059669;
+}
+
+.btnDeny {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnDeny:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #fa5252;
 }
 
 @media (max-width: 768px) {

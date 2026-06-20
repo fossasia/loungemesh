@@ -423,7 +423,7 @@ describe('SessionFeaturePanels', () => {
     expect(peerCard).toBeTruthy();
     
     const demoteBtn = peerCard!.find('.pill.subtle');
-    expect(demoteBtn.text()).toBe('Remove from stage');
+    expect(demoteBtn.text()).toBe('Remove presenter');
     await demoteBtn.trigger('click');
     expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"demote"'));
 

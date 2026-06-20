@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
@@ -33,11 +34,14 @@ const featureLabels: Record<FeatureKey, string> = {
   notes: 'Notes',
   whiteboard: 'Board',
   poll: 'Polls',
+  moderator: 'Moderator',
 };
 
 const features = useSessionFeaturesStore();
 const conference = useConferenceStore();
 const { engine } = useMediaEngine();
+const route = useRoute();
+const roomId = computed(() => String(route.params.id || ''));
 
 const notesDraft = ref(features.sharedNotes);
 const notesDirty = ref(false);
@@ -94,14 +98,14 @@ const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: dispos
   createNotesPushScheduler(
   () => features.canUseNotes,
   () => notesDraft.value,
-  (text) => {
-    if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
-    if (features.sharedNotes !== notesEditBase.value) return;
-    features.sharedNotes = text;
-    broadcastSharedNotes(engine, text);
-    notesDirty.value = false;
-    notesEditBase.value = text;
-  },
+    (text) => {
+      if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
+      if (features.sharedNotes !== notesEditBase.value) return;
+      features.updateSharedNotes(text, true);
+      broadcastSharedNotes(engine, text);
+      notesDirty.value = false;
+      notesEditBase.value = text;
+    },
 );
 
 const canResetNotesToTemplate = computed(
@@ -119,6 +123,7 @@ function resetNotesToTemplate() {
 
 function syncLobby() {
   engine.sendCommand('lobby', JSON.stringify({ enabled: features.lobbyEnabled }));
+  void features.updateRoomConfig(roomId.value, { lobbyEnabled: features.lobbyEnabled }, engine);
 }
 
 function syncRoomDefaults() {
@@ -152,6 +157,11 @@ function approve(entryId: string) {
   features.approveLobby(entryId);
 }
 
+function reject(entryId: string) {
+  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId }));
+  features.rejectLobby(entryId);
+}
+
 function kickUser(id: string) {
   kickParticipant(conference, engine, id);
 }
@@ -163,6 +173,11 @@ function muteUser(id: string) {
 function onStagePromotionToggle(event: Event) {
   const enabled = (event.target as HTMLInputElement).checked;
   syncStagePromotionEnabled(engine, enabled);
+  void features.updateRoomConfig(roomId.value, { stagePromotionEnabled: enabled }, engine);
+}
+
+function onRecordingToggle() {
+  void features.updateRoomConfig(roomId.value, { allowParticipantRecording: features.allowParticipantRecording }, engine);
 }
 
 function promoteUser(id: string) {
@@ -245,7 +260,7 @@ const featureCardStyle = computed(() => {
       </button>
     </template>
     <div v-if="features.panel === 'moderator'" class="body modBody">
-      <HostRoomSettingsSection v-if="features.isHost" />
+      <HostRoomSettingsSection v-if="features.isHost || features.isModerator" />
 
       <p v-if="features.stageMessage" class="stageMessage" role="status">{{ features.stageMessage }}</p>
 
@@ -261,15 +276,25 @@ const featureCardStyle = computed(() => {
               type="checkbox"
               @change="onStagePromotionToggle"
             />
-            <span>Allow stage promotion</span>
+            <span>Allow presenter promotion</span>
+          </label>
+          <label class="roomToggle" v-if="features.isHost || features.isModerator">
+            <input
+              v-model="features.allowParticipantRecording"
+              type="checkbox"
+              @change="onRecordingToggle"
+            />
+            <span>Allow participant recording</span>
           </label>
         </div>
-        <p class="stageStatus">Stage: <strong>{{ stageStatusLabel }}</strong></p>
+        <p class="stageStatus">Presenter: <strong>{{ stageStatusLabel }}</strong></p>
         <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
           <p class="sectionHint">Waiting to join</p>
           <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
-            <span class="name">{{ w.name }}</span>
+            <span class="name" :title="w.email">{{ w.name }}</span>
+            <span v-if="w.reason" class="reason" :title="w.reason">"{{ w.reason }}"</span>
             <button type="button" class="pill" @click="approve(w.id)">Admit</button>
+            <button type="button" class="pill warn" @click="reject(w.id)">Deny</button>
           </div>
         </div>
       </section>
@@ -313,7 +338,7 @@ const featureCardStyle = computed(() => {
             <div class="participantMeta">
               <span class="name">{{ displayName(uid) }}</span>
               <span v-if="uid === features.hostId" class="badge">Host</span>
-              <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">On stage</span>
+              <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">Presenter</span>
               <span v-else-if="uid === features.invitedStageUserId" class="badge stageInvitedBadge">Invited</span>
             </div>
             <div class="modActions">
@@ -323,7 +348,7 @@ const featureCardStyle = computed(() => {
                 class="pill"
                 @click="promoteUser(uid)"
               >
-                Promote
+                Make Presenter
               </button>
               <button
                 v-if="features.isHost && (uid === features.stageOccupantId || uid === features.invitedStageUserId)"
@@ -331,7 +356,7 @@ const featureCardStyle = computed(() => {
                 class="pill subtle"
                 @click="demoteUser(uid)"
               >
-                {{ uid === features.stageOccupantId ? 'Remove from stage' : 'Cancel invite' }}
+                {{ uid === features.stageOccupantId ? 'Remove presenter' : 'Cancel invite' }}
               </button>
               <button
                 v-if="uid !== features.hostId"
@@ -513,7 +538,7 @@ const featureCardStyle = computed(() => {
 }
 .grantTable {
   display: grid;
-  grid-template-columns: minmax(72px, auto) repeat(3, minmax(52px, 1fr));
+  grid-template-columns: minmax(72px, auto) repeat(4, minmax(52px, 1fr));
   gap: 8px 10px;
   align-items: center;
 }
