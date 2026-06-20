@@ -57,35 +57,8 @@ export function wireStoreSync(engine: MediaService): void {
     const features = useSessionFeaturesStore();
     if (id) {
       local.setMyID(id);
-      if (features.pendingHostClaim) {
-        features.pendingHostClaim = false;
-        features.setHost(id);
-        features.approveLobby(id);
-        engine.sendCommand('host', JSON.stringify({ hostId: id }));
-        engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
-        if (features.applyNotesTemplateIfNeeded()) {
-          broadcastSharedNotes(engine, features.sharedNotes);
-        }
-        broadcastHostRoomSettings(engine, features);
-      } else if (!features.hostId) {
-        features.setHost(id);
-        features.approveLobby(id);
-        engine.sendCommand('host', JSON.stringify({ hostId: id }));
-        engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
-        if (features.applyNotesTemplateIfNeeded()) {
-          broadcastSharedNotes(engine, features.sharedNotes);
-        }
-        broadcastHostRoomSettings(engine, features);
-      } else if (features.lobbyEnabled && !features.lobbyApproved[id]) {
-        features.localLobbyPending = true;
-        engine.sendCommand(
-          'lobby',
-          JSON.stringify({
-            action: 'wait',
-            id,
-            name: useConferenceStore().displayName,
-          }),
-        );
+      if (!features.isFetchingConfig) {
+        features.syncOrClaimHostOnLoaded(engine);
       }
       const others = Object.values(conferenceStore.users).map((u) => u.pos);
       local.setLocalPosition(spreadInitialUserPosition(others));
@@ -114,6 +87,8 @@ export function wireStoreSync(engine: MediaService): void {
     }
     const features = useSessionFeaturesStore();
     if (features.isHost) {
+      const local = useLocalStore();
+      engine.sendCommand('host', JSON.stringify({ hostId: local.id }));
       engine.sendCommand(
         'access',
         JSON.stringify(grantsPayloadForSync(features.roomDefaults, id, features.userGrants)),
