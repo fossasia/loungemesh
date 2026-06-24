@@ -1,6 +1,6 @@
 # --- build: embed Vite `VITE_*` vars at compile time ---
 # Image versions are pinned so Dependabot can open update PRs automatically.
-FROM node:24.16.0-alpine3.23 AS build
+FROM node:26.3.1-alpine3.23 AS build
 
 WORKDIR /app
 
