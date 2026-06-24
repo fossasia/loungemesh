@@ -47,7 +47,7 @@
     "@tiptap/extension-placeholder": "^3.25.0",
     "@tiptap/pm": "^3.25.0",
     "@tiptap/starter-kit": "^3.25.0",
-    "@tiptap/vue-3": "^3.25.0",
+    "@tiptap/vue-3": "^3.27.1",
     "emoji-mart-vue-fast": "^15.0.5",
     "mediabunny": "^1.46.0",
     "pinia": "^3.0.4",
