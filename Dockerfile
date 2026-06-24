@@ -38,7 +38,7 @@ ENV VITE_JITSI_PUBLIC_URL=$VITE_JITSI_PUBLIC_URL \
 RUN npm run build
 
 # --- runtime: static SPA served by nginx ---
-FROM nginx:1.30.2-alpine3.23
+FROM nginx:1.31.2-alpine3.23
 
 # The official nginx image processes *.conf.template via envsubst before start.
 # NGINX_ALLOW_IFRAME_FROM sets CSP frame-ancestors at runtime without a rebuild.
