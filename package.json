@@ -38,7 +38,7 @@
     "vite-plugin-compression2": "^2.5.3",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.7",
-    "vue-tsc": "^3.3.3"
+    "vue-tsc": "^3.3.6"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
