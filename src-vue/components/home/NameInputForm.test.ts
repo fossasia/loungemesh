@@ -28,12 +28,12 @@ describe('NameInputForm', () => {
     wrapper.unmount();
   });
 
-  it('does not emit when username is empty', async () => {
+  it('emits default session name when room input is empty', async () => {
     const { wrapper } = await mountWithApp(NameInputForm);
-    const inputs = wrapper.findAll('input[type="text"]');
-    await inputs[1].setValue('my-room');
     await wrapper.find('form').trigger('submit');
-    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.emitted('submit')?.[0]).toEqual([
+      { displayName: '', sessionName: conferenceNameDefault },
+    ]);
     wrapper.unmount();
   });
 });

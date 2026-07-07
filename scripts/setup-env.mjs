@@ -31,8 +31,6 @@ const PASSWORD_KEYS = new Set([
   'JIGASI_TRANSCRIBER_PASSWORD',
   'JIBRI_RECORDER_PASSWORD',
   'JIBRI_XMPP_PASSWORD',
-  'JWT_SECRET',
-  'ENCRYPTION_KEY',
 ]);
 
 const PRODUCTION_URL_KEYS = new Set([
@@ -66,8 +64,8 @@ function parseArgs(argv) {
   return out;
 }
 
-function rand(bytes = 16) {
-  return crypto.randomBytes(bytes).toString('hex');
+function rand() {
+  return crypto.randomBytes(16).toString('hex');
 }
 
 function stripProtocol(host) {
@@ -142,10 +140,9 @@ function applyProductionPlaceholders(text, { appHost, publicIp }) {
 }
 
 function passwordValue(key, current, templateValue, { forcePasswords }) {
-  const bytes = key === 'JWT_SECRET' || key === 'ENCRYPTION_KEY' ? 32 : 16;
-  if (forcePasswords) return rand(bytes);
+  if (forcePasswords) return rand();
   if (!isPlaceholder(current) && current !== undefined) return current;
-  if (isPlaceholder(templateValue)) return rand(bytes);
+  if (isPlaceholder(templateValue)) return rand();
   return templateValue;
 }
 

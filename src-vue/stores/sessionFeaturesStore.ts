@@ -2,7 +2,6 @@ import { defineStore } from 'pinia';
 import { getStageOccupantId } from '@/components/stage/getStageOccupantId';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
-import { useAuthStore } from '@/stores/authStore';
 import {
   mergeWhiteboardStroke,
   type WhiteboardStroke,
@@ -20,13 +19,15 @@ import {
   type AccessCommandPayload,
 } from '@/utils/sessionAccess';
 import { mergePolls } from '@/utils/sessionPoll';
-
+import {
+  loadPersistedHostRoomSettings,
+  persistHostRoomSettings,
+} from '@/utils/hostRoomSettings';
 import type { NotesCommand } from '@/utils/notesSync';
-import { decodeNotesFromWire, broadcastSharedNotes } from '@/utils/notesSync';
+import { decodeNotesFromWire } from '@/utils/notesSync';
 import type { RoomBackgroundCommand } from '@/utils/roomBackgroundSync';
-import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
 
-export type LobbyEntry = { id: string; name: string; email?: string; reason?: string };
+export type LobbyEntry = { id: string; name: string };
 export type PollOption = { id: string; label: string; votes: number; voters?: string[] };
 export type ActivePoll = {
   id: string;
@@ -57,15 +58,11 @@ export function defaultStageLayout(): StageLayout {
 
 export const useSessionFeaturesStore = defineStore('sessionFeatures', {
   state: () => ({
-    isVerifiedHost: false,
-    isVerifiedModerator: false,
-    allowParticipantRecording: false,
     hostId: '',
     lobbyEnabled: false,
     lobbyApproved: {} as Record<string, boolean>,
     lobbyWaiting: [] as LobbyEntry[],
     localLobbyPending: false,
-    lobbyRejected: false,
     handRaised: false,
     userReactions: {} as Record<string, UserReaction>,
     activePoll: null as ActivePoll | null,
@@ -93,9 +90,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     stageMessage: '',
     stageInvitationPending: false,
     invitedStageUserId: '',
-    meetingExists: false,
-    configLoaded: false,
-    isFetchingConfig: false,
   }),
   getters: {
     hasUnreadNotes(): boolean {
@@ -108,24 +102,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return this.pollActivitySeq > this.pollSeenSeq;
     },
     isHost(): boolean {
-      if (this.isVerifiedHost) return true;
       const local = useLocalStore();
       if (!local.id) return false;
-      if (this.isFetchingConfig) {
-        return false;
-      }
-      if (this.meetingExists) {
-        return this.hostId === local.id;
-      }
       if (!this.hostId) return true;
       return this.hostId === local.id;
-    },
-    isModerator(): boolean {
-      if (this.isVerifiedHost || this.isVerifiedModerator) return true;
-      const local = useLocalStore();
-      if (!local.id) return false;
-      if (this.hostId === local.id) return true;
-      return !!this.userGrants[local.id]?.moderator;
     },
     localGrants(): UserGrants {
       const local = useLocalStore();
@@ -167,9 +147,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     isLobbyBlocked(): boolean {
       if (!this.lobbyEnabled) return false;
-      if (this.isHost || this.isModerator) return false;
-      const auth = useAuthStore();
-      if (auth.isAuthenticated) return false;
+      if (this.isHost) return false;
       const local = useLocalStore();
       if (!local.id) return this.localLobbyPending;
       return this.localLobbyPending || !this.lobbyApproved[local.id];
@@ -187,9 +165,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.lobbyApproved[id] = true;
       this.lobbyWaiting = this.lobbyWaiting.filter((e) => e.id !== id);
     },
-    rejectLobby(id: string) {
-      this.lobbyWaiting = this.lobbyWaiting.filter((e) => e.id !== id);
-    },
     addLobbyWaiter(entry: LobbyEntry) {
       if (!this.lobbyWaiting.some((e) => e.id === entry.id)) {
         this.lobbyWaiting.push(entry);
@@ -205,38 +180,16 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         this.userReactions = next;
       }, REACTION_DISPLAY_MS);
     },
-    applyPoll(poll: ActivePoll | null, isLocal = false) {
+    applyPoll(poll: ActivePoll | null) {
       if (!poll) {
         this.activePoll = null;
         this.myPollVote = '';
-        /* v8 ignore start */
-        if (isLocal) {
-          const roomName = window.location.pathname.split('/').pop();
-          if (roomName) {
-            fetch(`/api/meetings/state/${roomName}/poll`, {
-              method: 'DELETE',
-            }).catch((err) => console.error('Failed to clear poll:', err));
-          }
-        }
-        /* v8 ignore stop */
         return;
       }
       const pollIdChanged = this.activePoll?.id !== poll.id;
       this.activePoll = mergePolls(poll, this.activePoll);
       if (pollIdChanged) this.myPollVote = '';
       this.syncMyPollVoteFromPoll();
-      /* v8 ignore start */
-      if (isLocal) {
-        const roomName = window.location.pathname.split('/').pop();
-        if (roomName) {
-          fetch(`/api/meetings/state/${roomName}/poll`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ poll: this.activePoll }),
-          }).catch((err) => console.error('Failed to save poll:', err));
-        }
-      }
-      /* v8 ignore stop */
     },
     syncMyPollVoteFromPoll() {
       const local = useLocalStore();
@@ -247,62 +200,37 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       const voted = this.activePoll.options.find((o) => o.voters?.includes(voterId));
       this.myPollVote = voted?.id ?? '';
     },
-    addWhiteboardStroke(stroke: WhiteboardStroke, isLocal = false) {
+    addWhiteboardStroke(stroke: WhiteboardStroke) {
       this.whiteboardStrokes = mergeWhiteboardStroke(this.whiteboardStrokes, stroke);
-      /* v8 ignore start */
-      if (isLocal) {
-        const roomName = window.location.pathname.split('/').pop();
-        if (roomName) {
-          fetch(`/api/meetings/state/${roomName}/whiteboard/stroke`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stroke }),
-          }).catch((err) => console.error('Failed to save stroke:', err));
-        }
-      }
-      /* v8 ignore stop */
     },
-    clearWhiteboard(isLocal = false) {
+    clearWhiteboard() {
       this.whiteboardStrokes = [];
-      /* v8 ignore start */
-      if (isLocal) {
-        const roomName = window.location.pathname.split('/').pop();
-        if (roomName) {
-          fetch(`/api/meetings/state/${roomName}/whiteboard/clear`, {
-            method: 'POST',
-          }).catch((err) => console.error('Failed to clear whiteboard:', err));
-        }
-      }
-      /* v8 ignore stop */
     },
     loadPersistedHostSettings(sessionId: string) {
       if (!sessionId) return;
       this.hostSettingsSessionId = sessionId;
+      if (!this.pendingHostClaim) return;
+      const saved = loadPersistedHostRoomSettings(sessionId);
+      if (!saved) return;
+      if (saved.gridBackgroundUrl) this.gridBackgroundUrl = saved.gridBackgroundUrl;
+      if (saved.notesTemplate) this.notesTemplate = saved.notesTemplate;
+    },
+    persistHostSettings() {
+      const sessionId = this.hostSettingsSessionId;
+      if (!sessionId) return;
+      persistHostRoomSettings(sessionId, {
+        gridBackgroundUrl: this.gridBackgroundUrl,
+        notesTemplate: this.notesTemplate,
+      });
     },
     setGridBackgroundUrl(url: string) {
       this.gridBackgroundUrl = url;
-      /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
-        fetch(`/api/meetings/state/${roomName}/background`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ gridBackgroundUrl: url }),
-        }).catch((err) => console.error('Failed to save background:', err));
-      }
-      /* v8 ignore stop */
+      this.persistHostSettings();
     },
     clearGridBackground() {
       this.gridBackgroundUrl = '';
       this.roomBgAssembly = null;
-      /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
-        fetch(`/api/meetings/state/${roomName}/background`, {
-          method: 'DELETE',
-        }).catch((err) => console.error('Failed to clear background:', err));
-      }
-      /* v8 ignore stop */
+      this.persistHostSettings();
     },
     applyNotesCommand(command: NotesCommand) {
       if (command.action === 'clear') {
@@ -346,84 +274,31 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     setNotesTemplate(text: string) {
       this.notesTemplate = text;
-      /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
-        fetch(`/api/meetings/config/${roomName}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notesTemplate: text }),
-        }).catch((err) => console.error('Failed to save notes template:', err));
-      }
-      /* v8 ignore stop */
+      this.persistHostSettings();
     },
     clearNotesTemplate() {
       this.notesTemplate = '';
-      /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
-        fetch(`/api/meetings/config/${roomName}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notesTemplate: '' }),
-        }).catch((err) => console.error('Failed to clear notes template:', err));
-      }
-      /* v8 ignore stop */
-    },
-    updateSharedNotes(text: string, isLocal = false) {
-      this.sharedNotes = text;
-      this.bumpNotesActivity();
-      /* v8 ignore start */
-      if (isLocal) {
-        const roomName = window.location.pathname.split('/').pop();
-        if (roomName) {
-          fetch(`/api/meetings/state/${roomName}/notes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notes: text }),
-          }).catch((err) => console.error('Failed to save notes:', err));
-        }
-      }
-      /* v8 ignore stop */
+      this.persistHostSettings();
     },
     /** Pre-fill shared notes from the host template when the session is still blank. */
     applyNotesTemplateIfNeeded(): boolean {
       if (!this.isHost || !this.notesTemplate.trim() || this.sharedNotes.trim()) return false;
-      this.updateSharedNotes(this.notesTemplate, true);
+      this.sharedNotes = this.notesTemplate;
       return true;
     },
     /** Replace shared notes with the host template (host only). */
     resetSharedNotesToTemplate(): boolean {
       if (!this.isHost || !this.notesTemplate.trim()) return false;
-      this.updateSharedNotes(this.notesTemplate, true);
+      this.sharedNotes = this.notesTemplate;
+      this.bumpNotesActivity();
       return true;
     },
     setRoomDefault(key: FeatureKey, value: boolean) {
       this.roomDefaults = { ...this.roomDefaults, [key]: value };
-      /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
-        fetch(`/api/meetings/state/${roomName}/access/defaults`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ defaults: this.roomDefaults }),
-        }).catch((err) => console.error('Failed to save room defaults:', err));
-      }
-      /* v8 ignore stop */
     },
     setUserGrant(userId: string, key: FeatureKey, value: boolean) {
       const current = this.grantsForUser(userId);
       this.userGrants[userId] = { ...current, [key]: value };
-      /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
-        fetch(`/api/meetings/state/${roomName}/access/grants`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, grants: this.userGrants[userId] }),
-        }).catch((err) => console.error('Failed to save user grants:', err));
-      }
-      /* v8 ignore stop */
     },
     applyAccessUpdate(data: AccessCommandPayload & { notes?: boolean; whiteboard?: boolean }) {
       const legacy = legacyAccessToDefaults(data);
@@ -469,10 +344,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.pollSeenSeq = this.pollActivitySeq;
     },
     togglePanel(name: typeof this.panel) {
-      if (name === 'notes' && !this.canUseNotes && !this.isHost && !this.isModerator) return;
-      if (name === 'whiteboard' && !this.canUseWhiteboard && !this.isHost && !this.isModerator) return;
-      if (name === 'poll' && !this.canUsePoll && !this.isHost && !this.isModerator) return;
-      if (name === 'moderator' && !this.isHost && !this.isModerator) return;
+      if (name === 'notes' && !this.canUseNotes) return;
+      if (name === 'whiteboard' && !this.canUseWhiteboard) return;
       const opening = this.panel !== name;
       this.panel = opening ? name : '';
       if (opening && name === 'notes') this.markNotesSeen();
@@ -482,10 +355,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     resetHostForJoin() {
       this.hostId = '';
       this.pendingHostClaim = true;
-      this.isFetchingConfig = false;
-      this.meetingExists = false;
-      this.configLoaded = false;
-      this.lobbyRejected = false;
     },
     setStageMessage(message: string) {
       this.stageMessage = message;
@@ -495,15 +364,11 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       }, 4000);
     },
     resetForLeave() {
-      this.isVerifiedHost = false;
-      this.isVerifiedModerator = false;
-      this.allowParticipantRecording = false;
       this.hostId = '';
       this.panel = '';
       this.localLobbyPending = false;
       this.lobbyWaiting = [];
       this.pendingHostClaim = false;
-      this.lobbyRejected = false;
       this.roomDefaults = defaultUserGrants();
       this.userGrants = {};
       this.gridBackgroundUrl = '';
@@ -521,161 +386,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.stageOccupantId = '';
       this.stageLayout = defaultStageLayout();
       this.stageMessage = '';
-      this.meetingExists = false;
-      this.configLoaded = false;
-      this.isFetchingConfig = false;
     },
-    /* v8 ignore start */
-    setVerifiedHost(verified: boolean) {
-      this.isVerifiedHost = verified;
-    },
-    setAllowParticipantRecording(value: boolean) {
-      this.allowParticipantRecording = value;
-    },
-    syncConfig(engine: any) {
-      engine.sendCommand('config', JSON.stringify({
-        allowParticipantRecording: this.allowParticipantRecording,
-        lobbyEnabled: this.lobbyEnabled,
-        stagePromotionEnabled: this.stagePromotionEnabled,
-      }));
-    },
-    syncOrClaimHostOnLoaded(engine: any) {
-      const local = useLocalStore();
-      const id = local.id;
-      if (!id) return;
-
-      const isHost = this.isVerifiedHost || (!this.meetingExists && !this.hostId);
-
-      if (isHost) {
-        this.hostId = id;
-        this.pendingHostClaim = false;
-
-        if (!this.meetingExists) {
-          const savedDefaults = localStorage.getItem('loungemesh:meeting_defaults');
-          if (savedDefaults) {
-            try {
-              const parsed = JSON.parse(savedDefaults);
-              this.lobbyEnabled = parsed.lobbyEnabled ?? false;
-              this.stagePromotionEnabled = parsed.stagePromotionEnabled ?? true;
-              this.allowParticipantRecording = parsed.allowParticipantRecording ?? false;
-              if (parsed.roomDefaults) {
-                this.roomDefaults = {
-                  notes: parsed.roomDefaults.notes ?? false,
-                  whiteboard: parsed.roomDefaults.whiteboard ?? false,
-                  poll: parsed.roomDefaults.poll ?? false,
-                  moderator: false,
-                };
-              }
-            } catch (err) {
-              console.error('Failed to parse meeting defaults in session:', err);
-            }
-          }
-        }
-
-        engine.sendCommand('host', JSON.stringify({ hostId: id }));
-        engine.sendCommand('access', JSON.stringify({ defaults: this.roomDefaults }));
-        engine.sendCommand('lobby', JSON.stringify({ enabled: this.lobbyEnabled }));
-        engine.sendCommand('stage', JSON.stringify({ action: 'settings', stagePromotionEnabled: this.stagePromotionEnabled }));
-        engine.sendCommand('config', JSON.stringify({ allowParticipantRecording: this.allowParticipantRecording }));
-
-        if (this.applyNotesTemplateIfNeeded()) {
-          broadcastSharedNotes(engine, this.sharedNotes);
-        }
-        broadcastHostRoomSettings(engine, this);
-      } else {
-        this.pendingHostClaim = false;
-        const auth = useAuthStore();
-        if (this.lobbyEnabled && !auth.isAuthenticated && !this.lobbyApproved[id]) {
-          this.localLobbyPending = false;
-        }
-      }
-    },
-    async fetchRoomConfigAndRole(roomName: string, engine?: any) {
-      this.isFetchingConfig = true;
-      try {
-        const roleRes = await fetch(`/api/meetings/role/${roomName}`);
-        if (roleRes.ok) {
-          const data = await roleRes.json();
-          this.isVerifiedHost = data.role === 'host';
-          this.isVerifiedModerator = data.role === 'moderator';
-          if (data.hostId) {
-            this.hostId = data.hostId;
-          }
-        }
-        const configRes = await fetch(`/api/meetings/config/${roomName}`);
-        if (configRes.ok) {
-          this.meetingExists = true;
-          const config = await configRes.json();
-          this.allowParticipantRecording = !!config.allowParticipantRecording;
-          this.lobbyEnabled = !!config.lobbyEnabled;
-          this.stagePromotionEnabled = !!config.stagePromotionEnabled;
-          this.notesTemplate = config.notesTemplate || '';
-        } else {
-          this.meetingExists = false;
-        }
-        const wbRes = await fetch(`/api/meetings/state/${roomName}/whiteboard`);
-        if (wbRes.ok) {
-          const wbData = await wbRes.json();
-          this.whiteboardStrokes = wbData.strokes || [];
-        }
-        const notesRes = await fetch(`/api/meetings/state/${roomName}/notes`);
-        if (notesRes.ok) {
-          const notesData = await notesRes.json();
-          this.sharedNotes = notesData.notes || '';
-        }
-        const accessRes = await fetch(`/api/meetings/state/${roomName}/access`);
-        if (accessRes.ok) {
-          const accessData = await accessRes.json();
-          if (accessData.defaults) this.roomDefaults = accessData.defaults;
-          if (accessData.grants) this.userGrants = accessData.grants;
-        }
-        const pollRes = await fetch(`/api/meetings/state/${roomName}/poll`);
-        if (pollRes.ok) {
-          const pollData = await pollRes.json();
-          if (pollData.poll) {
-            this.activePoll = pollData.poll;
-            this.syncMyPollVoteFromPoll();
-          }
-        }
-        const bgRes = await fetch(`/api/meetings/state/${roomName}/background`);
-        if (bgRes.ok) {
-          const bgData = await bgRes.json();
-          this.gridBackgroundUrl = bgData.gridBackgroundUrl || '';
-        }
-      } catch (err) {
-        console.error('Failed to fetch room config/role:', err);
-      } finally {
-        this.isFetchingConfig = false;
-        this.configLoaded = true;
-        const conferenceStore = useConferenceStore();
-        if (engine && conferenceStore.isJoined) {
-          this.syncOrClaimHostOnLoaded(engine);
-        }
-      }
-    },
-    async updateRoomConfig(
-      roomName: string,
-      updates: { allowParticipantRecording?: boolean; lobbyEnabled?: boolean; stagePromotionEnabled?: boolean; notesTemplate?: string },
-      engine: any
-    ) {
-      try {
-        const response = await fetch(`/api/meetings/config/${roomName}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates),
-        });
-        if (response.ok) {
-          const config = await response.json();
-          this.allowParticipantRecording = !!config.allowParticipantRecording;
-          this.lobbyEnabled = !!config.lobbyEnabled;
-          this.stagePromotionEnabled = !!config.stagePromotionEnabled;
-          this.notesTemplate = config.notesTemplate || '';
-          this.syncConfig(engine);
-        }
-      } catch (err) {
-        console.error('Failed to update room config:', err);
-      }
-    },
-    /* v8 ignore stop */
   },
 });

@@ -4,7 +4,6 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { encodeNotesForWire } from '@/utils/notesSync';
 import { useSessionFeaturesStore } from './sessionFeaturesStore';
-import { useAuthStore } from '@/stores/authStore';
 
 describe('sessionFeaturesStore', () => {
   beforeEach(() => {
@@ -29,52 +28,6 @@ describe('sessionFeaturesStore', () => {
     features.approveLobby('guest');
     features.localLobbyPending = false;
     expect(features.isLobbyBlocked).toBe(false);
-  });
-
-  it('checks isLobbyBlocked when local.id is empty', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    features.lobbyEnabled = true;
-    features.setHost('some-host');
-    local.setMyID('');
-
-    features.localLobbyPending = true;
-    expect(features.isLobbyBlocked).toBe(true);
-
-    features.localLobbyPending = false;
-    expect(features.isLobbyBlocked).toBe(false);
-  });
-
-  it('allows authenticated users to bypass the lobby', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    const auth = useAuthStore();
-    features.lobbyEnabled = true;
-    features.setHost('real-host');
-    local.setMyID('guest');
-    auth.isAuthenticated = true;
-    expect(features.isLobbyBlocked).toBe(false);
-  });
-
-  it('prevents non-authorized users from toggling restricted panels', () => {
-    const features = useSessionFeaturesStore();
-    features.setHost('real-host');
-    features.isVerifiedHost = false;
-    features.isVerifiedModerator = false;
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, moderator: false };
-
-    features.panel = '';
-    features.togglePanel('poll');
-    expect(features.panel).toBe('');
-
-    features.togglePanel('moderator');
-    expect(features.panel).toBe('');
-
-    features.togglePanel('notes');
-    expect(features.panel).toBe('');
-
-    features.togglePanel('whiteboard');
-    expect(features.panel).toBe('');
   });
 
   it('manages reactions, polls, and panels', () => {
@@ -208,17 +161,8 @@ describe('sessionFeaturesStore', () => {
     expect(features.lobbyWaiting).toHaveLength(0);
   });
 
-  it('rejects lobby waiters', () => {
-    const features = useSessionFeaturesStore();
-    features.addLobbyWaiter({ id: 'g1', name: 'Guest' });
-    expect(features.lobbyWaiting).toHaveLength(1);
-    features.rejectLobby('g1');
-    expect(features.lobbyWaiting).toHaveLength(0);
-  });
-
   it('tracks unread poll activity', () => {
     const features = useSessionFeaturesStore();
-    features.isVerifiedHost = true;
     features.bumpPollActivity();
     expect(features.hasUnreadPoll).toBe(true);
     features.togglePanel('poll');
@@ -411,13 +355,12 @@ describe('sessionFeaturesStore', () => {
     expect(features.resetSharedNotesToTemplate()).toBe(false);
   });
 
-  it('manages and clears host room settings properties', () => {
+  it('persists and clears host room settings', () => {
     const features = useSessionFeaturesStore();
     features.hostSettingsSessionId = 'room-1';
     features.setGridBackgroundUrl('data:test');
     features.setNotesTemplate('# Notes');
-    expect(features.gridBackgroundUrl).toBe('data:test');
-    expect(features.notesTemplate).toBe('# Notes');
+    expect(localStorage.getItem('loungemesh:host-room:room-1')).toContain('data:test');
 
     features.clearGridBackground();
     features.clearNotesTemplate();
@@ -425,10 +368,15 @@ describe('sessionFeaturesStore', () => {
     expect(features.notesTemplate).toBe('');
   });
 
-  it('records session id when loading settings', () => {
+  it('records session id without loading settings when not claiming host', () => {
     const features = useSessionFeaturesStore();
+    localStorage.setItem(
+      'loungemesh:host-room:room-2',
+      JSON.stringify({ gridBackgroundUrl: 'data:hidden' }),
+    );
     features.loadPersistedHostSettings('room-2');
     expect(features.hostSettingsSessionId).toBe('room-2');
+    expect(features.gridBackgroundUrl).toBe('');
   });
 
   it('skips loading persisted settings for empty session ids', () => {
@@ -436,6 +384,18 @@ describe('sessionFeaturesStore', () => {
     features.hostSettingsSessionId = 'keep';
     features.loadPersistedHostSettings('');
     expect(features.hostSettingsSessionId).toBe('keep');
+  });
+
+  it('loads persisted host settings when claiming host', () => {
+    localStorage.setItem(
+      'loungemesh:host-room:room-1',
+      JSON.stringify({ gridBackgroundUrl: 'data:test', notesTemplate: '# T' }),
+    );
+    const features = useSessionFeaturesStore();
+    features.resetHostForJoin();
+    features.loadPersistedHostSettings('room-1');
+    expect(features.gridBackgroundUrl).toBe('data:test');
+    expect(features.notesTemplate).toBe('# T');
   });
 
   it('reassembles chunked shared notes with markdown', () => {
@@ -481,10 +441,30 @@ describe('sessionFeaturesStore', () => {
     expect(features.gridBackgroundUrl).toBe('a');
   });
 
-  it('verifies default empty state on join reset', () => {
+  it('loads partial persisted host settings and skips missing entries', () => {
     const features = useSessionFeaturesStore();
-    features.resetForLeave();
+    features.resetHostForJoin();
+    features.loadPersistedHostSettings('missing-room');
     expect(features.gridBackgroundUrl).toBe('');
+    expect(features.notesTemplate).toBe('');
+
+    localStorage.setItem(
+      'loungemesh:host-room:notes-only',
+      JSON.stringify({ notesTemplate: '# Notes only' }),
+    );
+    features.resetHostForJoin();
+    features.loadPersistedHostSettings('notes-only');
+    expect(features.notesTemplate).toBe('# Notes only');
+    expect(features.gridBackgroundUrl).toBe('');
+
+    localStorage.setItem(
+      'loungemesh:host-room:bg-only',
+      JSON.stringify({ gridBackgroundUrl: 'data:bg-only' }),
+    );
+    features.resetHostForJoin();
+    features.notesTemplate = '';
+    features.loadPersistedHostSettings('bg-only');
+    expect(features.gridBackgroundUrl).toBe('data:bg-only');
     expect(features.notesTemplate).toBe('');
   });
 
@@ -544,63 +524,5 @@ describe('sessionFeaturesStore', () => {
     // Wait remaining for second message
     vi.advanceTimersByTime(2000);
     expect(features.stageMessage).toBe('');
-  });
-
-  it('respects meetingExists for host checks', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.setMyID('my-id');
-    
-    // Default meetingExists: false
-    features.meetingExists = false;
-    features.hostId = '';
-    expect(features.isHost).toBe(true); // Ad-hoc fallback
-    
-    features.hostId = 'my-id';
-    expect(features.isHost).toBe(true);
-    
-    features.hostId = 'other-id';
-    expect(features.isHost).toBe(false);
-
-    // With meetingExists: true
-    features.meetingExists = true;
-    features.hostId = '';
-    expect(features.isHost).toBe(false); // Guest cannot steal host
-    
-    features.hostId = 'my-id';
-    expect(features.isHost).toBe(true);
-    
-    features.hostId = 'other-id';
-    expect(features.isHost).toBe(false);
-  });
-
-  it('covers isHost and isModerator role getters', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.setMyID('host-id');
-
-    // Case 1: isVerifiedHost is true
-    features.isVerifiedHost = true;
-    expect(features.isHost).toBe(true);
-    expect(features.isModerator).toBe(true);
-
-    // Case 2: isVerifiedHost is false, isVerifiedModerator is true
-    features.isVerifiedHost = false;
-    features.isVerifiedModerator = true;
-    expect(features.isModerator).toBe(true);
-
-    // Case 3: both verified are false, hostId is my local id
-    features.isVerifiedModerator = false;
-    features.hostId = 'host-id';
-    expect(features.isModerator).toBe(true);
-  });
-
-  it('returns false for isHost while fetching config', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.setMyID('my-id');
-    features.hostId = 'my-id';
-    features.isFetchingConfig = true;
-    expect(features.isHost).toBe(false);
   });
 });

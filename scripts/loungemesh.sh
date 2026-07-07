@@ -59,11 +59,6 @@ _usage() {
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-SUDO=""
-if [[ "$(uname)" != "Darwin" ]] && command -v sudo >/dev/null 2>&1; then
-  SUDO="sudo"
-fi
-
 strip_proto() { echo "${1#https://}" | sed 's|^http://||' | sed 's|/$||'; }
 
 ensure_node() {
@@ -181,7 +176,7 @@ update_ip_in_env() {
   rm -f .env.bak
   # Mark JVB config for full regeneration so it picks up the new IP
   docker compose stop jvb jicofo 2>/dev/null || true
-  $SUDO rm -rf docker/jitsi-config/jvb
+  sudo rm -rf docker/jitsi-config/jvb
   mkdir -p docker/jitsi-config/jvb
   echo "${new_ip}" > docker/jitsi-config/.loungemesh-docker-host
   export DOCKER_HOST_ADDRESS="$new_ip"
@@ -232,7 +227,7 @@ regenerate_jvb_if_needed() {
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$ip" ]]; then
     echo "==> DOCKER_HOST_ADDRESS changed to ${ip} — recreating JVB config"
     docker compose stop jvb jicofo 2>/dev/null || true
-    $SUDO rm -rf docker/jitsi-config/jvb
+    sudo rm -rf docker/jitsi-config/jvb
     mkdir -p docker/jitsi-config/jvb
     echo "${ip}" > "$marker"
   fi
@@ -244,7 +239,7 @@ regenerate_web_if_needed() {
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$url" ]]; then
     echo "==> PUBLIC_URL changed to ${url} — regenerating Jitsi web config"
     docker compose stop jitsi-web 2>/dev/null || true
-    $SUDO rm -rf docker/jitsi-config/web
+    sudo rm -rf docker/jitsi-config/web
     mkdir -p docker/jitsi-config/web/crontabs docker/jitsi-config/transcripts
     echo "${url}" > "$marker"
   fi
@@ -275,47 +270,20 @@ patch_jitsi_nginx() {
   local nginx_conf="docker/jitsi-config/web/nginx/nginx.conf"
   [[ -f "$meet_conf" ]] || return 0
   echo "==> Patching Jitsi nginx for WebSocket"
-  $SUDO node -e '
-    const fs = require("fs");
-    
-    // Patch nginx_conf
-    const nginxConfPath = process.argv[1];
-    if (fs.existsSync(nginxConfPath)) {
-      let content = fs.readFileSync(nginxConfPath, "utf8");
-      if (content.includes("gzip on;")) {
-        fs.writeFileSync(nginxConfPath, content.replace("gzip on;", "gzip off;"));
-      }
-    }
-    
-    // Patch meet_conf
-    const meetConfPath = process.argv[2];
-    if (fs.existsSync(meetConfPath)) {
-      let content = fs.readFileSync(meetConfPath, "utf8");
-      
-      // Patch /xmpp-websocket
-      if (content.includes("location = /xmpp-websocket {")) {
-        const idx = content.indexOf("location = /xmpp-websocket {");
-        const nextLines = content.slice(idx, idx + 200);
-        if (!nextLines.includes("gzip off;")) {
-          content = content.replace("location = /xmpp-websocket {", "location = /xmpp-websocket {\n    gzip off;");
-        }
-      }
-      
-      // Patch /colibri-ws
-      if (content.includes("location ~ ^/colibri-ws/")) {
-        const idx = content.indexOf("location ~ ^/colibri-ws/");
-        const nextLines = content.slice(idx, idx + 200);
-        if (!nextLines.includes("gzip off;")) {
-          content = content.replace("location ~ ^/colibri-ws/ {", "location ~ ^/colibri-ws/ {\n    gzip off;");
-        }
-      }
-      
-      // Patch Connection header upgrade
-      content = content.replace("proxy_set_header Connection $connection_upgrade;", "proxy_set_header Connection \"upgrade\";");
-      
-      fs.writeFileSync(meetConfPath, content);
-    }
-  ' "$nginx_conf" "$meet_conf"
+  if [[ -f "$nginx_conf" ]] && grep -q 'gzip on' "$nginx_conf"; then
+    sudo sed -i 's/gzip on;/gzip off;/' "$nginx_conf"
+  fi
+  if grep -q 'location = /xmpp-websocket' "$meet_conf" && \
+     ! grep -A10 'location = /xmpp-websocket' "$meet_conf" | grep -q 'gzip off'; then
+    sudo sed -i '/location = \/xmpp-websocket {/a\    gzip off;' "$meet_conf"
+  fi
+  if grep -q 'location ~ \^/colibri-ws/' "$meet_conf" && \
+     ! grep -A6 'location ~ \^/colibri-ws/' "$meet_conf" | head -8 | grep -q 'gzip off'; then
+    sudo sed -i '/location ~ \^\/colibri-ws\//a\    gzip off;' "$meet_conf"
+  fi
+  sudo sed -i \
+    's/proxy_set_header Connection \$connection_upgrade;/proxy_set_header Connection "upgrade";/g' \
+    "$meet_conf" 2>/dev/null || true
   if docker compose ps --status running jitsi-web 2>/dev/null | grep -q jitsi-web; then
     docker compose exec -T jitsi-web nginx -t >/dev/null 2>&1 && \
       docker compose exec -T jitsi-web nginx -s reload 2>/dev/null || \
@@ -326,13 +294,13 @@ patch_jitsi_nginx() {
 check_ws() {
   local target="$1"; local origin="${2:-}"; local extra=()
   [[ -n "$origin" ]] && extra+=(-H "Origin: $origin")
-  (set +o pipefail; curl -si --http1.1 --max-time 5 \
-    ${extra[@]+"${extra[@]}"} \
+  curl -si --http1.1 \
+    "${extra[@]}" \
     -H "Connection: Upgrade" -H "Upgrade: websocket" \
     -H "Sec-WebSocket-Version: 13" \
     -H "Sec-WebSocket-Protocol: xmpp" \
     -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-    "$target" 2>/dev/null | head -1)
+    "$target" 2>/dev/null | head -1
 }
 
 verify_websockets() {
@@ -706,7 +674,7 @@ cmd_fix_jvb() {
 
   echo "==> Wiping cached JVB config (forces re-generation with new IP)"
   docker compose stop jvb jicofo 2>/dev/null || true
-  $SUDO rm -rf docker/jitsi-config/jvb
+  sudo rm -rf docker/jitsi-config/jvb
   mkdir -p docker/jitsi-config/jvb
   echo "${PUBLIC_IP}" > docker/jitsi-config/.loungemesh-docker-host
 

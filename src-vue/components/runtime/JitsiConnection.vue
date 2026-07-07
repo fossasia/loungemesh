@@ -28,7 +28,6 @@ function syncSession() {
       const features = useSessionFeaturesStore();
       features.resetHostForJoin();
       features.loadPersistedHostSettings(roomId);
-      void features.fetchRoomConfigAndRole(roomId, engine);
     },
   });
 }

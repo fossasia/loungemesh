@@ -32,7 +32,6 @@ import {
   LogOut,
   UserMinus,
   Info,
-  Settings,
 } from '@lucide/vue';
 
 const props = withDefaults(
@@ -75,8 +74,7 @@ export type IconName =
   | 'volume-x'
   | 'log-out'
   | 'user-minus'
-  | 'info'
-  | 'settings';
+  | 'info';
 
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
@@ -110,7 +108,6 @@ const registry: Record<IconName, Component> = {
   'log-out': LogOut,
   'user-minus': UserMinus,
   info: Info,
-  settings: Settings,
 };
 
 const icon = computed(() => registry[props.name]);

@@ -422,30 +422,6 @@ describe('handleSessionCommand', () => {
     expect(features.localLobbyPending).toBe(true);
   });
 
-  it('rejects other users without clearing local lobby pending', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.setMyID('me');
-    features.localLobbyPending = true;
-    features.addLobbyWaiter({ id: 'guest', name: 'Guest' });
-    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) });
-    expect(features.lobbyWaiting).toHaveLength(0);
-    expect(features.localLobbyPending).toBe(true);
-    expect(features.lobbyRejected).toBe(false);
-  });
-
-  it('rejects self and clears local lobby pending', () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.setMyID('me');
-    features.localLobbyPending = true;
-    features.addLobbyWaiter({ id: 'me', name: 'Me' });
-    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'me' }) });
-    expect(features.lobbyWaiting).toHaveLength(0);
-    expect(features.localLobbyPending).toBe(false);
-    expect(features.lobbyRejected).toBe(true);
-  });
-
   it('ignores host commands while a join is claiming host', () => {
     const features = useSessionFeaturesStore();
     features.resetHostForJoin();
@@ -453,22 +429,10 @@ describe('handleSessionCommand', () => {
     expect(features.hostId).toBe('');
   });
 
-  it('ignores host commands when meetingExists is true', () => {
-    const features = useSessionFeaturesStore();
-    features.meetingExists = true;
-    features.hostId = 'db-host';
-    handleSessionCommand('host', { value: JSON.stringify({ hostId: 'other-host' }) });
-    expect(features.hostId).toBe('db-host');
-  });
-
   it('ignores partial command payloads', () => {
     const features = useSessionFeaturesStore();
     features.setHost('existing');
     handleSessionCommand('host', { value: JSON.stringify({ hostId: 'other' }) });
-    expect(features.hostId).toBe('existing');
-
-    handleSessionCommand('host', { value: 'bad' });
-    handleSessionCommand('host', { value: '{}' });
     expect(features.hostId).toBe('existing');
 
     handleSessionCommand('lobby', { value: 'bad' });
@@ -505,44 +469,5 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('name', { value: JSON.stringify({ id: 'u1', name: '   ' }) });
     handleSessionCommand('name', { value: JSON.stringify({ id: 'u1' }) });
     expect(conference.users.u1.user?._displayName).toBe('Original');
-  });
-
-  it('processes config commands to toggle features in real time', () => {
-    const features = useSessionFeaturesStore();
-    features.allowParticipantRecording = false;
-    features.lobbyEnabled = false;
-    features.stagePromotionEnabled = false;
-
-    handleSessionCommand('config', {
-      value: JSON.stringify({
-        allowParticipantRecording: true,
-        lobbyEnabled: true,
-        stagePromotionEnabled: true,
-      })
-    });
-    expect(features.allowParticipantRecording).toBe(true);
-    expect(features.lobbyEnabled).toBe(true);
-    expect(features.stagePromotionEnabled).toBe(true);
-
-    handleSessionCommand('config', {
-      value: JSON.stringify({
-        lobbyEnabled: false,
-      })
-    });
-    expect(features.allowParticipantRecording).toBe(true);
-    expect(features.lobbyEnabled).toBe(false);
-    expect(features.stagePromotionEnabled).toBe(true);
-
-    handleSessionCommand('config', {
-      value: JSON.stringify({
-        allowParticipantRecording: false,
-      })
-    });
-    expect(features.allowParticipantRecording).toBe(false);
-    expect(features.lobbyEnabled).toBe(false);
-    expect(features.stagePromotionEnabled).toBe(true);
-
-    handleSessionCommand('config', { value: 'not-json' });
-    expect(features.allowParticipantRecording).toBe(false);
   });
 });

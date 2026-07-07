@@ -23,8 +23,8 @@ describe('StagePreviewDialog', () => {
     features.stageInvitationPending = true;
 
     const { wrapper } = await mountPreviewDialog();
-    expect(wrapper.text()).toContain('Presenter Setup');
-    expect(wrapper.text()).toContain('You are asked to present');
+    expect(wrapper.text()).toContain('Stage Setup');
+    expect(wrapper.text()).toContain('You are asked to go on stage');
     wrapper.unmount();
   });
 
@@ -64,7 +64,7 @@ describe('StagePreviewDialog', () => {
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
 
     const { wrapper } = await mountPreviewDialog();
-    expect(wrapper.text()).toContain('You are live as a presenter');
+    expect(wrapper.text()).toContain('You are live on stage');
     await wrapper.find('.actionBtn.warn').trigger('click');
     expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"demote"'));
     wrapper.unmount();

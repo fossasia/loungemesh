@@ -3,7 +3,6 @@ import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
-import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
 import { makeTrack } from '@/test/makeTrack';
 import { nextTick } from 'vue';
@@ -197,28 +196,6 @@ describe('SharedScreens', () => {
     await wrapper.find('.previewToggleButton').trigger('click');
     expect(wrapper.find('.videoContainer').exists()).toBe(false);
     expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
-
-    wrapper.unmount();
-  });
-
-  it('filters remote screenshares based on distance unless they are presenting', async () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.pos = { x: 0, y: 0 };
-
-    const conference = useConferenceStore();
-    conference.addUser('far-user', { _displayName: 'Far User' });
-    const user = conference.users['far-user'];
-    user.screenshare = makeTrack('desktop');
-    user.pos = { x: 1000, y: 1000 };
-
-    const { wrapper } = await mountWithApp(SharedScreens);
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
-
-    // Make presenter
-    features.stageOccupantId = 'far-user';
-    await nextTick();
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
 
     wrapper.unmount();
   });
