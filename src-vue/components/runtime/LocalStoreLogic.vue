@@ -4,7 +4,6 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
-import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
 import { throttle } from '@/utils/throttle';
 import { getVolumeByDistance } from '@/utils/vector';
@@ -19,7 +18,6 @@ const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
 const connectionStore = useConnectionStore();
 const localStore = useLocalStore();
-const features = useSessionFeaturesStore();
 
 const throttledSendPos = throttle((pos: string) => {
   engine.sendCommand('pos', pos);
@@ -48,7 +46,7 @@ function applyVolumes(myPos: { x: number; y: number }) {
   for (const key of Object.keys(conferenceStore.users)) {
     const u = conferenceStore.users[key];
     const proximity = getVolumeByDistance(myPos, u.pos);
-    const gain = playbackGainForUser(u, proximity, key === features.stageOccupantId);
+    const gain = playbackGainForUser(u, proximity);
     if (u.volume !== proximity) {
       conferenceStore.patchUser(key, { volume: proximity }, false);
     }
@@ -79,7 +77,6 @@ function initProximityWorker() {
           conferenceStore.users,
           (userId, patch) => conferenceStore.patchUser(userId, patch, false),
           setParticipantVolume,
-          id === features.stageOccupantId
         );
       }
       localStore.calculateUsersOnScreen();

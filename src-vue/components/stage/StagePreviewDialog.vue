@@ -44,12 +44,12 @@ const isLocalSpeaking = computed(() => local.speaking && !local.mute);
 
 const tooltipText = computed(() => {
   if (features.isLocalStageOccupant) {
-    return 'You are live as a presenter. Everyone can see and hear you.';
+    return 'You are live on stage. Everyone can see and hear you.';
   }
   if (hasEverythingShared.value) {
-    return 'You are asked to present. Ready to start?';
+    return 'You are asked to go on stage. Ready to start?';
   }
-  return 'You are asked to present. Please share your screen, camera access, and mic if you like and tap the icon to start.';
+  return 'You are asked to go on stage. Please share your screen, camera access, and mic if you like and tap the icon to start.';
 });
 
 const pipStyle = computed(() => {
@@ -242,7 +242,7 @@ function handleDecline() {
   <div class="stagePreviewOverlay" @click.self="emit('close')">
     <div class="stagePreviewCard">
       <div class="previewHeader">
-        <h3 class="previewTitle">Presenter Setup</h3>
+        <h3 class="previewTitle">Stage Setup</h3>
         <button type="button" class="closeBtn" @click="emit('close')">
           <AppIcon name="close" :size="18" />
         </button>
@@ -333,7 +333,7 @@ function handleDecline() {
       <div class="actionsArea">
         <template v-if="features.isLocalStageOccupant">
           <button type="button" class="actionBtn warn" @click="handleLeaveStage">
-            Stop Presenting
+            Leave Stage
           </button>
           <button type="button" class="actionBtn secondary" @click="emit('close')">
             Close
@@ -341,7 +341,7 @@ function handleDecline() {
         </template>
         <template v-else>
           <button type="button" class="actionBtn primary" @click="handleGoLive">
-            Present
+            Go Live
           </button>
           <button type="button" class="actionBtn secondary" @click="handleDecline">
             Decline

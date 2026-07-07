@@ -38,14 +38,3 @@ docker/.env.jitsi
 app
 .env.app
 docker/jitsi-config
-
-# Server backend paths
-server/node_modules/
-server/dist/
-server/.venv/
-server/.pytest_cache/
-server/.env
-server/.env.local
-server/.env.development
-server/.env.production
-

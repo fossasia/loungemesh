@@ -27,56 +27,9 @@ services:
     depends_on:
       jitsi-web:
         condition: service_started
-      server:
-        condition: service_started
     restart: unless-stopped
     # Join the jitsi network so nginx can proxy /libs/ to the jitsi-web container
     # (lib-jitsi-meet is served from there, never bundled as a static file).
-    networks:
-      meet.jitsi:
-
-  server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - JWT_SECRET=${JWT_SECRET}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - ALLOWED_OAUTH_ORIGINS=${ALLOWED_OAUTH_ORIGINS}
-    depends_on:
-      postgres:
-        condition: service_started
-      redis:
-        condition: service_started
-    networks:
-      meet.jitsi:
-
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-loungemesh}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-loungemesh}
-      POSTGRES_DB: ${POSTGRES_DB:-loungemesh}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      meet.jitsi:
-
-  redis:
-    image: redis:7.4-alpine
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
     networks:
       meet.jitsi:
 
@@ -150,7 +103,3 @@ services:
 
 networks:
   meet.jitsi:
-
-volumes:
-  postgres_data:
-  redis_data:

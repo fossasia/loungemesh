@@ -76,13 +76,13 @@ function openPanel(name: 'notes' | 'whiteboard') {
     >
       <template #icon><AppIcon name="hand" /></template>
     </IconButton>
-    <div v-if="features.canUsePoll || features.isHost || features.isModerator" class="toolWrap">
+    <div class="toolWrap">
       <IconButton
         label="Poll"
         :active="features.panel === 'poll'"
         :activity-dot="features.hasUnreadPoll"
         sound="panel"
-        title="Poll"
+        :title="features.canUsePoll || features.isHost ? 'Poll' : 'Poll — ask host for access'"
         :aria-expanded="features.panel === 'poll'"
         @click="togglePollPanel"
       >
@@ -94,23 +94,21 @@ function openPanel(name: 'notes' | 'whiteboard') {
       </div>
     </div>
     <IconButton
-      v-if="features.canUseNotes || features.isHost || features.isModerator"
       label="Shared notes"
       :active="features.panel === 'notes'"
       :activity-dot="features.hasUnreadNotes"
       sound="panel"
-      title="Shared notes"
+      :title="features.canUseNotes ? 'Shared notes' : 'Notes — ask host for access'"
       @click="openPanel('notes')"
     >
       <template #icon><AppIcon name="file-text" /></template>
     </IconButton>
     <IconButton
-      v-if="features.canUseWhiteboard || features.isHost || features.isModerator"
       label="Whiteboard"
       :active="features.panel === 'whiteboard'"
       :activity-dot="features.hasUnreadWhiteboard"
       sound="panel"
-      title="Whiteboard"
+      :title="features.canUseWhiteboard ? 'Whiteboard' : 'Whiteboard — ask host for access'"
       @click="openPanel('whiteboard')"
     >
       <template #icon><AppIcon name="pencil" /></template>
