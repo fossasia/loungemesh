@@ -32,7 +32,7 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
   }
 
   function publishStroke(stroke: WhiteboardStroke) {
-    features.addWhiteboardStroke(stroke);
+    features.addWhiteboardStroke(stroke, true);
     engine.sendCommand('wb', JSON.stringify({ action: 'stroke', stroke }));
   }
 
@@ -79,7 +79,7 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
 
   function clearWhiteboard() {
     if (!features.canClearWhiteboard) return;
-    features.clearWhiteboard();
+    features.clearWhiteboard(true);
     engine.sendCommand('wb', JSON.stringify({ action: 'clear' }));
     redrawWhiteboard();
   }

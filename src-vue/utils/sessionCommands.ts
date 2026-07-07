@@ -50,8 +50,15 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
     }
     case 'host': {
       const data = parse<{ hostId?: string }>(payload);
-      if (data?.hostId && !features.hostId && !features.pendingHostClaim) {
-        features.setHost(data.hostId);
+      if (data?.hostId) {
+        if (features.meetingExists) {
+          // Keep DB host ID - do not let Jitsi clients overwrite it
+        } else {
+          // Ad-hoc fallback: accept if not claiming host and not already set
+          if (!features.pendingHostClaim && !features.hostId) {
+            features.setHost(data.hostId);
+          }
+        }
       }
       break;
     }
@@ -61,15 +68,29 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
         id?: string;
         name?: string;
         enabled?: boolean;
+        email?: string;
+        reason?: string;
       }>(payload);
       if (!data) break;
       if (data.enabled != null) features.lobbyEnabled = data.enabled;
       if (data.action === 'wait' && data.id && data.name) {
-        features.addLobbyWaiter({ id: data.id, name: data.name });
+        features.addLobbyWaiter({
+          id: data.id,
+          name: data.name,
+          email: data.email,
+          reason: data.reason,
+        });
       }
       if (data.action === 'approve' && data.id) {
         features.approveLobby(data.id);
         if (data.id === local.id) features.localLobbyPending = false;
+      }
+      if (data.action === 'reject' && data.id) {
+        features.rejectLobby(data.id);
+        if (data.id === local.id) {
+          features.localLobbyPending = false;
+          features.lobbyRejected = true;
+        }
       }
       break;
     }
@@ -142,6 +163,25 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       >(payload);
       if (!data) break;
       features.applyAccessUpdate(data);
+      break;
+    }
+    case 'config': {
+      const data = parse<{
+        allowParticipantRecording?: boolean;
+        lobbyEnabled?: boolean;
+        stagePromotionEnabled?: boolean;
+      }>(payload);
+      if (data) {
+        if (data.allowParticipantRecording !== undefined) {
+          features.allowParticipantRecording = data.allowParticipantRecording;
+        }
+        if (data.lobbyEnabled !== undefined) {
+          features.lobbyEnabled = data.lobbyEnabled;
+        }
+        if (data.stagePromotionEnabled !== undefined) {
+          features.stagePromotionEnabled = data.stagePromotionEnabled;
+        }
+      }
       break;
     }
     case 'chat': {

@@ -6,8 +6,12 @@ import ScreenshareVideo from './ScreenshareVideo.vue';
 import ExpandedScreenshare from './ExpandedScreenshare.vue';
 import AppIcon from '../ui/AppIcon.vue';
 
+import { getVectorDistance } from '@/utils/vector';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+
 const conference = useConferenceStore();
 const local = useLocalStore();
+const features = useSessionFeaturesStore();
 
 const isCollapsed = ref(false);
 const poppedOutIds = ref<string[]>([]);
@@ -28,6 +32,11 @@ const screenshares = computed(() => {
 
   for (const [id, user] of Object.entries(conference.users)) {
     if (user.screenshare) {
+      const dist = getVectorDistance(local.pos, user.pos);
+      const isPresenter = features.stageOccupantId === id;
+      if (dist > 650 && !isPresenter) {
+        continue;
+      }
       list.push({
         id,
         name: user.user?._displayName || 'Friendly Sphere',
