@@ -10,6 +10,7 @@ import RemoteAudio from './RemoteAudio.vue';
 import NameTag from './overlays/NameTag.vue';
 import UserBackdrop from './overlays/UserBackdrop.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
+import { getVectorDistance } from '@/utils/vector';
 
 const props = defineProps<{
   id: string;
@@ -45,8 +46,22 @@ const videoTrackKey = computed(() => {
   const t = videoTrack.value as { getTrackLabel?: () => string } | undefined;
   return t?.getTrackLabel?.() ?? props.id;
 });
-const showAvatar = computed(() => !videoTrack.value || isStageOccupant.value);
-const speaking = computed(() => !!user.value?.speaking && !user.value?.mute);
+const isPresenter = computed(() => features.stageOccupantId === props.id);
+const distance = computed(() => {
+  if (!local.pos || !user.value?.pos) return 0;
+  return getVectorDistance(local.pos, user.value.pos);
+});
+const isOutsideSphere = computed(() => distance.value > 650);
+const showAvatar = computed(() => {
+  if (isStageOccupant.value) return true;
+  if (!videoTrack.value) return true;
+  if (isOutsideSphere.value && features.isStageModeActive) return true;
+  return false;
+});
+const speaking = computed(() => {
+  if (isOutsideSphere.value && !isPresenter.value) return false;
+  return !!user.value?.speaking && !user.value?.mute;
+});
 const reaction = computed(() => features.userReactions[props.id]?.emoji);
 const handUp = computed(
   () =>
@@ -77,7 +92,7 @@ const isStageOccupant = computed(() => {
       }"
     >
       <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" />
-      <template v-if="videoTrack && !isStageOccupant">
+      <template v-if="videoTrack && !isStageOccupant && !(isOutsideSphere && features.isStageModeActive)">
         <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>
       <span v-if="reaction" class="floatReact">{{ reaction }}</span>

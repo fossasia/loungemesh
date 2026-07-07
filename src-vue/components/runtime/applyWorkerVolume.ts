@@ -9,9 +9,10 @@ export function applyWorkerVolume(
   users: Record<string, ProximityUser>,
   patchUser: (id: string, patch: { volume: number }) => void,
   setVolume: (userId: string, gain: number) => void,
+  isPresenter?: boolean,
 ): void {
   const user = users[id];
   if (!user) return;
   patchUser(id, { volume });
-  setVolume(id, playbackGainForUser(user, volume));
+  setVolume(id, playbackGainForUser(user, volume, isPresenter));
 }

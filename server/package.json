@@ -1,0 +1,43 @@
+{
+  "name": "loungemesh-server",
+  "version": "1.0.0",
+  "description": "Backend API server for LoungeMesh",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.0",
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "google-auth-library": "^9.15.0",
+    "ics": "^3.8.1",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.1",
+    "rate-limit-redis": "^4.2.0",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^22.13.1",
+    "@types/nodemailer": "^8.0.1",
+    "prisma": "^6.4.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

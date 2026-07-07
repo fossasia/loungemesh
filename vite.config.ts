@@ -29,6 +29,10 @@ export default defineConfig({
         target: process.env.VITE_JITSI_LIBS_ORIGIN || 'http://localhost:8001',
         changeOrigin: true,
       },
+      '/api': {
+        target: process.env.VITE_API_ORIGIN || 'http://localhost:5000',
+        changeOrigin: true,
+      },
     },
   },
   build: {
