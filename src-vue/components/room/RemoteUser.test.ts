@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useLocalStore } from '@/stores/localStore';
 import { makeTrack } from '@/test/makeTrack';
 import RemoteUser from './RemoteUser.vue';
 
@@ -20,6 +21,8 @@ describe('RemoteUser', () => {
 
   it('shows speaking highlight on camera video', async () => {
     const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.pos = { x: 10, y: 20 };
     conference.addUser('u1', { _displayName: 'Bob' } as never);
     const u = conference.users.u1;
     u.speaking = true;
@@ -34,6 +37,8 @@ describe('RemoteUser', () => {
 
   it('shows speaking highlight on avatar when camera is off', async () => {
     const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.pos = { x: 0, y: 0 };
     conference.addUser('u-avatar', { _displayName: 'Cam Off' } as never);
     const u = conference.users['u-avatar'];
     u.speaking = true;
@@ -111,6 +116,27 @@ describe('RemoteUser', () => {
     conference.users.u2.pos = { x: 0, y: 0 };
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u2' } });
     expect(wrapper.text()).toContain('Presenting');
+    wrapper.unmount();
+  });
+
+  it('shows avatar when remote user is outside sphere and stage/presenter mode is active', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.pos = { x: 0, y: 0 };
+    conference.addUser('u-outside', { _displayName: 'Outside' } as never);
+    const u = conference.users['u-outside'];
+    u.pos = { x: 1000, y: 0 };
+    u.video = makeTrack('video');
+
+    features.stageOccupantId = 'some-other';
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-outside' } });
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(false);
+
+    features.stageOccupantId = null;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(true);
+
     wrapper.unmount();
   });
 });

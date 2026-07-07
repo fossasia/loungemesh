@@ -8,6 +8,7 @@ import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import SessionPage from './SessionPage.vue';
 import { playUiSound } from '@/utils/uiSounds';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 
 vi.mock('@/utils/uiSounds', () => ({
   playUiSound: vi.fn(),
@@ -711,6 +712,50 @@ describe('SessionPage', () => {
     (globalThis as { MediaRecorder?: unknown }).MediaRecorder = savedRecorder;
     if (savedCapture) HTMLCanvasElement.prototype.captureStream = savedCapture;
     else delete (HTMLCanvasElement.prototype as { captureStream?: unknown }).captureStream;
+  });
+
+  it('renders lobby notification banner for host/moderator and handles admit/deny', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.lobbyWaiting = [
+      { id: 'guest-1', name: 'Bob', email: 'bob@example.com', reason: 'To present' }
+    ];
+
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    // Check banner render
+    const banner = wrapper.find('.lobbyNotificationBanner');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('Bob');
+    expect(banner.text()).toContain('bob@example.com');
+    expect(banner.text()).toContain('To present');
+
+    // Click Admit
+    await banner.find('.btnAdmit').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"approve"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-1"'));
+
+    // Reset lobby wait for reject test
+    features.lobbyWaiting = [
+      { id: 'guest-2', name: 'Alice' }
+    ];
+    await flushPromises();
+
+    // Click Deny
+    await wrapper.find('.btnDeny').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"reject"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-2"'));
+
+    wrapper.unmount();
   });
 });
 

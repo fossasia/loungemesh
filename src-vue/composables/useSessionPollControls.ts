@@ -45,7 +45,7 @@ export function useSessionPollControls() {
       options: opts,
       open: true,
     };
-    features.applyPoll(poll);
+    features.applyPoll(poll, true);
     engine.sendCommand('poll', JSON.stringify(poll));
     playUiSound('success');
   }
@@ -57,7 +57,7 @@ export function useSessionPollControls() {
     if (!voterId) return;
     features.myPollVote = optionId;
     const poll = applyVote(features.activePoll!, optionId, voterId);
-    features.applyPoll(poll);
+    features.applyPoll(poll, true);
     engine.sendCommand('poll', JSON.stringify(poll));
     playUiSound('success');
   }
@@ -68,7 +68,7 @@ export function useSessionPollControls() {
     if (!poll) return;
     const senderId = pollResultsSenderId(local.id, engine.getLocalUserId());
     publishPollResultsToChat(conference, poll, senderId);
-    features.applyPoll(null);
+    features.applyPoll(null, true);
     engine.sendCommand('poll', JSON.stringify(null));
     playUiSound('tap');
   }

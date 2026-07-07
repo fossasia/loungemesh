@@ -12,6 +12,7 @@ import {
 import App from './App.vue';
 import { routes } from './router/routes';
 import { useLocalStore } from '@/stores/localStore';
+import { useAuthStore } from '@/stores/authStore';
 
 const mediaRoutes = new Set(['session', 'enter']);
 
@@ -21,6 +22,9 @@ export function bootstrap(mountSelector = '#app') {
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
+
+  const auth = useAuthStore(pinia);
+  void auth.checkAuth();
 
   const router = createRouter({
     history: createWebHistory(),

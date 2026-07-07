@@ -1,0 +1,10 @@
+node_modules
+dist
+.venv
+.pytest_cache
+*.log
+.DS_Store
+.env
+.env.local
+.env.development
+.env.production

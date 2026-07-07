@@ -123,11 +123,8 @@ describe('SessionTools', () => {
     features.setHost('host');
     features.roomDefaults = { notes: false, whiteboard: false, poll: false };
     const { wrapper } = await mountWithApp(SessionTools);
-    expect(wrapper.find('[aria-label="Shared notes"]').exists()).toBe(true);
-    await wrapper.find('[aria-label="Shared notes"]').trigger('click');
-    expect(features.panel).toBe('');
-    await wrapper.find('[aria-label="Whiteboard"]').trigger('click');
-    expect(features.panel).toBe('');
+    expect(wrapper.find('[aria-label="Shared notes"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Whiteboard"]').exists()).toBe(false);
     wrapper.unmount();
   });
 

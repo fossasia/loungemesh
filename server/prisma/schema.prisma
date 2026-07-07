@@ -1,0 +1,61 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String?
+  displayName  String
+  avatarUrl    String?
+  googleId     String?   @unique
+  googleToken  String?   // Encrypted AES-256-GCM Google OAuth token payload
+  createdAt    DateTime  @default(now())
+  meetings     Meeting[]
+}
+
+model Meeting {
+  id            String         @id @default(uuid())
+  title         String
+  roomName      String         @unique
+  hostId        String
+  host          User           @relation(fields: [hostId], references: [id])
+  isScheduled   Boolean        @default(false)
+  startTime     DateTime?
+  endTime       DateTime?
+  recurrence    String?        // NONE, DAILY, WEEKLY, MONTHLY, YEARLY
+  guestEmails   String[]       @default([])
+  moderatorEmails String[]     @default([])
+  googleEventId String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  configs       MeetingConfig?
+  sessionLogs   SessionLog[]
+}
+
+model MeetingConfig {
+  meetingId                 String  @id
+  meeting                   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  lobbyEnabled              Boolean @default(false)
+  stagePromotionEnabled     Boolean @default(true)
+  allowParticipantRecording Boolean @default(false)
+  notesTemplate             String?
+  sharedNotes               String?
+  activePoll                String?
+  roomDefaults              String?
+  userGrants                String?
+}
+
+model SessionLog {
+  id        String   @id @default(uuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  eventType String   // START, END, JOIN, LEAVE, RECORDING_START, RECORDING_STOP
+  details   String?  // JSON string
+  createdAt DateTime @default(now())
+}

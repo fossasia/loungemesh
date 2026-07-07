@@ -649,8 +649,9 @@ describe('wireStoreSync', () => {
     await engine.joinRoom('room', 'Bob', {});
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
-    expect(features.localLobbyPending).toBe(true);
-    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('wait'));
+    expect(features.localLobbyPending).toBe(false);
+    expect(features.isLobbyBlocked).toBe(true);
+    expect(cmdSpy).not.toHaveBeenCalledWith('lobby', expect.any(String));
   });
 
   it('clears remote screenshare track on trackAdded if muted', async () => {
@@ -802,5 +803,25 @@ describe('wireStoreSync', () => {
     }).not.toThrow();
     (engine as { disconnectParticipantAudio?: unknown }).disconnectParticipantAudio = saved;
   });
+
+  it('skips host sync if config is fetching', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    await flushPromises();
+
+    features.isFetchingConfig = true;
+    const syncSpy = vi.spyOn(features, 'syncOrClaimHostOnLoaded');
+    
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
 });
+
 
