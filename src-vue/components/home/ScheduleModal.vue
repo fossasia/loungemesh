@@ -37,6 +37,10 @@ const syncGoogleCal = ref(true);
 const errorMsg = ref('');
 const loading = ref(false);
 
+const titleError = ref(false);
+const dateError = ref(false);
+const timeError = ref(false);
+
 const guestEmails = ref<string[]>([]);
 const emailInput = ref('');
 const emailError = ref('');
@@ -180,7 +184,15 @@ onMounted(() => {
 });
 
 async function handleSubmit() {
-  if (!title.value.trim() || !date.value || !time.value) {
+  const isTitleEmpty = !title.value.trim();
+  const isDateEmpty = !date.value.trim();
+  const isTimeEmpty = !time.value.trim();
+
+  titleError.value = isTitleEmpty;
+  dateError.value = isDateEmpty;
+  timeError.value = isTimeEmpty;
+
+  if (isTitleEmpty || isDateEmpty || isTimeEmpty) {
     errorMsg.value = 'Please enter a title, date, and time.';
     return;
   }
@@ -288,27 +300,55 @@ async function handleSubmit() {
 
       <p v-if="errorMsg" class="error" role="alert">{{ errorMsg }}</p>
 
-      <form class="form" @submit.prevent="handleSubmit">
+      <form class="form" novalidate @submit.prevent="handleSubmit">
         <div class="inputGroup">
-          <label for="meetTitle">Meeting Title</label>
+          <label for="meetTitle">
+            Meeting Title<span class="required-marker">*</span>
+          </label>
           <input
             id="meetTitle"
             v-model="title"
+            :class="{ 'input-error': titleError }"
             type="text"
             placeholder="Weekly Synup, Design Sync..."
-            required
+            @input="titleError = false; errorMsg = ''"
           />
+          <Transition name="tooltip-fade">
+            <div v-if="titleError" class="custom-tooltip">Title is required</div>
+          </Transition>
         </div>
 
         <div class="row">
           <div class="inputGroup half">
-            <label for="meetDate">Start Date</label>
-            <input id="meetDate" v-model="date" type="date" required />
+            <label for="meetDate">
+              Start Date<span class="required-marker">*</span>
+            </label>
+            <input
+              id="meetDate"
+              v-model="date"
+              :class="{ 'input-error': dateError }"
+              type="date"
+              @input="dateError = false; errorMsg = ''"
+            />
+            <Transition name="tooltip-fade">
+              <div v-if="dateError" class="custom-tooltip">Date is required</div>
+            </Transition>
           </div>
 
           <div class="inputGroup half">
-            <label for="meetTime">Start Time</label>
-            <input id="meetTime" v-model="time" type="time" required />
+            <label for="meetTime">
+              Start Time<span class="required-marker">*</span>
+            </label>
+            <input
+              id="meetTime"
+              v-model="time"
+              :class="{ 'input-error': timeError }"
+              type="time"
+              @input="timeError = false; errorMsg = ''"
+            />
+            <Transition name="tooltip-fade">
+              <div v-if="timeError" class="custom-tooltip">Time is required</div>
+            </Transition>
           </div>
         </div>
 
@@ -498,12 +538,15 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
 }
  
 .inputGroup label {
   font-size: var(--fs-small, 14px);
   font-weight: 600;
   color: var(--color-mono10, #1e2240);
+  display: inline-flex;
+  align-items: center;
 }
  
 .inputGroup input,
@@ -523,6 +566,58 @@ async function handleSubmit() {
 .inputGroup select:focus {
   border-color: #4f6ef7;
   box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.15);
+}
+
+.inputGroup input.input-error {
+  border-color: #fa5252 !important;
+  background-color: #fff5f5 !important;
+}
+
+.inputGroup input.input-error:focus {
+  box-shadow: 0 0 0 4px rgba(250, 82, 82, 0.15);
+}
+
+.required-marker {
+  color: #fa5252;
+  margin-left: 3px;
+  font-weight: bold;
+}
+
+.custom-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: -22px;
+  background: #fa5252;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(250, 82, 82, 0.2);
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.custom-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 15px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid #fa5252;
+}
+
+/* Transitions */
+.tooltip-fade-enter-active,
+.tooltip-fade-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.tooltip-fade-enter-from,
+.tooltip-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
 }
  
 .row {

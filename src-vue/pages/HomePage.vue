@@ -1546,7 +1546,12 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
   gap: 16px;
   align-items: flex-start;
   text-align: left;
-  animation: alertFadeIn 0.3s ease-out;
+  animation: bannerFadeIn 0.3s ease-out;
+}
+
+@keyframes bannerFadeIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .ctaIcon {
