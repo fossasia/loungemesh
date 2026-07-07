@@ -6,9 +6,7 @@ CREATE TABLE "User" (
     "displayName" TEXT NOT NULL,
     "avatarUrl" TEXT,
     "googleId" TEXT,
-    "appleId" TEXT,
     "googleToken" TEXT,
-    "appleToken" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
@@ -24,6 +22,8 @@ CREATE TABLE "Meeting" (
     "startTime" TIMESTAMP(3),
     "endTime" TIMESTAMP(3),
     "recurrence" TEXT,
+    "guestEmails" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "moderatorEmails" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "googleEventId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -37,6 +37,11 @@ CREATE TABLE "MeetingConfig" (
     "lobbyEnabled" BOOLEAN NOT NULL DEFAULT false,
     "stagePromotionEnabled" BOOLEAN NOT NULL DEFAULT true,
     "allowParticipantRecording" BOOLEAN NOT NULL DEFAULT false,
+    "notesTemplate" TEXT,
+    "sharedNotes" TEXT,
+    "activePoll" TEXT,
+    "roomDefaults" TEXT,
+    "userGrants" TEXT,
 
     CONSTRAINT "MeetingConfig_pkey" PRIMARY KEY ("meetingId")
 );
@@ -57,9 +62,6 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_googleId_key" ON "User"("googleId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "User_appleId_key" ON "User"("appleId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Meeting_roomName_key" ON "Meeting"("roomName");

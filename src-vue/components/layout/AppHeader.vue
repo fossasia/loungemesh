@@ -34,7 +34,7 @@ function handleProfileClick() {
     <div class="userMenu">
       <button type="button" class="profileBtn" @click="handleProfileClick" aria-label="Profile menu">
         <img v-if="auth.isAuthenticated" :src="auth.userAvatarUrl" alt="User Avatar" class="avatarImg" />
-        <span v-else class="signInPill">Sign In</span>
+        <span v-else class="signInPill">Sign In / Register</span>
       </button>
       
       <UserProfilePopover v-if="showProfile" @close="showProfile = false" />
