@@ -257,4 +257,15 @@ describe('conferenceStore', () => {
     expect(store.users).toEqual({});
     expect(store.messages).toEqual([]);
   });
+
+  it('handles screenshareAudio track actions', () => {
+    const store = useConferenceStore();
+    store.addUser('u_test');
+    const mockTrack = { getType: () => 'audio' } as any;
+    store.setUserTrack('u_test', 'screenshareAudio', mockTrack);
+    expect(store.users['u_test'].screenshareAudio).toBe(mockTrack);
+
+    store.clearUserTrack('u_test', 'screenshareAudio');
+    expect(store.users['u_test'].screenshareAudio).toBeUndefined();
+  });
 });

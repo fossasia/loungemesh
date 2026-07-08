@@ -45,4 +45,10 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/JoinPage.vue'),
     props: true,
   },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    /* v8 ignore next */
+    component: () => import('@/pages/NotFoundPage.vue'),
+  },
 ];

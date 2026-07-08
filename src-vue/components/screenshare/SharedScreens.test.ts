@@ -97,6 +97,7 @@ describe('SharedScreens', () => {
     const conference = useConferenceStore();
     conference.addUser('u1', { _displayName: 'Bob' });
     conference.users.u1.screenshare = makeTrack('desktop');
+    conference.users.u1.screenshareAudio = makeTrack('audio');
 
     const { wrapper } = await mountWithApp(SharedScreens);
 
@@ -112,6 +113,12 @@ describe('SharedScreens', () => {
     expect(wrapper.findComponent(ExpandedScreenshare).exists()).toBe(true);
 
     const expanded = wrapper.findComponent(ExpandedScreenshare);
+
+    // Click audio toggle in expanded view
+    const audioToggle = expanded.find('.audioToggleButton');
+    expect(audioToggle.exists()).toBe(true);
+    await audioToggle.trigger('click');
+    expect(useLocalStore().mutedRemoteScreenshareAudios['u1']).toBe(true);
 
     // Trigger Drag
     const header = expanded.find('.windowHeader');
@@ -219,6 +226,70 @@ describe('SharedScreens', () => {
     features.stageOccupantId = 'far-user';
     await nextTick();
     expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('toggles screenshare audio for local and remote streams', async () => {
+    const { getMediaEngineInstance } = await import('@/services/mediaEngineSingleton');
+    const engine = getMediaEngineInstance();
+    const setTrackMuteMock = vi.fn();
+    engine.setTrackMute = setTrackMuteMock;
+
+    const local = useLocalStore();
+    local.id = 'me';
+    local.screenshare = makeTrack('desktop');
+    local.screenshareAudio = makeTrack('audio');
+    local.screenshareAudioMuted = false;
+
+    const conference = useConferenceStore();
+    conference.addUser('u1', { _displayName: 'Bob' });
+    conference.users.u1.screenshare = makeTrack('desktop');
+    conference.users.u1.screenshareAudio = makeTrack('audio');
+
+    const { wrapper } = await mountWithApp(SharedScreens);
+
+    const localToggle = wrapper.find('.screenshareItem.is-local .audioToggleButton');
+    expect(localToggle.exists()).toBe(true);
+    await localToggle.trigger('click');
+    expect(local.screenshareAudioMuted).toBe(true);
+
+    await localToggle.trigger('click');
+    expect(local.screenshareAudioMuted).toBe(false);
+
+    const remoteToggle = wrapper.find('.screenshareItem:not(.is-local) .audioToggleButton');
+    expect(remoteToggle.exists()).toBe(true);
+    await remoteToggle.trigger('click');
+    expect(local.mutedRemoteScreenshareAudios['u1']).toBe(true);
+    expect(setTrackMuteMock).toHaveBeenCalledWith('mock-track-id', true);
+
+    local.screenshareAudio = undefined;
+    await localToggle.trigger('click');
+
+    conference.users.u1.screenshareAudio = undefined;
+    await remoteToggle.trigger('click');
+
+    wrapper.unmount();
+  });
+
+  it('toggles screenshare audio for local expanded screenshare', async () => {
+    const local = useLocalStore();
+    local.id = 'me';
+    local.screenshareAudio = makeTrack('audio');
+
+    const { wrapper } = await mountWithApp(ExpandedScreenshare, {
+      props: {
+        id: 'local',
+        name: 'You',
+        track: makeTrack('desktop'),
+        index: 0,
+      },
+    });
+
+    const toggle = wrapper.find('.audioToggleButton');
+    expect(toggle.exists()).toBe(true);
+    await toggle.trigger('click');
+    expect(local.screenshareAudioMuted).toBe(true);
 
     wrapper.unmount();
   });

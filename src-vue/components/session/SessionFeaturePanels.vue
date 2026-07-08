@@ -37,12 +37,19 @@ const featureLabels: Record<FeatureKey, string> = {
   moderator: 'Moderator',
 };
 
+import { useLocalStore } from '@/stores/localStore';
+import { downloadBlob } from '@/utils/sessionExport';
+
 const features = useSessionFeaturesStore();
 const conference = useConferenceStore();
+const local = useLocalStore();
 const { engine } = useMediaEngine();
 const route = useRoute();
 const roomId = computed(() => String(route.params.id || ''));
 
+import { threeWayMerge } from '@/utils/threeWayMerge';
+
+const activeNotesTab = ref<'shared' | 'private'>('shared');
 const notesDraft = ref(features.sharedNotes);
 const notesDirty = ref(false);
 /** Shared notes snapshot when the user started their current edit session. */
@@ -51,10 +58,12 @@ const notesEditBase = ref(features.sharedNotes);
 watch(
   () => features.sharedNotes,
   (t) => {
-    notesDraft.value = nextNotesDraft(notesDirty.value, t, notesDraft.value);
-    if (!notesDirty.value) {
-      notesEditBase.value = t;
+    if (notesDirty.value) {
+      notesDraft.value = threeWayMerge(notesEditBase.value, t, notesDraft.value);
+    } else {
+      notesDraft.value = t;
     }
+    notesEditBase.value = t;
   },
 );
 
@@ -65,9 +74,22 @@ watch(
       notesDraft.value = features.sharedNotes;
       notesDirty.value = false;
       notesEditBase.value = features.sharedNotes;
+      
+      const saved = localStorage.getItem(`loungemesh:private_notes:${roomId.value}`);
+      local.privateNotes = saved || '';
     }
   },
 );
+
+function onPrivateNotesInput(text: string) {
+  local.privateNotes = text;
+  localStorage.setItem(`loungemesh:private_notes:${roomId.value}`, text);
+}
+
+function downloadPrivateNotes() {
+  const blob = new Blob([local.privateNotes], { type: 'text/markdown' });
+  downloadBlob(blob, `private-notes-${roomId.value}.md`);
+}
 
 function onNotesInput() {
   if (!notesDirty.value) {
@@ -405,14 +427,47 @@ const featureCardStyle = computed(() => {
     </div>
 
     <div v-else-if="features.panel === 'notes'" class="body notesBody">
-      <NotesEditor
-        v-model="notesDraft"
-        class="notesEditorWrap"
-        :readonly="!features.canUseNotes"
-        @update:model-value="onNotesInput"
-        @blur="onNotesBlur"
-      />
-      <p class="hint">Edits sync in real time for everyone in the call.</p>
+      <div class="notesTabs">
+        <button
+          type="button"
+          class="notesTabButton"
+          :class="{ active: activeNotesTab === 'shared' }"
+          @click="activeNotesTab = 'shared'"
+        >
+          Shared
+        </button>
+        <button
+          type="button"
+          class="notesTabButton"
+          :class="{ active: activeNotesTab === 'private' }"
+          @click="activeNotesTab = 'private'"
+        >
+          Private
+        </button>
+      </div>
+
+      <template v-if="activeNotesTab === 'shared'">
+        <NotesEditor
+          v-model="notesDraft"
+          class="notesEditorWrap"
+          :readonly="!features.canUseNotes"
+          @update:model-value="onNotesInput"
+          @blur="onNotesBlur"
+        />
+        <p class="hint">Edits sync in real time for everyone in the call.</p>
+      </template>
+      <template v-else>
+        <NotesEditor
+          v-model="local.privateNotes"
+          class="notesEditorWrap"
+          @update:model-value="onPrivateNotesInput"
+        />
+        <div class="privateActions">
+          <button type="button" class="notesDownloadBtn" @click="downloadPrivateNotes">
+            <AppIcon name="download" :size="14" /> Download Markdown
+          </button>
+        </div>
+      </template>
     </div>
 
   </MenuCard>
@@ -678,5 +733,53 @@ const featureCardStyle = computed(() => {
   font-size: var(--fs-small);
   color: var(--color-mono30);
   margin: 8px 0 0;
+}
+.notesTabs {
+  display: flex;
+  background: var(--color-bg-inset, rgba(0, 0, 0, 0.05));
+  padding: 3px;
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: 12px;
+}
+.notesTabButton {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: var(--font-body);
+  font-size: 0.825rem;
+  font-weight: 500;
+  color: var(--color-mono30, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.notesTabButton.active {
+  background: var(--input-bg, #fff);
+  color: var(--color-text-default, #0f172a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.privateActions {
+  display: flex;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+.notesDownloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--btn-primary-bg, #4f6ef7);
+  color: var(--btn-primary-fg, #fff);
+  border: none;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 6px);
+  font-family: var(--font-body);
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.notesDownloadBtn:hover {
+  opacity: 0.9;
 }
 </style>

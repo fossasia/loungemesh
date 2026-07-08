@@ -63,6 +63,7 @@ export interface MediaService {
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;
   /** 0.0–1.0 gain for spatial audio */
   setParticipantVolume(userId: string, gain: number): void;
+  setTrackMute?(trackId: string, muted: boolean): void;
   /** Tear down remote audio routing when a participant is fully muted. */
   disconnectParticipantAudio?(userId: string): void;
   /** Resume Web Audio after autoplay policy (call on first user gesture). */

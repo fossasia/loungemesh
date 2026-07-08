@@ -70,6 +70,9 @@ export type LocalState = {
   audio?: JitsiTrack;
   video?: JitsiTrack;
   screenshare?: JitsiTrack;
+  screenshareAudio?: JitsiTrack;
+  screenshareAudioMuted: boolean;
+  mutedRemoteScreenshareAudios: Record<string, boolean>;
   videoType?: 'camera' | 'desktop';
   onStage: boolean;
   stageVisible: boolean;
@@ -77,6 +80,9 @@ export type LocalState = {
   visibleUsers: string[];
   usersOnStage: string[];
   selectedUsersOnStage: string[];
+  audioError: boolean;
+  videoError: boolean;
+  privateNotes: string;
 };
 
 export const useLocalStore = defineStore('local', {
@@ -94,6 +100,9 @@ export const useLocalStore = defineStore('local', {
     audio: undefined,
     video: undefined,
     screenshare: undefined,
+    screenshareAudio: undefined,
+    screenshareAudioMuted: false,
+    mutedRemoteScreenshareAudios: {},
     videoType: 'camera',
     onStage: false,
     stageVisible: true,
@@ -101,6 +110,9 @@ export const useLocalStore = defineStore('local', {
     visibleUsers: [],
     usersOnStage: [],
     selectedUsersOnStage: [],
+    audioError: false,
+    videoError: false,
+    privateNotes: '',
   };
   },
   actions: {
@@ -234,6 +246,7 @@ export const useLocalStore = defineStore('local', {
       if (this.audio) {
         if (this.audio.isMuted()) await this.audio.unmute();
         this.mute = false;
+        this.audioError = false;
         engine.refreshRemoteAudio?.();
         return;
       }
@@ -255,7 +268,9 @@ export const useLocalStore = defineStore('local', {
         if (created.isMuted()) await created.unmute();
         this.audio = markRaw(created);
         this.mute = false;
+        this.audioError = false;
       } catch {
+        this.audioError = true;
         /* user denied or device unavailable */
       }
       engine.refreshRemoteAudio?.();
@@ -273,6 +288,7 @@ export const useLocalStore = defineStore('local', {
       }
       this.mute = true;
       this.speaking = false;
+      this.audioError = false;
       // Release the device so the OS mic indicator turns off (soft-mute leaves capture open).
       this.audio = undefined;
       await nextTick();
@@ -295,6 +311,7 @@ export const useLocalStore = defineStore('local', {
       if (this.video && this.videoType === 'camera') {
         if (this.video.isMuted()) await this.video.unmute();
         this.cameraOff = false;
+        this.videoError = false;
         return;
       }
       try {
@@ -315,7 +332,9 @@ export const useLocalStore = defineStore('local', {
         this.video = markRaw(created);
         this.videoType = 'camera';
         this.cameraOff = false;
+        this.videoError = false;
       } catch {
+        this.videoError = true;
         /* user denied or device unavailable */
       }
     },
@@ -329,6 +348,7 @@ export const useLocalStore = defineStore('local', {
       this.cameraOff = true;
       this.video = undefined;
       this.videoType = 'camera';
+      this.videoError = false;
       await nextTick();
       await waitForMediaElementDetach();
       await releaseLocalMediaTracks(tracksToRelease, conf);
@@ -336,14 +356,17 @@ export const useLocalStore = defineStore('local', {
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();
-      await releaseLocalMediaTracks([this.audio, this.video, this.screenshare], engine.getConference());
+      await releaseLocalMediaTracks([this.audio, this.video, this.screenshare, this.screenshareAudio], engine.getConference());
       this.audio = undefined;
       this.video = undefined;
       this.screenshare = undefined;
+      this.screenshareAudio = undefined;
       this.videoType = 'camera';
       this.speaking = false;
       this.cameraOff = true;
       this.mute = true;
+      this.audioError = false;
+      this.videoError = false;
     },
   },
 });

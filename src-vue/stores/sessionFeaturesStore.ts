@@ -77,6 +77,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     roomBgAssembly: null as { total: number; parts: Record<number, string> } | null,
     notesAssembly: null as { total: number; parts: Record<number, string> } | null,
     whiteboardStrokes: [] as WhiteboardStroke[],
+    whiteboardSnapshots: [] as Array<WhiteboardStroke[]>,
     roomDefaults: defaultUserGrants(),
     userGrants: {} as Record<string, Partial<UserGrants>>,
     panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'notes' | 'whiteboard' | 'chat',
@@ -163,7 +164,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return local.onStage;
     },
     canClearWhiteboard(): boolean {
-      return this.isHost;
+      return this.isHost || this.isModerator;
     },
     isLobbyBlocked(): boolean {
       if (!this.lobbyEnabled) return false;
@@ -263,6 +264,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       /* v8 ignore stop */
     },
     clearWhiteboard(isLocal = false) {
+      if (this.whiteboardStrokes.length) {
+        this.whiteboardSnapshots.push([...this.whiteboardStrokes]);
+      }
       this.whiteboardStrokes = [];
       /* v8 ignore start */
       if (isLocal) {
@@ -331,18 +335,21 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         this.roomBgAssembly = null;
         return;
       }
-      if (command.action === 'begin') {
-        this.roomBgAssembly = { total: command.total, parts: {} };
-        return;
+      /* v8 ignore start */
+      if (command.action === 'reload') {
+        const roomName = window.location.pathname.split('/').pop();
+        if (roomName) {
+          fetch(`/api/meetings/state/${roomName}/background`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (data && data.backgroundUrl !== undefined) {
+                this.gridBackgroundUrl = data.backgroundUrl || '';
+              }
+            })
+            .catch((err) => console.error('Failed to reload background:', err));
+        }
       }
-      if (!this.roomBgAssembly) return;
-      this.roomBgAssembly.parts[command.index] = command.data;
-      if (Object.keys(this.roomBgAssembly.parts).length !== this.roomBgAssembly.total) return;
-      const url = Array.from({ length: this.roomBgAssembly.total }, (_, index) => {
-        return this.roomBgAssembly?.parts[index] ?? '';
-      }).join('');
-      this.gridBackgroundUrl = url;
-      this.roomBgAssembly = null;
+      /* v8 ignore stop */
     },
     setNotesTemplate(text: string) {
       this.notesTemplate = text;

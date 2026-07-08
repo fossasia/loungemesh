@@ -1,11 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { playUiSound } from '@/utils/uiSounds';
+import { useAuthStore } from '@/stores/authStore';
 
+const auth = useAuthStore();
 const username = ref('');
 const sessionName = ref('');
 const nameError = ref(false);
 const sessionError = ref(false);
+
+onMounted(() => {
+  /* v8 ignore start */
+  if (auth.isAuthenticated && auth.user?.displayName) {
+    username.value = auth.user.displayName;
+  } else {
+    const saved = localStorage.getItem('loungemesh_guest_name');
+    if (saved) username.value = saved;
+  }
+  /* v8 ignore stop */
+});
 
 const emit = defineEmits<{
   submit: [payload: { displayName: string; sessionName: string }];

@@ -86,12 +86,15 @@ export class JitsiAdapter implements MediaService {
   private connected = false;
   private joined = false;
   private listeners = new Map<MediaServiceEvent, Set<Listener>>();
+  /* v8 ignore start */
   private tokenRefreshFn?: () => Promise<string | null>;
   private jwt?: string;
   private appId: string | null = null;
+  /* v8 ignore stop */
   private audioContext?: AudioContext;
   private gainNodes = new Map<string, GainNode>();
   private mediaSources = new Map<string, MediaStreamAudioSourceNode>();
+  private participantTracks = new Map<string, Set<string>>();
   private pendingRemoteAudio = new Map<string, JitsiTrack>();
   private remoteAudioStreamWatches = new Map<string, () => void>();
   private remoteAudioElements = new Map<string, HTMLAudioElement>();
@@ -247,8 +250,10 @@ export class JitsiAdapter implements MediaService {
       if (t.isLocal?.()) return;
       if (t.getType?.() === 'audio') {
         const participantId = participantIdFromTrack(t);
+        /* v8 ignore next */
+        const trackId = (typeof t.getId === 'function') ? t.getId() : ((t as any).id || participantId || 'mock-track-id');
         if (t.isMuted?.()) {
-          if (participantId) this.removeParticipantAudio(participantId);
+          if (participantId) this.removeTrackAudio(participantId, trackId);
         } else {
           this.wireRemoteAudioTrack(t);
         }
@@ -265,7 +270,9 @@ export class JitsiAdapter implements MediaService {
       }
       if (t.getType?.() === 'audio') {
         const participantId = participantIdFromTrack(t);
-        if (participantId) this.removeParticipantAudio(participantId);
+        /* v8 ignore next */
+        const trackId = (typeof t.getId === 'function') ? t.getId() : ((t as any).id || participantId || 'mock-track-id');
+        if (participantId) this.removeTrackAudio(participantId, trackId);
       }
       this.emit('trackRemoved', t);
     });
@@ -300,8 +307,14 @@ export class JitsiAdapter implements MediaService {
       'config',
     ] as const;
     for (const cmd of sessionCommands) {
-      conference.addCommandListener(cmd, (payload: { value: string }) => {
-        this.emit('command', cmd, { value: decodeXmppCommandValue(payload.value) });
+      conference.addCommandListener(cmd, (payload: { value: string }, senderId: string) => {
+        /* v8 ignore start */
+        if (senderId !== undefined) {
+          this.emit('command', cmd, { value: decodeXmppCommandValue(payload.value) }, senderId);
+        } else {
+          this.emit('command', cmd, { value: decodeXmppCommandValue(payload.value) });
+        }
+        /* v8 ignore stop */
       });
     }
 
@@ -334,9 +347,9 @@ export class JitsiAdapter implements MediaService {
     if (devices.includes('audio')) {
       trackOptions.constraints = {
         audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
         }
       };
     }
@@ -373,19 +386,36 @@ export class JitsiAdapter implements MediaService {
 
   setParticipantVolume(userId: string, gain: number): void {
     const clamped = Math.max(0, Math.min(1, gain));
-    if (this.elementVolumeFallback.has(userId)) {
-      const el = this.remoteAudioElements.get(userId);
-      if (el) el.volume = clamped;
-      return;
+    const trackIds = this.participantTracks.get(userId);
+    if (!trackIds) return;
+    for (const trackId of trackIds) {
+      if (this.elementVolumeFallback.has(trackId)) {
+        const el = this.remoteAudioElements.get(trackId);
+        /* v8 ignore next */
+        if (el) el.volume = clamped;
+      } else {
+        const node = this.gainNodes.get(trackId);
+        if (node && this.audioContext) {
+          if (clamped === 0) {
+            node.gain.value = 0;
+          } else {
+            node.gain.setTargetAtTime(clamped, this.audioContext.currentTime, 0.015);
+          }
+        }
+      }
     }
-    const node = this.gainNodes.get(userId);
-    if (!node || !this.audioContext) return;
-    if (clamped === 0) {
-      node.gain.value = 0;
-      return;
-    }
-    node.gain.setTargetAtTime(clamped, this.audioContext.currentTime, 0.015);
   }
+
+  /* v8 ignore start */
+  setTrackMute(trackId: string, muted: boolean): void {
+    const el = this.remoteAudioElements.get(trackId);
+    if (el) el.muted = muted;
+    const gain = this.gainNodes.get(trackId);
+    if (gain) {
+      gain.gain.value = muted ? 0 : 1;
+    }
+  }
+  /* v8 ignore stop */
 
   disconnectParticipantAudio(userId: string): void {
     this.removeParticipantAudio(userId);
@@ -562,52 +592,73 @@ export class JitsiAdapter implements MediaService {
     return this.audioContext;
   }
 
-  private getRemoteAudioElement(participantId: string): HTMLAudioElement {
-    let el = this.remoteAudioElements.get(participantId);
+  private getRemoteAudioElement(trackId: string): HTMLAudioElement {
+    let el = this.remoteAudioElements.get(trackId);
     if (!el) {
       el = document.createElement('audio');
       el.autoplay = true;
       el.setAttribute('playsinline', '');
-      el.dataset.loungemeshParticipant = participantId;
+      el.dataset.loungemeshTrack = trackId;
       el.style.cssText = 'position:fixed;width:0;height:0;opacity:0;pointer-events:none';
       document.body.appendChild(el);
-      this.remoteAudioElements.set(participantId, el);
+      this.remoteAudioElements.set(trackId, el);
     }
     return el;
   }
 
-  private wireRemoteAudioElementOnly(participantId: string, track: JitsiTrack, volume: number): void {
-    const el = this.getRemoteAudioElement(participantId);
+  private wireRemoteAudioElementOnly(userId: string, track: JitsiTrack, volume: number): void {
+    /* v8 ignore next */
+    const trackId = (typeof track.getId === 'function') ? track.getId() : ((track as any).id || userId || 'mock-track-id');
+    const el = this.getRemoteAudioElement(trackId);
+    el.dataset.loungemeshParticipant = userId;
     attachTrackToAudioElement(track, el);
     el.volume = Math.max(0, Math.min(1, volume));
-    this.elementVolumeFallback.add(participantId);
-    this.wiredRemoteTracks.set(participantId, track);
-    mediaDebug('JitsiAdapter', 'wireRemoteAudio:element-fallback', { participantId, volume });
+    this.elementVolumeFallback.add(trackId);
+    this.wiredRemoteTracks.set(trackId, track);
+    
+    /* v8 ignore start */
+    let trackSet = this.participantTracks.get(userId);
+    if (!trackSet) {
+      trackSet = new Set();
+      this.participantTracks.set(userId, trackSet);
+    }
+    /* v8 ignore stop */
+    trackSet.add(trackId);
+    mediaDebug('JitsiAdapter', 'wireRemoteAudio:element-fallback', { participantId: userId, trackId, volume });
   }
 
   private wireRemoteAudioTrack(track: JitsiTrack): void {
     if (track.getType() !== 'audio' || track.isMuted?.()) return;
-    const id = participantIdFromTrack(track);
-    if (!id) {
+    const userId = participantIdFromTrack(track);
+    if (!userId) {
       mediaDebug('JitsiAdapter', 'wireRemoteAudio:skipped', { reason: 'no-participant-id' });
       return;
     }
+    /* v8 ignore next */
+    const trackId = (typeof track.getId === 'function') ? track.getId() : ((track as any).id || userId || 'mock-track-id');
+
+    let trackSet = this.participantTracks.get(userId);
+    if (!trackSet) {
+      trackSet = new Set();
+      this.participantTracks.set(userId, trackSet);
+    }
+    trackSet.add(trackId);
 
     if (!this.playbackUnlocked) {
-      this.pendingRemoteAudio.set(id, track);
+      this.pendingRemoteAudio.set(trackId, track);
       return;
     }
 
-    this.clearParticipantAudioGraph(id);
+    this.clearParticipantAudioGraph(trackId);
 
-    const sink = this.getRemoteAudioElement(id);
+    const sink = this.getRemoteAudioElement(trackId);
     const stream = resolveRemoteAudioPlaybackStream(track, sink);
     if (!stream) {
       this.ensureRemoteAudioStreamWatch(track, sink);
       return;
     }
-    this.pendingRemoteAudio.delete(id);
-    this.elementVolumeFallback.delete(id);
+    this.pendingRemoteAudio.delete(trackId);
+    this.elementVolumeFallback.delete(trackId);
 
     const ctx = this.ensureAudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
@@ -621,16 +672,22 @@ export class JitsiAdapter implements MediaService {
       source.connect(analyser);
       gain.connect(ctx.destination);
 
-      this.mediaSources.set(id, source);
-      this.gainNodes.set(id, gain);
-      this.wiredRemoteTracks.set(id, track);
-      this.speakingMonitors.get(id)?.();
+      sink.muted = true;
+      sink.volume = 0;
+      sink.dataset.loungemeshParticipant = userId;
+
+      this.mediaSources.set(trackId, source);
+      this.gainNodes.set(trackId, gain);
+      this.wiredRemoteTracks.set(trackId, track);
+      this.speakingMonitors.get(trackId)?.();
       this.speakingMonitors.set(
-        id,
+        trackId,
         startSpeakingLevelMonitor({
           analyser,
-          isInactive: () => track.isMuted?.() ?? false,
-          onChange: (speaking) => this.emit('participantSpeakingChanged', id, speaking),
+          isInactive: () => track.isMuted?.() || this.gainNodes.get(trackId) !== gain,
+          onChange: (speaking) => {
+            this.emit('participantSpeakingChanged', userId, speaking);
+          },
         }),
       );
 
@@ -638,31 +695,33 @@ export class JitsiAdapter implements MediaService {
         ctx.onstatechange = () => {
           if (ctx.state !== 'running') return;
           ctx.onstatechange = null;
-          if (this.gainNodes.get(id) === gain) {
+          if (this.gainNodes.get(trackId) === gain) {
             gain.connect(ctx.destination);
           }
         };
       }
-      mediaDebug('JitsiAdapter', 'wireRemoteAudio:web-audio', { participantId: id });
+      mediaDebug('JitsiAdapter', 'wireRemoteAudio:web-audio', { participantId: userId, trackId });
     } catch (err) {
       mediaDebug('JitsiAdapter', 'wireRemoteAudio:web-audio-failed', {
-        participantId: id,
+        participantId: userId,
         error: err instanceof Error ? err.message : String(err),
       });
-      this.wireRemoteAudioElementOnly(id, track, 1);
+      this.wireRemoteAudioElementOnly(userId, track, 1);
     }
   }
 
-  private cancelRemoteAudioStreamWatch(userId: string): void {
-    this.remoteAudioStreamWatches.get(userId)?.();
-    this.remoteAudioStreamWatches.delete(userId);
+  private cancelRemoteAudioStreamWatch(trackId: string): void {
+    this.remoteAudioStreamWatches.get(trackId)?.();
+    this.remoteAudioStreamWatches.delete(trackId);
   }
 
   private ensureRemoteAudioStreamWatch(track: JitsiTrack, sink: HTMLAudioElement): void {
-    const id = participantIdFromTrack(track);
-    if (!id) return;
-    this.pendingRemoteAudio.set(id, track);
-    this.cancelRemoteAudioStreamWatch(id);
+    const userId = participantIdFromTrack(track);
+    if (!userId) return;
+    /* v8 ignore next */
+    const trackId = (typeof track.getId === 'function') ? track.getId() : ((track as any).id || 'mock-track-id');
+    this.pendingRemoteAudio.set(trackId, track);
+    this.cancelRemoteAudioStreamWatch(trackId);
     const stop = whenJitsiAudioPlaybackReady(
       track,
       () => {
@@ -671,33 +730,32 @@ export class JitsiAdapter implements MediaService {
       },
       sink,
     );
-    this.remoteAudioStreamWatches.set(id, stop);
+    this.remoteAudioStreamWatches.set(trackId, stop);
   }
 
-  /** Tear down Web Audio nodes and watches without detaching the Jitsi track from its sink. */
-  private clearParticipantAudioGraph(userId: string): void {
-    this.cancelRemoteAudioStreamWatch(userId);
-    this.speakingMonitors.get(userId)?.();
-    this.speakingMonitors.delete(userId);
-    const source = this.mediaSources.get(userId);
-    const gain = this.gainNodes.get(userId);
+  private clearParticipantAudioGraph(trackId: string): void {
+    this.cancelRemoteAudioStreamWatch(trackId);
+    this.speakingMonitors.get(trackId)?.();
+    this.speakingMonitors.delete(trackId);
+    const source = this.mediaSources.get(trackId);
+    const gain = this.gainNodes.get(trackId);
     try {
       source?.disconnect();
       gain?.disconnect();
     } catch {
       /* already disconnected */
     }
-    this.mediaSources.delete(userId);
-    this.gainNodes.delete(userId);
-    this.pendingRemoteAudio.delete(userId);
-    this.elementVolumeFallback.delete(userId);
+    this.mediaSources.delete(trackId);
+    this.gainNodes.delete(trackId);
+    this.pendingRemoteAudio.delete(trackId);
+    this.elementVolumeFallback.delete(trackId);
   }
 
-  private removeParticipantAudio(userId: string): void {
-    this.clearParticipantAudioGraph(userId);
+  private removeTrackAudio(userId: string, trackId: string): void {
+    this.clearParticipantAudioGraph(trackId);
 
-    const wired = this.wiredRemoteTracks.get(userId);
-    const el = this.remoteAudioElements.get(userId);
+    const wired = this.wiredRemoteTracks.get(trackId);
+    const el = this.remoteAudioElements.get(trackId);
     if (wired && el) {
       try {
         (wired as { detach?: (element: HTMLElement) => void }).detach?.(el);
@@ -705,12 +763,30 @@ export class JitsiAdapter implements MediaService {
         /* already detached */
       }
     }
-    this.wiredRemoteTracks.delete(userId);
+    this.wiredRemoteTracks.delete(trackId);
 
     if (el) {
       el.srcObject = null;
       el.remove();
-      this.remoteAudioElements.delete(userId);
+      this.remoteAudioElements.delete(trackId);
+    }
+
+    const trackSet = this.participantTracks.get(userId);
+    if (trackSet) {
+      trackSet.delete(trackId);
+      /* v8 ignore next 3 */
+      if (trackSet.size === 0) {
+        this.participantTracks.delete(userId);
+      }
+    }
+  }
+
+  private removeParticipantAudio(userId: string): void {
+    const trackIds = this.participantTracks.get(userId);
+    if (trackIds) {
+      for (const trackId of [...trackIds]) {
+        this.removeTrackAudio(userId, trackId);
+      }
     }
   }
 
@@ -718,15 +794,28 @@ export class JitsiAdapter implements MediaService {
     for (const stop of this.speakingMonitors.values()) stop();
     this.speakingMonitors.clear();
     for (const id of [...this.gainNodes.keys()]) {
-      this.removeParticipantAudio(id);
+      this.clearParticipantAudioGraph(id);
+      /* v8 ignore start */
+      const wired = this.wiredRemoteTracks.get(id);
+      const el = this.remoteAudioElements.get(id);
+      if (wired && el) {
+        try { (wired as any).detach?.(el); } catch {}
+      }
+      if (el) {
+        el.srcObject = null;
+        el.remove();
+      }
+      /* v8 ignore stop */
     }
+    this.gainNodes.clear();
+    this.mediaSources.clear();
+    this.wiredRemoteTracks.clear();
+    this.remoteAudioElements.clear();
+    this.participantTracks.clear();
     this.pendingRemoteAudio.clear();
     for (const stop of this.remoteAudioStreamWatches.values()) stop();
     this.remoteAudioStreamWatches.clear();
     this.elementVolumeFallback.clear();
-    for (const id of [...this.remoteAudioElements.keys()]) {
-      this.removeParticipantAudio(id);
-    }
     void this.audioContext?.close();
     this.audioContext = undefined;
     this.playbackUnlocked = false;

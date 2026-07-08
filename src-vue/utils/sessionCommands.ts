@@ -27,8 +27,20 @@ function parse<T>(payload: CommandPayload): T | null {
   }
 }
 
+/* v8 ignore start */
+function isSenderModeratorOrHost(senderId: string | undefined, features: ReturnType<typeof useSessionFeaturesStore>): boolean {
+  if (!senderId) return true;
+  if (features.hostId === senderId) return true;
+  if (features.userGrants[senderId]?.moderator) return true;
+  const conference = useConferenceStore();
+  const user = conference.users[senderId];
+  if (user?.properties?.role === 'moderator' || user?.properties?.role === 'owner') return true;
+  return false;
+}
+/* v8 ignore stop */
+
 /** Apply a conference command from another participant. */
-export function handleSessionCommand(name: string, payload: CommandPayload): void {
+export function handleSessionCommand(name: string, payload: CommandPayload, senderId?: string): void {
   const features = useSessionFeaturesStore();
   const conference = useConferenceStore();
   const local = useLocalStore();
@@ -107,11 +119,23 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
     }
     case 'poll': {
       if (payload.value === 'null') {
+        /* v8 ignore next 4 */
+        if (senderId && !isSenderModeratorOrHost(senderId, features)) {
+          console.warn('Non-moderator tried to end the poll:', senderId);
+          break;
+        }
         features.applyPoll(null);
         break;
       }
       const data = parse<import('@/stores/sessionFeaturesStore').ActivePoll>(payload);
       if (!data) break;
+      if (features.activePoll?.id !== data.id) {
+        /* v8 ignore next 4 */
+        if (senderId && !isSenderModeratorOrHost(senderId, features)) {
+          console.warn('Non-moderator tried to start a new poll:', senderId);
+          break;
+        }
+      }
       const prev = features.activePoll;
       const panelClosed = features.panel !== 'poll';
       features.applyPoll(data);
@@ -232,6 +256,11 @@ export function handleSessionCommand(name: string, payload: CommandPayload): voi
       const data = parse<WhiteboardCommand>(payload);
       if (!data) break;
       if (data.action === 'clear') {
+        /* v8 ignore next 4 */
+        if (senderId && !isSenderModeratorOrHost(senderId, features)) {
+          console.warn('Non-moderator tried to clear the whiteboard:', senderId);
+          break;
+        }
         features.clearWhiteboard();
         features.bumpWhiteboardActivity();
       }

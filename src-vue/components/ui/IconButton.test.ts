@@ -58,4 +58,12 @@ describe('IconButton', () => {
     (wrapper.vm as any).onClick();
     expect(playUiSound).not.toHaveBeenCalled();
   });
+
+  it('renders hardware error badge when error is true', () => {
+    const wrapper = mount(IconButton, {
+      props: { label: 'Cam', error: true },
+      slots: { icon: '<span class="ico">x</span>' },
+    });
+    expect(wrapper.find('.errorBadge').exists()).toBe(true);
+  });
 });

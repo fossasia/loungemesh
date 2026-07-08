@@ -5,7 +5,6 @@ import { useLocalStore } from '@/stores/localStore';
 import {
   broadcastHostRoomSettings,
 } from './hostRoomSettings';
-import { ROOM_BACKGROUND_CHUNK_SIZE } from './roomBackgroundSync';
 
 describe('hostRoomSettings', () => {
   beforeEach(() => {
@@ -33,23 +32,19 @@ describe('hostRoomSettings', () => {
     expect(engine.sendCommand).not.toHaveBeenCalled();
   });
 
-  it('broadcasts chunked room commands for large wallpapers', () => {
+  it('broadcasts reload command for wallpapers', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('host');
     features.setHost('host');
-    const url = 'data:image/jpeg;base64,' + 'x'.repeat(ROOM_BACKGROUND_CHUNK_SIZE + 1);
+    const url = 'data:image/jpeg;base64,xxxx';
     features.gridBackgroundUrl = url;
 
     const engine = { sendCommand: vi.fn() };
     broadcastHostRoomSettings(engine as never, features);
     expect(engine.sendCommand).toHaveBeenCalledWith(
       'room',
-      JSON.stringify({ action: 'begin', total: 2 }),
-    );
-    expect(engine.sendCommand).toHaveBeenCalledWith(
-      'room',
-      expect.stringContaining('"action":"chunk"'),
+      JSON.stringify({ action: 'reload' }),
     );
   });
 
