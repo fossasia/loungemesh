@@ -33,7 +33,7 @@
     "prettier": "^3.8.3",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.0.14",
     "vite-plugin-compression2": "^2.5.3",
     "vitepress": "^1.6.4",
