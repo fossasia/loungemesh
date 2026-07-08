@@ -54,10 +54,31 @@ async function getGoogleAccessToken(userId: string, req?: Request): Promise<stri
   }
 }
 
+// Helper to convert simple Markdown to HTML for Google Calendar
+function markdownToHtml(md: string): string {
+  if (!md) return '';
+  return md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/__(.*?)__/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
+    .replace(/\n/g, '<br />');
+}
+
 // Helper: Sync Event to Google Calendar (Create or Update)
 async function syncGoogleCalendarEvent(
   userId: string,
-  meeting: { title: string; roomName: string; startTime: Date; endTime: Date; recurrence?: string | null; guestEmails?: string[]; moderatorEmails?: string[] },
+  meeting: { title: string; description?: string | null; roomName: string; startTime: Date; endTime: Date; recurrence?: string | null; guestEmails?: string[]; moderatorEmails?: string[] },
   existingEventId?: string | null,
   req?: Request
 ): Promise<string | null> {
@@ -65,9 +86,13 @@ async function syncGoogleCalendarEvent(
   const accessToken = await getGoogleAccessToken(userId, req);
   if (!accessToken) return null;
 
+  const joinLinkHtml = `<p><strong>Join LoungeMesh Spatial Meet:</strong> <a href="http://${host}/session/${meeting.roomName}">http://${host}/session/${meeting.roomName}</a></p>`;
+  const descHtml = meeting.description ? markdownToHtml(meeting.description) : '';
+  const finalDescription = descHtml ? `${descHtml}<br /><br />${joinLinkHtml}` : joinLinkHtml;
+
   const eventPayload: any = {
     summary: meeting.title,
-    description: `Join LoungeMesh Spatial Meet: http://${host}/session/${meeting.roomName}`,
+    description: finalDescription,
     start: {
       dateTime: meeting.startTime.toISOString(),
       timeZone: 'UTC',
@@ -156,7 +181,8 @@ export async function createMeeting(req: Request, res: Response) {
     lobbyEnabled,
     stagePromotionEnabled,
     allowParticipantRecording,
-    roomDefaults
+    roomDefaults,
+    description
   } = req.body;
 
   if (!title || !roomName) {
@@ -185,6 +211,7 @@ export async function createMeeting(req: Request, res: Response) {
         startTime: start,
         endTime: end,
         recurrence: recurrence || 'NONE',
+        description: description || null,
         guestEmails: guests,
         moderatorEmails: moderators,
         hostId,
@@ -206,6 +233,7 @@ export async function createMeeting(req: Request, res: Response) {
     if (isScheduled && start && end && syncGoogleCal) {
       const eventId = await syncGoogleCalendarEvent(hostId, {
         title,
+        description: description || null,
         roomName,
         startTime: start,
         endTime: end,
@@ -304,7 +332,8 @@ export async function updateMeeting(req: Request, res: Response) {
     stagePromotionEnabled,
     allowParticipantRecording,
     roomDefaults,
-    syncGoogleCal
+    syncGoogleCal,
+    description
   } = req.body;
 
   try {
@@ -346,6 +375,7 @@ export async function updateMeeting(req: Request, res: Response) {
         startTime: start,
         endTime: end,
         recurrence: rec,
+        description: description !== undefined ? description : meeting.description,
         guestEmails: guests,
         moderatorEmails: moderators,
         configs: {
@@ -383,6 +413,7 @@ export async function updateMeeting(req: Request, res: Response) {
           meeting.hostId,
           {
             title: updated.title,
+            description: updated.description,
             roomName: updated.roomName,
             startTime: start,
             endTime: end,

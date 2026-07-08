@@ -22,7 +22,7 @@ describe('safeSessionSlug', () => {
 describe('exportFileName', () => {
   const now = new Date(2026, 4, 31, 23, 10);
   it('builds a timestamped name per kind', () => {
-    expect(exportFileName('notes', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.md');
+    expect(exportFileName('notes', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.txt');
     expect(exportFileName('whiteboard', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.png');
     expect(exportFileName('recording', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.mp4');
   });
@@ -56,7 +56,7 @@ describe('notesToMarkdown', () => {
   const now = new Date('2026-05-31T17:40:00.000Z');
   it('includes a heading, timestamp and the notes body', () => {
     const md = notesToMarkdown('  hello world  ', 'room', now);
-    expect(md).toContain('# LoungeMesh notes — room');
+    expect(md).toContain('# LoungeMesh public notes — room');
     expect(md).toContain('2026-05-31T17:40:00.000Z');
     expect(md).toContain('hello world');
   });

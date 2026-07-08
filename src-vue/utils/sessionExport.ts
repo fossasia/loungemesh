@@ -15,7 +15,7 @@ export function blobMimeToExtension(mimeType: string): string {
 }
 
 const EXTENSIONS: Record<ExportKind, string> = {
-  notes: 'md',
+  notes: 'txt',
   whiteboard: 'png',
   recording: 'mp4',
 };
@@ -45,7 +45,7 @@ export function exportFileName(
 
 /** Render shared notes as a small Markdown document. */
 export function notesToMarkdown(notes: string, sessionId: string | undefined, now: Date = new Date()): string {
-  const heading = `# LoungeMesh notes — ${safeSessionSlug(sessionId)}`;
+  const heading = `# LoungeMesh public notes — ${safeSessionSlug(sessionId)}`;
   const when = `_Exported ${now.toISOString()}_`;
   const body = notes.trim().length ? notes.trim() : '_No notes were taken in this session._';
   return `${heading}\n\n${when}\n\n${body}\n`;
