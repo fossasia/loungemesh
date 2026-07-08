@@ -1,7 +1,7 @@
 import type { WhiteboardStroke } from '@/utils/whiteboardSync';
 import { renderWhiteboard } from '@/utils/whiteboardCanvas';
 
-export type ExportKind = 'notes' | 'whiteboard' | 'recording';
+export type ExportKind = 'notes' | 'notes-rtf' | 'whiteboard' | 'recording';
 
 /** Derive a clean file extension from a MediaRecorder blob MIME type. */
 export function blobMimeToExtension(mimeType: string): string {
@@ -16,6 +16,7 @@ export function blobMimeToExtension(mimeType: string): string {
 
 const EXTENSIONS: Record<ExportKind, string> = {
   notes: 'md',
+  'notes-rtf': 'rtf',
   whiteboard: 'png',
   recording: 'mp4',
 };
@@ -84,4 +85,35 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   anchor.remove();
   // Revoke on the next tick so the download has a chance to start first.
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Convert a Markdown document into valid RTF format to preserve rich text formatting. */
+export function markdownToRtf(md: string, title: string): string {
+  const body = md
+    .replace(/\\/g, '\\\\')
+    .replace(/{/g, '\\{')
+    .replace(/}/g, '\\}')
+    .replace(/\*\*\*(.*?)\*\*\*/g, '\\b\\i $1\\i0\\b0')
+    .replace(/\*\*(.*?)\*\*/g, '\\b $1\\b0')
+    .replace(/\*(.*?)\*/g, '\\i $1\\i0')
+    .replace(/__(.*?)__/g, '\\b $1\\b0')
+    .replace(/_(.*?)_/g, '\\i $1\\i0')
+    .replace(/^# (.*?)$/gm, '\\line\\fs36\\b $1\\b0\\fs24\\line')
+    .replace(/^## (.*?)$/gm, '\\line\\fs30\\b $1\\b0\\fs24\\line')
+    .replace(/^### (.*?)$/gm, '\\line\\fs26\\b $1\\b0\\fs24\\line')
+    .replace(/^- (.*?)$/gm, '\\bullet  $1\\line')
+    .replace(/^\* (.*?)$/gm, '\\bullet  $1\\line')
+    .replace(/`(.*?)`/g, '{\\f1 $1}')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '{\\field{\\*\\fldinst{HYPERLINK "$2"}}{\\fldrslt{\\ul $1}}}')
+    .replace(/\n/g, '\\par\n');
+
+  return `{\\rtf1\\ansi\\deff0
+{\\fonttbl{\\f0\\fnil\\fcharset0 Helvetica;}{\\f1\\fmodern\\fcharset0 Courier;}}
+{\\colortbl ;\\red0\\green0\\blue255;}
+\\viewkind4\\uc1
+\\f0\\fs24
+\\b\\fs40 ${title}\\b0\\par
+\\line
+${body}
+}`;
 }

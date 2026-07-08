@@ -77,7 +77,7 @@ watch(
 );
 
 const sessionId = computed(() => String(route.params.id ?? props.id ?? ''));
-const { exportNotes, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
+const { exportNotes, exportNotesRtf, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
 
 const recorder = useSessionRecorder(makeRecorderSources(local, conf));
 const recording = useSessionRecording(recorder, exportRecording);
@@ -295,6 +295,7 @@ onBeforeUnmount(() => {
     @cancel="showLeaveDialog = false"
     @leave="doLeave"
     @export-notes="exportNotes"
+    @export-notes-rtf="exportNotesRtf"
     @export-whiteboard="exportWhiteboard"
     @export-recording="recording.downloadRecording"
     @toggle-recording="recording.toggleRecording(selectedQuality)"

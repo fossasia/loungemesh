@@ -7,6 +7,7 @@ import {
   notesToMarkdown,
   renderWhiteboardToCanvas,
   safeSessionSlug,
+  markdownToRtf,
 } from './sessionExport';
 
 describe('safeSessionSlug', () => {
@@ -106,5 +107,25 @@ describe('downloadBlob', () => {
     expect(revokeURL).toHaveBeenCalledWith('blob:fake');
     click.mockRestore();
     vi.useRealTimers();
+  });
+});
+
+describe('markdownToRtf', () => {
+  it('converts markdown formatting to RTF syntax successfully', () => {
+    const md = `# Heading 1\n## Heading 2\n### Heading 3\n***bold italic***\n**bold**\n*italic*\n- item\n* item2\n\`code\`\n[Google](https://google.com)`;
+    const rtf = markdownToRtf(md, 'Title');
+    expect(rtf).toContain('\\rtf1');
+    expect(rtf).toContain('Title');
+    expect(rtf).toContain('\\fs36\\b Heading 1');
+    expect(rtf).toContain('\\fs30\\b Heading 2');
+    expect(rtf).toContain('\\fs26\\b Heading 3');
+    expect(rtf).toContain('\\b\\i bold italic');
+    expect(rtf).toContain('\\b bold');
+    expect(rtf).toContain('\\i italic');
+    expect(rtf).toContain('\\bullet  item');
+    expect(rtf).toContain('\\bullet  item2');
+    expect(rtf).toContain('{\\f1 code}');
+    expect(rtf).toContain('HYPERLINK "https://google.com"');
+    expect(rtf).toContain('Google');
   });
 });
