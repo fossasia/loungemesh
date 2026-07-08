@@ -88,8 +88,8 @@ async function syncGoogleCalendarEvent(
 
   try {
     const url = existingEventId
-      ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingEventId}`
-      : 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+      ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${existingEventId}?sendUpdates=all`
+      : 'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all';
 
     const method = existingEventId ? 'PUT' : 'POST';
 
@@ -122,7 +122,7 @@ async function deleteGoogleCalendarEvent(userId: string, eventId: string, req?: 
 
   try {
     const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`,
       {
         method: 'DELETE',
         headers: {
