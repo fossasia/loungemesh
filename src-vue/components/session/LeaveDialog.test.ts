@@ -23,13 +23,15 @@ describe('LeaveDialog', () => {
   it('shows export options and emits each action for hosts', async () => {
     const wrapper = mountDialog({ hasRecording: true });
     const buttons = wrapper.findAll('.export');
-    expect(buttons).toHaveLength(3);
+    expect(buttons).toHaveLength(4);
     await buttons[0].trigger('click');
     await buttons[1].trigger('click');
     await buttons[2].trigger('click');
+    await buttons[3].trigger('click');
     await wrapper.find('.btn.leave').trigger('click');
     await wrapper.find('.btn.cancel').trigger('click');
     expect(wrapper.emitted('export-notes')).toHaveLength(1);
+    expect(wrapper.emitted('export-notes-rtf')).toHaveLength(1);
     expect(wrapper.emitted('export-whiteboard')).toHaveLength(1);
     expect(wrapper.emitted('export-recording')).toHaveLength(1);
     expect(wrapper.emitted('leave')).toHaveLength(1);
@@ -38,13 +40,13 @@ describe('LeaveDialog', () => {
 
   it('disables the recording download until a recording exists', () => {
     const wrapper = mountDialog({ hasRecording: false });
-    const recordingBtn = wrapper.findAll('.export')[2];
+    const recordingBtn = wrapper.findAll('.export')[3];
     expect((recordingBtn.element as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('hides the recording export when recording is unsupported', () => {
     const wrapper = mountDialog({ recordingSupported: false });
-    expect(wrapper.findAll('.export')).toHaveLength(2);
+    expect(wrapper.findAll('.export')).toHaveLength(3);
   });
 
   it('shows LIVE pill on the recording export button while recording is active', () => {

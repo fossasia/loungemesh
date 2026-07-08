@@ -13,6 +13,7 @@ const emit = defineEmits<{
   (e: 'cancel'): void;
   (e: 'leave'): void;
   (e: 'export-notes'): void;
+  (e: 'export-notes-rtf'): void;
   (e: 'export-whiteboard'): void;
   (e: 'export-recording'): void;
   (e: 'toggle-recording'): void;
@@ -32,6 +33,7 @@ function onLeave() {
 function onExport(type: string) {
   playUiSound('tap');
   if (type === 'notes') emit('export-notes');
+  else if (type === 'notes-rtf') emit('export-notes-rtf');
   else if (type === 'whiteboard') emit('export-whiteboard');
   else if (type === 'recording') emit('export-recording');
 }
@@ -71,9 +73,22 @@ function onExport(type: string) {
                       <line x1="16" y1="13" x2="8" y2="13"/>
                       <line x1="16" y1="17" x2="8" y2="17"/>
                     </svg>
-                    <span>Notes</span>
+                    <span>Public Notes</span>
                   </div>
                   <span class="ext">.md</span>
+                </button>
+
+                <button type="button" class="export" @click="onExport('notes-rtf')">
+                  <div class="exportLeft">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="exportIcon">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    <span>Public Notes (RTF)</span>
+                  </div>
+                  <span class="ext">.rtf</span>
                 </button>
 
                 <button type="button" class="export" @click="onExport('whiteboard')">

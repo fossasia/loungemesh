@@ -7,6 +7,7 @@ import {
   notesToMarkdown,
   renderWhiteboardToCanvas,
   safeSessionSlug,
+  markdownToRtf,
 } from './sessionExport';
 
 describe('safeSessionSlug', () => {
@@ -56,7 +57,7 @@ describe('notesToMarkdown', () => {
   const now = new Date('2026-05-31T17:40:00.000Z');
   it('includes a heading, timestamp and the notes body', () => {
     const md = notesToMarkdown('  hello world  ', 'room', now);
-    expect(md).toContain('# LoungeMesh notes — room');
+    expect(md).toContain('# LoungeMesh public notes — room');
     expect(md).toContain('2026-05-31T17:40:00.000Z');
     expect(md).toContain('hello world');
   });
@@ -106,5 +107,58 @@ describe('downloadBlob', () => {
     expect(revokeURL).toHaveBeenCalledWith('blob:fake');
     click.mockRestore();
     vi.useRealTimers();
+  });
+});
+
+describe('markdownToRtf', () => {
+  it('converts markdown formatting to RTF syntax successfully', () => {
+    const md = `# Heading 1
+## Heading 2
+### Heading 3
+***bold italic***
+**bold**
+*italic*
+- item
+
+regular text after empty line
+* item2
+\`code\`
+[Google](https://google.com)
+> quote
+> quote line 2
+normal text after quote
+---
+\`\`\`
+js code
+\`\`\`
+> quote at end`;
+    const rtf = markdownToRtf(md, 'Title');
+    expect(rtf).toContain('\\rtf1');
+    expect(rtf).toContain('Title');
+    expect(rtf).toContain('\\fs36\\b Heading 1');
+    expect(rtf).toContain('\\fs30\\b Heading 2');
+    expect(rtf).toContain('\\fs26\\b Heading 3');
+    expect(rtf).toContain('\\b\\i bold italic');
+    expect(rtf).toContain('\\b bold');
+    expect(rtf).toContain('\\i italic');
+    expect(rtf).toContain('\\bullet  item');
+    expect(rtf).toContain('regular text after empty line');
+    expect(rtf).toContain('\\bullet  item2');
+    expect(rtf).toContain('{\\f1 code}');
+    expect(rtf).toContain('HYPERLINK "https://google.com"');
+    expect(rtf).toContain('Google');
+    expect(rtf).toContain('{\\i quote');
+    expect(rtf).toContain('quote line 2');
+    expect(rtf).toContain('normal text after quote');
+    expect(rtf).toContain('--------------------------------------------------');
+    expect(rtf).toContain('{\\f1 js code}');
+    expect(rtf).toContain('quote at end');
+  });
+
+  it('handles indented nested list levels in RTF correctly', () => {
+    const md = `- item\n  - nested item`;
+    const rtf = markdownToRtf(md, 'Title');
+    expect(rtf).toContain('\\bullet  item');
+    expect(rtf).toContain('\\tab \\bullet  nested item');
   });
 });

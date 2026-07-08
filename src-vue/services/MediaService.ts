@@ -47,7 +47,7 @@ export type MediaServiceEventMap = {
   participantPropertyChanged: [id: string, properties: Record<string, unknown>];
   participantSpeakingChanged: [id: string, speaking: boolean];
   displayNameChanged: [id: string, displayName: string];
-  command: [name: string, payload: { value: string }];
+  command: [name: string, payload: { value: string }, senderId?: string];
   /** Fired when Jitsi reports AUTHENTICATION_REQUIRED (JWT expired) */
   tokenExpired: [];
 };
