@@ -86,6 +86,17 @@ onMounted(() => {
       console.error('Failed to parse meeting defaults:', err);
     }
   }
+  
+  // Background preloader for emoji picker index
+  setTimeout(() => {
+    void import('@/utils/emojiMart').then(({ getEmojiIndex }) => {
+      try {
+        getEmojiIndex();
+      } catch (err) {
+        console.warn('Emoji preloader failed:', err);
+      }
+    });
+  }, 2000);
 });
 
 // Reactively watch for auth state changes to fetch/clear upcoming meetings
@@ -129,6 +140,7 @@ async function fetchUpcoming() {
 // Handler for guest name form submit
 function goSessionGuest(payload: { displayName: string; sessionName: string }) {
   const name = formatSphereName(payload.displayName);
+  localStorage.setItem('loungemesh_guest_name', payload.displayName);
   conference.setDisplayName(name);
   conference.setConferenceName(payload.sessionName);
   router.push(`/session/${payload.sessionName}`);
@@ -887,7 +899,7 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
  
 .alert {
   position: fixed;
-  top: 24px;
+  top: 88px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 12000;

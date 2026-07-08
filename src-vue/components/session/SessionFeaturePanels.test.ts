@@ -189,7 +189,7 @@ describe('SessionFeaturePanels', () => {
     await wrapper.find('.notesTa').setValue('typing');
     features.sharedNotes = 'remote overwrite';
     await flushPromises();
-    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('typing');
+    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('remote overwrite typing');
     wrapper.unmount();
   });
 

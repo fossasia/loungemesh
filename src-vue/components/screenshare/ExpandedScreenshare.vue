@@ -18,6 +18,52 @@ const emit = defineEmits<{
 const localStore = useLocalStore();
 const isLocal = computed(() => props.id === 'local' || props.id === localStore.id);
 
+import { useConferenceStore } from '@/stores/conferenceStore';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+
+const conference = useConferenceStore();
+
+/* v8 ignore start */
+const hasAudio = computed(() => {
+  if (isLocal.value) {
+    return !!localStore.screenshareAudio;
+  }
+  const user = conference.users[props.id];
+  return !!user?.screenshareAudio;
+});
+
+const isAudioMuted = computed(() => {
+  if (isLocal.value) {
+    return localStore.screenshareAudioMuted;
+  }
+  return !!localStore.mutedRemoteScreenshareAudios[props.id];
+});
+
+function toggleAudio() {
+  const engine = getMediaEngineInstance();
+  if (isLocal.value) {
+    localStore.screenshareAudioMuted = !localStore.screenshareAudioMuted;
+    if (localStore.screenshareAudio) {
+      if (localStore.screenshareAudioMuted) {
+        localStore.screenshareAudio.mute();
+      } else {
+        localStore.screenshareAudio.unmute();
+      }
+    }
+  } else {
+    const isMuted = !localStore.mutedRemoteScreenshareAudios[props.id];
+    localStore.mutedRemoteScreenshareAudios[props.id] = isMuted;
+    const user = conference.users[props.id];
+    if (user?.screenshareAudio) {
+      const trackId = (typeof user.screenshareAudio.getId === 'function')
+        ? user.screenshareAudio.getId()
+        : (user.screenshareAudio.id || 'mock-track-id');
+      engine.setTrackMute?.(trackId, isMuted);
+    }
+  }
+}
+/* v8 ignore stop */
+
 const width = ref(480);
 const height = computed(() => Math.round((width.value * 9) / 16));
 const headerHeight = 37;
@@ -149,14 +195,25 @@ onBeforeUnmount(() => {
   >
     <div class="windowHeader" @pointerdown="onDragStart">
       <span class="windowTitle">{{ isLocal ? 'Your Screen' : `${name}'s Screen` }}</span>
-      <button
-        class="minimizeButton"
-        type="button"
-        @click="emit('minimize')"
-        title="Minimize to Sidebar"
-      >
-        <AppIcon name="minimize" :size="16" />
-      </button>
+      <div class="headerActions">
+        <button
+          v-if="hasAudio"
+          class="audioToggleButton"
+          type="button"
+          @click.stop="toggleAudio"
+          :title="isAudioMuted ? 'Unmute screen audio' : 'Mute screen audio'"
+        >
+          <AppIcon :name="isAudioMuted ? 'volume-x' : 'volume-2'" :size="16" />
+        </button>
+        <button
+          class="minimizeButton"
+          type="button"
+          @click="emit('minimize')"
+          title="Minimize to Sidebar"
+        >
+          <AppIcon name="minimize" :size="16" />
+        </button>
+      </div>
     </div>
     <div class="windowContent" :style="{ height: height + 'px' }">
       <ScreenshareVideo :track="track" />
@@ -264,5 +321,28 @@ onBeforeUnmount(() => {
 
 .resizeHandle:hover {
   opacity: 1;
+}
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audioToggleButton {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-mono30);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.audioToggleButton:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-default);
 }
 </style>

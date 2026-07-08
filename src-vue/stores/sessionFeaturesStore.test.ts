@@ -459,26 +459,33 @@ describe('sessionFeaturesStore', () => {
     expect(features.sharedNotes).toBe('a');
   });
 
-  it('reassembles chunked room background commands', () => {
+  it('updates room background commands on reload or clear', async () => {
+    vi.useRealTimers();
     const features = useSessionFeaturesStore();
-    features.applyRoomBackgroundCommand({ action: 'begin', total: 2 });
-    features.applyRoomBackgroundCommand({
-      action: 'chunk',
-      index: 0,
-      data: 'data:image/jpeg;base64,',
-    });
-    expect(features.gridBackgroundUrl).toBe('');
-    features.applyRoomBackgroundCommand({ action: 'chunk', index: 1, data: 'abc' });
+    
+    const fetchSpy = vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        json: () => Promise.resolve({ backgroundUrl: 'data:image/jpeg;base64,abc' }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const originalLocation = window.location;
+    delete (window as any).location;
+    window.location = { pathname: '/room/room-name' } as any;
+
+    features.applyRoomBackgroundCommand({ action: 'reload' });
+    
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/meetings/state/room-name/background');
     expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
+
     features.applyRoomBackgroundCommand({ action: 'clear' });
     expect(features.gridBackgroundUrl).toBe('');
-    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'orphan' });
-    expect(features.gridBackgroundUrl).toBe('');
 
-    features.applyRoomBackgroundCommand({ action: 'begin', total: 2 });
-    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'a' });
-    features.applyRoomBackgroundCommand({ action: 'chunk', index: 2, data: 'c' });
-    expect(features.gridBackgroundUrl).toBe('a');
+    vi.unstubAllGlobals();
+    window.location = originalLocation;
   });
 
   it('verifies default empty state on join reset', () => {

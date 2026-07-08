@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import JitsiConnection from '@/components/runtime/JitsiConnection.vue';
 import LocalStoreLogic from '@/components/runtime/LocalStoreLogic.vue';
@@ -152,9 +152,25 @@ watch(
   { immediate: true }
 );
 
+let handReminderInterval: any;
+
+onMounted(() => {
+  handReminderInterval = setInterval(() => {
+    const hasRemoteHand = Object.values(conf.users).some(u => 
+      u.properties?.handRaised === true || u.properties?.handRaised === 'true'
+    );
+    if (hasRemoteHand) {
+      playUiSound('handRaise');
+    }
+  }, 15000);
+});
+
 onBeforeUnmount(() => {
   if (stageInviteInterval) {
     clearInterval(stageInviteInterval);
+  }
+  if (handReminderInterval) {
+    clearInterval(handReminderInterval);
   }
 });
 </script>
@@ -218,6 +234,7 @@ onBeforeUnmount(() => {
     <IconButton
       :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
       :warning="local.cameraOff"
+      :error="local.videoError"
       :sound="local.cameraOff ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleCamera()"
     >
@@ -228,6 +245,7 @@ onBeforeUnmount(() => {
     <IconButton
       :label="local.mute ? 'Unmute' : 'Mute'"
       :warning="local.mute"
+      :error="local.audioError"
       :sound="local.mute ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleMute()"
     >

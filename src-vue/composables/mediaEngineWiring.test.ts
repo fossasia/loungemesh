@@ -566,11 +566,7 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Agenda');
     expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith(
-      'room',
-      JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,wall' }),
-    );
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
   it('applies host template when the first participant becomes host', async () => {
@@ -589,11 +585,7 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Kickoff');
     expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith(
-      'room',
-      JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,grid' }),
-    );
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
   it('rebroadcasts room background when host sees a new participant', async () => {
@@ -611,11 +603,7 @@ describe('wireStoreSync', () => {
     await engine.joinRoom('room', 'Host', {});
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith(
-      'room',
-      JSON.stringify({ action: 'chunk', index: 0, data: 'data:image/jpeg;base64,wall' }),
-    );
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
   it('rebroadcasts shared notes when host sees a new participant', async () => {

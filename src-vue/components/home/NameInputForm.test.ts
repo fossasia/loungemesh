@@ -36,4 +36,16 @@ describe('NameInputForm', () => {
     expect(wrapper.emitted('submit')).toBeUndefined();
     wrapper.unmount();
   });
+
+  it('pre-populates display name when user is authenticated', async () => {
+    const { useAuthStore } = await import('@/stores/authStore');
+    const auth = useAuthStore();
+    auth.isAuthenticated = true;
+    auth.user = { displayName: 'Authenticated User', email: 'a@b.com' } as any;
+
+    const { wrapper } = await mountWithApp(NameInputForm);
+    const inputs = wrapper.findAll('input[type="text"]');
+    expect((inputs[0].element as HTMLInputElement).value).toBe('Authenticated User');
+    wrapper.unmount();
+  });
 });

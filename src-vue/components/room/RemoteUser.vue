@@ -91,7 +91,7 @@ const isStageOccupant = computed(() => {
         onStageOccupant: isStageOccupant,
       }"
     >
-      <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" />
+      <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" :displayName="user?.user?._displayName || ''" />
       <template v-if="videoTrack && !isStageOccupant && !(isOutsideSphere && features.isStageModeActive)">
         <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>

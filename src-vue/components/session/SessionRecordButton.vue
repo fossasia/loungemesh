@@ -48,15 +48,14 @@ const emit = defineEmits<{
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border: 1.5px solid rgba(148, 163, 184, 0.4);
+  border: 1.5px solid var(--line-dark, #cbd5e1);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
+  background: var(--btn-default-bg, #f1f5f9);
   cursor: pointer;
   font-family: var(--font-body);
   font-size: 0.8rem;
   font-weight: var(--fw-medium);
-  color: var(--color-text-default);
+  color: var(--btn-default-fg, #1e293b);
   transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
   letter-spacing: 0.02em;
 }
@@ -111,14 +110,13 @@ const emit = defineEmits<{
 
 .qualityPicker {
   padding: 6px 8px;
-  border: 1.5px solid rgba(148, 163, 184, 0.4);
+  border: 1.5px solid var(--line-dark, #cbd5e1);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
+  background: var(--btn-default-bg, #f1f5f9);
   font-family: var(--font-body);
   font-size: 0.75rem;
   font-weight: var(--fw-medium);
-  color: var(--color-text-default);
+  color: var(--btn-default-fg, #1e293b);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
   appearance: none;
@@ -126,9 +124,14 @@ const emit = defineEmits<{
   text-align: center;
 }
 
+.qualityPicker option {
+  background: var(--btn-default-bg, #f1f5f9);
+  color: var(--btn-default-fg, #1e293b);
+}
+
 .qualityPicker:not(:disabled):hover {
   border-color: rgba(79, 110, 247, 0.5);
-  background: rgba(79, 110, 247, 0.08);
+  background: var(--btn-default-bg-hover, #e2e8f0);
 }
 
 .qualityPicker:disabled {

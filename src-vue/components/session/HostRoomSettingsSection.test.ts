@@ -51,7 +51,7 @@ describe('HostRoomSettingsSection', () => {
     await flushPromises();
     const features = useSessionFeaturesStore();
     expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,wall');
-    expect(cmdSpy).toHaveBeenCalledWith('room', expect.stringContaining('data:image/jpeg'));
+    expect(cmdSpy).toHaveBeenCalledWith('room', expect.stringContaining('reload'));
     expect(wrapper.find('.preview').exists()).toBe(true);
     wrapper.unmount();
   });

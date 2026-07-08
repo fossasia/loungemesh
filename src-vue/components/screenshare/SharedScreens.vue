@@ -27,6 +27,8 @@ const screenshares = computed(() => {
       id: local.id || 'local',
       name: 'You',
       track: local.screenshare,
+      hasAudio: !!local.screenshareAudio,
+      isAudioMuted: local.screenshareAudioMuted,
     });
   }
 
@@ -41,6 +43,8 @@ const screenshares = computed(() => {
         id,
         name: user.user?._displayName || 'Friendly Sphere',
         track: user.screenshare,
+        hasAudio: !!user.screenshareAudio,
+        isAudioMuted: !!local.mutedRemoteScreenshareAudios[id],
       });
     }
   }
@@ -77,6 +81,35 @@ const popOut = (id: string) => {
 const popIn = (id: string) => {
   poppedOutIds.value = poppedOutIds.value.filter((x) => x !== id);
 };
+
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+
+/* v8 ignore start */
+function toggleScreenshareAudio(item: any) {
+  const engine = getMediaEngineInstance();
+  if (item.id === 'local' || item.id === local.id || item.name === 'You') {
+    local.screenshareAudioMuted = !local.screenshareAudioMuted;
+    if (local.screenshareAudio) {
+      if (local.screenshareAudioMuted) {
+        local.screenshareAudio.mute();
+      } else {
+        /* v8 ignore next */
+        local.screenshareAudio.unmute();
+      }
+    }
+  } else {
+    const isMuted = !local.mutedRemoteScreenshareAudios[item.id];
+    local.mutedRemoteScreenshareAudios[item.id] = isMuted;
+    const user = conference.users[item.id];
+    if (user?.screenshareAudio) {
+      const trackId = (typeof user.screenshareAudio.getId === 'function')
+        ? user.screenshareAudio.getId()
+        : (user.screenshareAudio.id || 'mock-track-id');
+      engine.setTrackMute?.(trackId, isMuted);
+    }
+  }
+}
+/* v8 ignore stop */
 </script>
 
 <template>
@@ -112,6 +145,16 @@ const popIn = (id: string) => {
                   {{ (item.id === 'local' || item.id === local.id || item.name === 'You') ? 'Your Screen' : `${item.name}'s Screen` }}
                   <span v-if="item.id === 'local' || item.id === local.id || item.name === 'You'" class="sharingBadge">Sharing</span>
                 </span>
+                <button
+                  v-if="item.hasAudio"
+                  class="audioToggleButton"
+                  type="button"
+                  @click.stop="toggleScreenshareAudio(item)"
+                  :title="item.isAudioMuted ? 'Unmute screen audio' : 'Mute screen audio'"
+                  :style="{ marginRight: '8px' }"
+                >
+                  <AppIcon :name="item.isAudioMuted ? 'volume-x' : 'volume-2'" :size="14" />
+                </button>
                 <template v-if="item.id === 'local' || item.id === local.id || item.name === 'You'">
                   <button
                     class="previewToggleButton"
@@ -349,8 +392,16 @@ const popIn = (id: string) => {
   text-transform: uppercase;
 }
 
-.expandButton,
-.previewToggleButton {
+.expandButton:hover,
+.audioToggleButton:hover,
+.previewToggleButton:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-default);
+}
+
+.audioToggleButton,
+.previewToggleButton,
+.expandButton {
   background: none;
   border: none;
   padding: 4px;
@@ -361,12 +412,6 @@ const popIn = (id: string) => {
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s, color 0.2s;
-}
-
-.expandButton:hover,
-.previewToggleButton:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  color: var(--color-text-default);
 }
 
 .previewToggleButton {

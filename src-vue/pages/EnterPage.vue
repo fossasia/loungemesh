@@ -65,6 +65,7 @@ onBeforeUnmount(() => {
     <IconButton
       :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
       :warning="local.cameraOff"
+      :error="local.videoError"
       :sound="local.cameraOff ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleCamera()"
     >
@@ -75,6 +76,7 @@ onBeforeUnmount(() => {
     <IconButton
       :label="local.mute ? 'Unmute' : 'Mute'"
       :warning="local.mute"
+      :error="local.audioError"
       :sound="local.mute ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleMute()"
     >
