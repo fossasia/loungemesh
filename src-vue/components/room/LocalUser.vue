@@ -184,7 +184,7 @@ defineExpose({ attach, videoEl });
           onStageOccupant: isStageOccupant,
         }"
       >
-        <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" />
+        <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" :displayName="conference.displayName" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
         <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
         <span v-if="reaction" class="floatReact">{{ reaction }}</span>

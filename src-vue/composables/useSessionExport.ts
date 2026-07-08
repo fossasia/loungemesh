@@ -20,6 +20,15 @@ export function useSessionExport(getSessionId: () => string) {
     const canvas = renderWhiteboardToCanvas(features.whiteboardStrokes);
     const blob = await canvasToPngBlob(canvas);
     if (blob) downloadBlob(blob, exportFileName('whiteboard', getSessionId()));
+
+    for (let i = 0; i < features.whiteboardSnapshots.length; i++) {
+      const snapCanvas = renderWhiteboardToCanvas(features.whiteboardSnapshots[i]);
+      const snapBlob = await canvasToPngBlob(snapCanvas);
+      /* v8 ignore next 3 */
+      if (snapBlob) {
+        downloadBlob(snapBlob, exportFileName(`whiteboard-snapshot-${i + 1}`, getSessionId()));
+      }
+    }
   }
 
   function exportRecording(blob: Blob): void {

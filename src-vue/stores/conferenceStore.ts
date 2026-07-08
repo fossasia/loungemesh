@@ -22,6 +22,7 @@ export type RemoteUser = {
   audio?: JitsiTrack;
   video?: JitsiTrack;
   screenshare?: JitsiTrack;
+  screenshareAudio?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   properties: Record<string, unknown>;
   /** Plain display-name snapshot — never store a Jitsi participant object. */
@@ -101,13 +102,15 @@ export const useConferenceStore = defineStore('conference', {
         },
       });
     },
-    setUserTrack(id: string, kind: 'audio' | 'video', track: JitsiTrack) {
+    setUserTrack(id: string, kind: 'audio' | 'video' | 'screenshareAudio', track: JitsiTrack) {
       if (!this.users[id]) {
         mediaDebug('conferenceStore', 'setUserTrack:skipped', { id, kind, reason: 'unknown-user' });
         return;
       }
       if (kind === 'audio') {
         this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
+      } else if (kind === 'screenshareAudio') {
+        this.patchUser(id, { screenshareAudio: markRaw(track) });
       } else if (track.isMuted?.()) {
         if (track.videoType === 'desktop') {
           this.clearUserTrack(id, 'screenshare');
@@ -133,10 +136,12 @@ export const useConferenceStore = defineStore('conference', {
         });
       }
     },
-    clearUserTrack(id: string, kind: 'audio' | 'video' | 'screenshare') {
+    clearUserTrack(id: string, kind: 'audio' | 'video' | 'screenshare' | 'screenshareAudio') {
       if (!this.users[id]) return;
       if (kind === 'audio') {
         this.patchUser(id, { audio: undefined, mute: false });
+      } else if (kind === 'screenshareAudio') {
+        this.patchUser(id, { screenshareAudio: undefined });
       } else if (kind === 'screenshare') {
         this.patchUser(id, { screenshare: undefined });
         mediaDebug('conferenceStore', 'clearUserTrack:screenshare', { id, usersEpoch: this.usersEpoch });

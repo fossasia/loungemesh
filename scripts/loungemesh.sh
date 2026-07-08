@@ -618,8 +618,9 @@ cmd_bootstrap() {
 
   echo "==> Production .env"
   ensure_node
-  local ah
+  local ah jh
   ah=$(strip_proto "$APP_HOST")
+  jh="${ah}"
   node scripts/setup-env.mjs production \
     --app-host="$ah" \
     --public-ip="$PUBLIC_IP" \

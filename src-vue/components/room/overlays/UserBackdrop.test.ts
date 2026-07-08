@@ -12,7 +12,7 @@ describe('UserBackdrop', () => {
   it('shows user avatar when not on stage', async () => {
     const { wrapper } = await mountWithApp(UserBackdrop, { props: { onStage: false } });
     expect(wrapper.find('.base.avatar').exists()).toBe(true);
-    expect(wrapper.find('svg').exists()).toBe(true);
+    expect(wrapper.find('img').exists()).toBe(true);
     wrapper.unmount();
   });
 });

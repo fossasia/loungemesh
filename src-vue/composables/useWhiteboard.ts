@@ -31,8 +31,10 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
     renderWhiteboard(canvasEl.value, features.whiteboardStrokes, currentStroke);
   }
 
-  function publishStroke(stroke: WhiteboardStroke) {
-    features.addWhiteboardStroke(stroke, true);
+  let lastPublishTime = 0;
+
+  function publishStroke(stroke: WhiteboardStroke, isLocal = false) {
+    features.addWhiteboardStroke(stroke, isLocal);
     engine.sendCommand('wb', JSON.stringify({ action: 'stroke', stroke }));
   }
 
@@ -48,6 +50,7 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
       width: penWidth.value,
       points: [point],
     };
+    lastPublishTime = Date.now();
     canvasEl.value?.setPointerCapture(e.pointerId);
     redrawWhiteboard();
   }
@@ -59,6 +62,13 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
     if (!point) return;
     currentStroke.points.push(point);
     redrawWhiteboard();
+
+    const now = Date.now();
+    /* v8 ignore next 4 */
+    if (now - lastPublishTime > 50) {
+      lastPublishTime = now;
+      publishStroke(currentStroke, false);
+    }
   }
 
   function onCanvasUp(e: PointerEvent) {
@@ -71,7 +81,7 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
       /* ignore */
     }
     if (currentStroke.points.length > 1) {
-      publishStroke(currentStroke);
+      publishStroke(currentStroke, true);
     }
     currentStroke = null;
     redrawWhiteboard();

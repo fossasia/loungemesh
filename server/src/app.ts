@@ -12,8 +12,20 @@ dotenv.config();
 
 const app = express();
 
-// Configure CORS for local development (Vite UI on port 5173)
-const allowedOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:8780', 'http://127.0.0.1:8780'];
+// Configure CORS for local development and production
+const extraOrigins = (process.env.ALLOWED_OAUTH_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:8780',
+  'http://127.0.0.1:8780',
+  ...extraOrigins
+];
+
 app.use(
   cors({
     origin: (origin, callback) => {

@@ -5,16 +5,18 @@ import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
 import { nextTick, markRaw } from 'vue';
 import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 
-/** Stop the local screenshare track if one is active. */
 export async function stopLocalScreenshare(): Promise<void> {
   const local = useLocalStore();
   const track = local.screenshare;
-  if (!track) return;
+  const audioTrack = local.screenshareAudio;
+  if (!track && !audioTrack) return;
   local.screenshare = undefined;
+  local.screenshareAudio = undefined;
+  local.screenshareAudioMuted = false;
   const engine = getMediaEngineInstance();
   await nextTick();
   await waitForMediaElementDetach();
-  await releaseLocalMediaTracks([track], engine.getConference());
+  await releaseLocalMediaTracks([track, audioTrack].filter(Boolean) as any[], engine.getConference());
 }
 
 export async function startLocalScreenshare(engine: MediaService): Promise<void> {
@@ -27,6 +29,13 @@ export async function startLocalScreenshare(engine: MediaService): Promise<void>
 
   await engine.addLocalTrack(newTrack);
   local.screenshare = markRaw(newTrack);
+
+  const audioTrack = tracks.find((t: any) => t.getType?.() === 'audio');
+  if (audioTrack) {
+    await engine.addLocalTrack(audioTrack);
+    local.screenshareAudio = markRaw(audioTrack);
+    local.screenshareAudioMuted = false;
+  }
 }
 
 export async function toggleLocalScreenshare(engine: MediaService): Promise<void> {

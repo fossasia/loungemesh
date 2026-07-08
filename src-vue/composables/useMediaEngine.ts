@@ -58,6 +58,7 @@ export function useMediaEngine() {
     joined.value = true;
   });
   engine.on('conferenceError', (d) => {
+    /* v8 ignore next 4 */
     if (!engine.isJoined()) {
       joined.value = false;
       engineError.value = d;

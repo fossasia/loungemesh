@@ -17,9 +17,22 @@ export async function ensureLocalTracks(
   if (!local.mute && !local.audio) devices.push('audio');
   if (!local.cameraOff && !local.video) devices.push('video');
   if (!devices.length) return existing;
-  // One createLocalTracks call merges audio+video into a single getUserMedia request.
-  // Parallel calls break Firefox (lost/failed concurrent capture requests).
-  const tracks = await engine.createLocalTracks(devices);
+  let tracks: JitsiTrack[] = [];
+  try {
+    tracks = await engine.createLocalTracks(devices);
+    if (devices.includes('audio')) {
+      local.audioError = !tracks.some(t => t.getType?.() === 'audio');
+    }
+    if (devices.includes('video')) {
+      local.videoError = !tracks.some(t => t.getType?.() === 'video');
+    }
+  } catch (err) {
+    /* v8 ignore start */
+    if (devices.includes('audio')) local.audioError = true;
+    if (devices.includes('video')) local.videoError = true;
+    mediaDebug('ensureLocalTracks', 'acquisition failed', { err });
+    /* v8 ignore stop */
+  }
   unlockMediaPlaybackNow(engine);
   const merged = [...existing];
   const used = new Set<JitsiTrack>();

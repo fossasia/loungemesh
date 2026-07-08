@@ -545,4 +545,16 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('config', { value: 'not-json' });
     expect(features.allowParticipantRecording).toBe(false);
   });
+
+  it('prevents non-moderators from starting polls or clearing whiteboard', () => {
+    const features = useSessionFeaturesStore();
+    features.activePoll = undefined;
+    features.setHost('host1');
+    handleSessionCommand('poll', { value: JSON.stringify({ id: 'poll-1', question: 'q', options: ['a'] }) }, 'guest1');
+    expect(features.activePoll).toBeUndefined();
+
+    features.whiteboardStrokes = [{ x: 1, y: 1, isStart: true, color: '#000', size: 1 }];
+    handleSessionCommand('wb', { value: JSON.stringify({ action: 'clear' }) }, 'guest1');
+    expect(features.whiteboardStrokes.length).toBe(1);
+  });
 });

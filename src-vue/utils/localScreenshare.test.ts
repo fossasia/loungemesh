@@ -86,6 +86,20 @@ describe('localScreenshare', () => {
     expect(local.screenshare).toBe(desktopTrack);
   });
 
+  it('startLocalScreenshare captures system audio if audio track is present', async () => {
+    const engine = getMediaEngineInstance();
+    const desktopTrack = { getType: () => 'video', videoType: 'desktop' } as any;
+    const audioTrack = { getType: () => 'audio' } as any;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([desktopTrack, audioTrack]);
+    const addSpy = vi.spyOn(engine, 'addLocalTrack');
+    const local = useLocalStore();
+    await startLocalScreenshare(engine);
+    expect(addSpy).toHaveBeenCalledWith(desktopTrack);
+    expect(addSpy).toHaveBeenCalledWith(audioTrack);
+    expect(local.screenshare).toBe(desktopTrack);
+    expect(local.screenshareAudio).toBe(audioTrack);
+  });
+
   it('toggleLocalScreenshare toggles screenshare on and off', async () => {
     const engine = getMediaEngineInstance();
     const desktopTrack = { getType: () => 'video', videoType: 'desktop' } as any;
