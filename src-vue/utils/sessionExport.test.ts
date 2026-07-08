@@ -22,7 +22,7 @@ describe('safeSessionSlug', () => {
 describe('exportFileName', () => {
   const now = new Date(2026, 4, 31, 23, 10);
   it('builds a timestamped name per kind', () => {
-    expect(exportFileName('notes', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.txt');
+    expect(exportFileName('notes', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.md');
     expect(exportFileName('whiteboard', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.png');
     expect(exportFileName('recording', 'Daily', now)).toBe('loungemesh-daily-20260531-2310.mp4');
   });

@@ -73,7 +73,7 @@ function onExport(type: string) {
                     </svg>
                     <span>Public Notes</span>
                   </div>
-                  <span class="ext">.txt</span>
+                  <span class="ext">.md</span>
                 </button>
 
                 <button type="button" class="export" @click="onExport('whiteboard')">

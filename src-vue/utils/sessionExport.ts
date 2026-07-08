@@ -15,7 +15,7 @@ export function blobMimeToExtension(mimeType: string): string {
 }
 
 const EXTENSIONS: Record<ExportKind, string> = {
-  notes: 'txt',
+  notes: 'md',
   whiteboard: 'png',
   recording: 'mp4',
 };

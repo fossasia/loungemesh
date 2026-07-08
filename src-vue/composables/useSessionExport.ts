@@ -12,8 +12,8 @@ export function useSessionExport(getSessionId: () => string) {
   const features = useSessionFeaturesStore();
 
   function exportNotes(): void {
-    const text = notesToMarkdown(features.sharedNotes, getSessionId());
-    downloadBlob(new Blob([text], { type: 'text/plain' }), exportFileName('notes', getSessionId()));
+    const markdown = notesToMarkdown(features.sharedNotes, getSessionId());
+    downloadBlob(new Blob([markdown], { type: 'text/markdown' }), exportFileName('notes', getSessionId()));
   }
 
   async function exportWhiteboard(): Promise<void> {
