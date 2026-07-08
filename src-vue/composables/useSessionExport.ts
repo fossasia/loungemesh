@@ -34,7 +34,7 @@ export function useSessionExport(getSessionId: () => string) {
       const snapBlob = await canvasToPngBlob(snapCanvas);
       /* v8 ignore next 3 */
       if (snapBlob) {
-        downloadBlob(snapBlob, exportFileName(`whiteboard-snapshot-${i + 1}`, getSessionId()));
+        downloadBlob(snapBlob, exportFileName(`whiteboard-snapshot-${i + 1}` as any, getSessionId()));
       }
     }
   }
