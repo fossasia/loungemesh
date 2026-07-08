@@ -27,15 +27,31 @@ const allowedOrigins = [
 ];
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
+  cors((req: any, callback) => {
+    const origin = req.headers.origin;
+    const host = req.headers.host;
+
+    let isAllowed = false;
+    if (!origin) {
+      isAllowed = true;
+    } else {
+      if (allowedOrigins.includes(origin)) {
+        isAllowed = true;
       } else {
-        callback(new Error('Not allowed by CORS'));
+        try {
+          const originHost = new URL(origin).host;
+          if (host && originHost === host) {
+            isAllowed = true;
+          }
+        } catch (err) {}
       }
-    },
-    credentials: true,
+    }
+
+    if (isAllowed) {
+      callback(null, { origin: true, credentials: true });
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   })
 );
 

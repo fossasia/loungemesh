@@ -14,6 +14,7 @@ declare global {
         email: string;
         displayName: string;
         avatarUrl?: string | null;
+        googleId?: string | null;
       };
     }
   }
@@ -44,6 +45,7 @@ export async function parseUserSession(req: Request, res: Response, next: NextFu
         email: true,
         displayName: true,
         avatarUrl: true,
+        googleId: true,
       },
     });
 
