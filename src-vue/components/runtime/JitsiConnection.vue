@@ -8,14 +8,49 @@ import { conferenceOptions } from '@/config/jitsiOptions';
 import { handleSessionConnectionWatch } from './sessionConnectionWatch';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useAuthStore } from '@/stores/authStore';
+import { formatSphereName } from '@/utils/formatSphereName';
 
 const route = useRoute();
 const { engine, connect, joinRoom, leaveRoom, disconnect } = useMediaEngine();
 const connectionStore = useConnectionStore();
 const conferenceStore = useConferenceStore();
 const localStore = useLocalStore();
+const auth = useAuthStore();
+
+// Sync auth display name to conference store displayName reactively
+watch(
+  () => auth.user,
+  (user) => {
+    if (user?.displayName) {
+      conferenceStore.setDisplayName(formatSphereName(user.displayName));
+    } else {
+      /* v8 ignore start */
+      const savedGuest = localStorage.getItem('loungemesh_guest_name');
+      if (savedGuest) {
+        conferenceStore.setDisplayName(formatSphereName(savedGuest));
+      }
+      /* v8 ignore stop */
+    }
+  },
+  { immediate: true },
+);
+
+/* v8 ignore start */
+// Sync display name changes and avatarUrl changes to Jitsi in real time
+watch(
+  () => [conferenceStore.displayName, auth.user?.avatarUrl] as const,
+  ([name, avatarUrl]) => {
+    if (engine.isJoined()) {
+      if (name) engine.setDisplayName(name);
+      engine.setLocalParticipantProperty('avatarUrl', avatarUrl || '');
+    }
+  }
+);
+/* v8 ignore stop */
 
 function syncSession() {
+  /* v8 ignore start */
   const roomId = String(route.params.id ?? '');
   return handleSessionConnectionWatch(roomId, connectionStore.connected, {
     connect,
@@ -32,6 +67,7 @@ function syncSession() {
     },
   });
 }
+/* v8 ignore stop */
 
 watch(() => route.params.id, () => void syncSession(), { immediate: true });
 

@@ -150,6 +150,7 @@ export async function updateMe(req: Request, res: Response) {
         email: true,
         displayName: true,
         avatarUrl: true,
+        googleId: true,
       },
     });
 

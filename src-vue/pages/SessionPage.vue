@@ -77,13 +77,14 @@ watch(
 );
 
 const sessionId = computed(() => String(route.params.id ?? props.id ?? ''));
-const { exportNotes, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
+const { exportNotes, exportNotesRtf, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
 
 const recorder = useSessionRecorder(makeRecorderSources(local, conf));
 const recording = useSessionRecording(recorder, exportRecording);
 const selectedQuality = ref<'720p' | '480p'>('720p');
 
 const showLeaveDialog = ref(false);
+const showLobbyDropdown = ref(false);
 
 function approve(entryId: string) {
   engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId }));
@@ -203,21 +204,67 @@ onBeforeUnmount(() => {
     mode="audience"
   />
   <p v-if="features.stageMessage" class="stageToast" role="status">{{ features.stageMessage }}</p>
-  <div v-if="(features.isHost || features.isModerator) && features.lobbyWaiting.length > 0" class="lobbyNotificationBanner">
-    <div class="bannerHeader">
+  <!-- Top-right Lobby Queue Dropdown Menu -->
+  <div
+    v-if="features.isHost || features.isModerator"
+    class="lobbyMenuContainer"
+  >
+    <button
+      type="button"
+      class="lobbyMenuBtn"
+      :class="{ hasWaiters: features.lobbyWaiting.length > 0 }"
+      @click="showLobbyDropdown = !showLobbyDropdown"
+      title="Lobby Queue"
+    >
       <AppIcon name="user" :size="16" />
-      <span>{{ features.lobbyWaiting.length === 1 ? '1 person wants to join' : `${features.lobbyWaiting.length} people want to join` }}</span>
-    </div>
-    <div class="bannerBody">
-      <div v-for="w in features.lobbyWaiting" :key="w.id" class="bannerRow">
-        <div class="bannerUser">
-          <strong class="bannerName">{{ w.name }}</strong>
-          <span v-if="w.email" class="bannerEmail" :title="w.email">{{ w.email }}</span>
-          <span v-if="w.reason" class="bannerReason">"{{ w.reason }}"</span>
+      <span class="lobbyBtnLabel">Lobby</span>
+      <span v-if="features.lobbyWaiting.length > 0" class="lobbyBadge">
+        {{ features.lobbyWaiting.length }}
+      </span>
+    </button>
+    <div v-if="showLobbyDropdown" class="lobbyDropdownCard">
+      <div class="lobbyDropdownHeader">
+        <h3>Waiting Room</h3>
+        <span class="lobbyCount">{{ features.lobbyWaiting.length }} waiting</span>
+      </div>
+      <div class="lobbyDropdownBody">
+        <div v-if="features.lobbyWaiting.length === 0" class="lobbyEmptyState">
+          No one is waiting in the lobby.
         </div>
-        <div class="bannerActions">
-          <button type="button" class="btnAdmit" @click="approve(w.id)">Admit</button>
-          <button type="button" class="btnDeny" @click="reject(w.id)">Deny</button>
+        <div
+          v-else
+          v-for="w in features.lobbyWaiting"
+          :key="w.id"
+          class="lobbyDropdownRow"
+        >
+          <div class="lobbyUserAvatar">
+            {{ w.name.slice(0, 2).toUpperCase() }}
+          </div>
+          <div class="lobbyUserInfo">
+            <div class="lobbyUserMain">
+              <strong class="lobbyUserName">{{ w.name }}</strong>
+              <span v-if="w.email" class="lobbyUserEmail" :title="w.email">{{ w.email }}</span>
+            </div>
+            <p v-if="w.reason" class="lobbyUserReason">"{{ w.reason }}"</p>
+          </div>
+          <div class="lobbyDropdownActions">
+            <button
+              type="button"
+              class="btnAdmit"
+              title="Admit"
+              @click="approve(w.id)"
+            >
+              Admit
+            </button>
+            <button
+              type="button"
+              class="btnDeny"
+              title="Deny"
+              @click="reject(w.id)"
+            >
+              Deny
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -295,6 +342,7 @@ onBeforeUnmount(() => {
     @cancel="showLeaveDialog = false"
     @leave="doLeave"
     @export-notes="exportNotes"
+    @export-notes-rtf="exportNotesRtf"
     @export-whiteboard="exportWhiteboard"
     @export-recording="recording.downloadRecording"
     @toggle-recording="recording.toggleRecording(selectedQuality)"
@@ -326,71 +374,166 @@ onBeforeUnmount(() => {
   }
 }
 
-.lobbyNotificationBanner {
+.lobbyMenuContainer {
   position: fixed;
-  top: 76px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10050;
-  width: min(400px, calc(100vw - 32px));
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(79, 110, 247, 0.2);
-  border-radius: 16px;
-  box-shadow: 0 20px 40px -10px rgba(30, 34, 64, 0.25), 0 5px 15px -3px rgba(30, 34, 64, 0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 14px;
-  box-sizing: border-box;
-  animation: bannerSlideDown 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  top: 14px;
+  right: 18px;
+  z-index: 6000;
 }
 
-@keyframes bannerSlideDown {
-  from { opacity: 0; transform: translate(-50%, -20px) scale(0.95); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
-}
-
-.bannerHeader {
+.lobbyMenuBtn {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--line-light, #cbd5e1);
+  background: var(--btn-default-bg, #ffffff);
+  color: var(--color-text-default, #1e293b);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: var(--fw-medium, 500);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.lobbyMenuBtn:hover {
+  background: var(--btn-default-bg-hover, #f8fafc);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.lobbyMenuBtn.hasWaiters {
+  border-color: rgba(79, 110, 247, 0.3);
+  animation: lobbyPulse 2.5s infinite;
+}
+
+@keyframes lobbyPulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(79, 110, 247, 0.1); }
+  50% { box-shadow: 0 2px 14px rgba(79, 110, 247, 0.25); border-color: rgba(79, 110, 247, 0.5); }
+}
+
+.lobbyBadge {
+  background: #fa5252;
+  color: #ffffff;
+  font-size: 11px;
   font-weight: 700;
-  color: #4f6ef7;
-  margin-bottom: 10px;
-  border-bottom: 1px solid rgba(79, 110, 247, 0.1);
-  padding-bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 1;
 }
 
-.bannerBody {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 200px;
-  overflow-y: auto;
+.lobbyDropdownCard {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 360px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(79, 110, 247, 0.15);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(30, 34, 64, 0.18), 0 5px 15px -3px rgba(30, 34, 64, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 16px;
+  box-sizing: border-box;
+  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.bannerRow {
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.lobbyDropdownHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  border-bottom: 1px solid rgba(79, 110, 247, 0.1);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.bannerUser {
+.lobbyDropdownHeader h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e2240;
+}
+
+.lobbyCount {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6970a0;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.lobbyDropdownBody {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.lobbyEmptyState {
+  text-align: center;
+  color: #6970a0;
+  font-size: 13px;
+  padding: 24px 0;
+  font-weight: 500;
+}
+
+.lobbyDropdownRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.lobbyDropdownRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.lobbyUserAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4f6ef7;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lobbyUserInfo {
+  flex: 1;
   min-width: 0;
 }
 
-.bannerName {
-  font-size: 14px;
-  color: #1e2240;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
+.lobbyUserMain {
+  display: flex;
+  flex-direction: column;
 }
 
-.bannerEmail {
+.lobbyUserName {
+  font-size: 13px;
+  color: #1e2240;
+  font-weight: 600;
+}
+
+.lobbyUserEmail {
   font-size: 11px;
   color: #6970a0;
   text-overflow: ellipsis;
@@ -398,16 +541,20 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.bannerReason {
+.lobbyUserReason {
   font-size: 11px;
   color: #6970a0;
   font-style: italic;
-  margin-top: 2px;
+  margin: 4px 0 0;
+  background: #f8fafc;
+  padding: 4px 6px;
+  border-radius: 6px;
 }
 
-.bannerActions {
+.lobbyDropdownActions {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -415,10 +562,10 @@ onBeforeUnmount(() => {
   background: #10b981;
   color: #fff;
   border: none;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -431,10 +578,10 @@ onBeforeUnmount(() => {
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   color: #475569;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
 }

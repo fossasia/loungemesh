@@ -12,6 +12,9 @@ export interface JitsiTrack {
   videoType?: 'camera' | 'desktop';
   attach(element: HTMLElement): void;
   detach(element: HTMLElement): void;
+  id: string;
+  getId(): string;
+  getTrack(): MediaStreamTrack;
 }
 
 export interface ReceiverConstraints {
@@ -45,7 +48,7 @@ export interface JitsiConference {
   sendTextMessage(text: string): void;
   sendCommand(name: string, payload: { value: string }): void;
   removeCommand(name: string): void;
-  addCommandListener(name: string, handler: (payload: { value: string }) => void): void;
+  addCommandListener(name: string, handler: (payload: { value: string }, senderId: string) => void): void;
   addTrack(track: JitsiTrack): Promise<void>;
   removeTrack?(track: JitsiTrack): Promise<void>;
   replaceTrack(oldTrack: JitsiTrack, newTrack: JitsiTrack): Promise<void>;

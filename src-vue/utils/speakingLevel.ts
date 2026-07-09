@@ -1,5 +1,5 @@
-export const SPEAKING_THRESHOLD = 3;
-export const SPEAKING_HYSTERESIS = 1.5;
+export const SPEAKING_THRESHOLD = 5;
+export const SPEAKING_HYSTERESIS = 2.5;
 
 /** Poll frequency data and report when speaking state changes. */
 export function startSpeakingLevelMonitor(options: {

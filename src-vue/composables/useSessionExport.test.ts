@@ -12,6 +12,8 @@ vi.mock('@/utils/sessionExport', () => ({
   renderWhiteboardToCanvas: vi.fn(() => ({}) as HTMLCanvasElement),
   canvasToPngBlob,
   downloadBlob,
+  markdownToRtf: vi.fn(() => 'RTF'),
+  safeSessionSlug: vi.fn(() => 'slug'),
 }));
 
 import { useSessionExport } from './useSessionExport';
@@ -26,6 +28,11 @@ describe('useSessionExport', () => {
 
   it('exports notes as a markdown download', () => {
     useSessionExport(() => 'room').exportNotes();
+    expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'file.ext');
+  });
+
+  it('exports notes as an RTF download', () => {
+    useSessionExport(() => 'room').exportNotesRtf();
     expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'file.ext');
   });
 

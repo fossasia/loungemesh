@@ -135,8 +135,8 @@ function handleProfileClick() {
 .sessionBrand {
   position: fixed;
   top: 14px;
-  right: 18px;
-  left: auto;
+  left: 18px;
+  right: auto;
   z-index: 1;
   display: flex;
   align-items: center;

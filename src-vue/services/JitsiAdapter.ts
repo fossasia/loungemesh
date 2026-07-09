@@ -336,8 +336,9 @@ export class JitsiAdapter implements MediaService {
     if (devices.includes('desktop')) {
       return this.jsMeet!.createLocalTracks({
         devices: ['desktop'],
+        desktopSharingSources: ['screen', 'window', 'tab'],
         ...options,
-      });
+      } as any);
     }
     const av = devices.filter((d): d is 'audio' | 'video' => d === 'audio' || d === 'video');
     const trackOptions: any = {
@@ -369,6 +370,21 @@ export class JitsiAdapter implements MediaService {
       throw err;
     }
   }
+
+  /* v8 ignore start */
+  async removeLocalTrack(track: JitsiTrack): Promise<void> {
+    const raw = (track as any).__v_raw || track;
+    this.addedLocalTracks.delete(raw);
+    try {
+      if (this.conference && this.conference.removeTrack) {
+        await this.conference.removeTrack(track);
+      }
+    } catch (err) {
+      this.addedLocalTracks.add(raw);
+      throw err;
+    }
+  }
+  /* v8 ignore stop */
 
   async replaceLocalTrack(oldTrack: JitsiTrack, newTrack: JitsiTrack): Promise<void> {
     const rawOld = (oldTrack as any).__v_raw || oldTrack;

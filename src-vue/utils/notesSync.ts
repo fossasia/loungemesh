@@ -1,7 +1,7 @@
 import type { MediaService } from '@/services/MediaService';
 
 /** Safe XMPP payload size — markdown notes must be split to avoid XML parse errors. */
-export const NOTES_CHUNK_SIZE = 2400;
+export const NOTES_CHUNK_SIZE = 8000;
 
 export type NotesCommand =
   | { action: 'clear' }

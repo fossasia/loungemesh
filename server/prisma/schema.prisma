@@ -29,6 +29,7 @@ model Meeting {
   startTime     DateTime?
   endTime       DateTime?
   recurrence    String?        // NONE, DAILY, WEEKLY, MONTHLY, YEARLY
+  description   String?
   guestEmails   String[]       @default([])
   moderatorEmails String[]     @default([])
   googleEventId String?
@@ -49,6 +50,7 @@ model MeetingConfig {
   activePoll                String?
   roomDefaults              String?
   userGrants                String?
+  gridBackgroundUrl         String?
 }
 
 model SessionLog {

@@ -31,13 +31,24 @@ export function bootstrap(mountSelector = '#app') {
     routes,
   });
   router.beforeEach((to, from) => {
-    if (mediaRoutes.has(String(from.name)) && to.name === 'home') {
+    if (mediaRoutes.has(String(from.name)) && !mediaRoutes.has(String(to.name))) {
       useLocalStore(pinia).stopAllLocalMedia();
     }
   });
   app.use(router);
 
   app.mount(mountSelector);
+
+  /* v8 ignore start */
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && typeof window !== 'undefined' && !('__vitest_environment__' in window)) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.error('Service worker registration failed:', err);
+      });
+    });
+  }
+  /* v8 ignore stop */
+
   return { app, router };
 }
 

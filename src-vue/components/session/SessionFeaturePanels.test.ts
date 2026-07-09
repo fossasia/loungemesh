@@ -327,7 +327,10 @@ describe('SessionFeaturePanels', () => {
   });
 
   it('syncs notes draft when remote notes change', async () => {
+    const local = useLocalStore();
+    local.setMyID('me');
     const features = useSessionFeaturesStore();
+    features.setHost('me');
     features.panel = 'poll';
     const { wrapper } = await mountPanels();
     features.sharedNotes = 'updated remotely';

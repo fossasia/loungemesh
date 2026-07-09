@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/authStore';
+import NotesEditor from '@/components/session/NotesEditor.vue';
 
 export interface ScheduledMeeting {
   id: string;
@@ -15,6 +16,7 @@ export interface ScheduledMeeting {
   configs?: {
     userGrants?: string | null;
   } | null;
+  description?: string | null;
 }
 
 const props = defineProps<{
@@ -29,6 +31,7 @@ const emit = defineEmits<{
 const auth = useAuthStore();
 
 const title = ref('');
+const description = ref('');
 const date = ref('');
 const time = ref('');
 const duration = ref(30); // default 30 mins
@@ -146,6 +149,7 @@ function handleModEmailKeydown(e: KeyboardEvent) {
 onMounted(() => {
   if (props.meeting) {
     title.value = props.meeting.title;
+    description.value = props.meeting.description || '';
     recurrence.value = props.meeting.recurrence || 'NONE';
     syncGoogleCal.value = !!props.meeting.googleEventId;
     guestEmails.value = (props.meeting as any).guestEmails ? [...(props.meeting as any).guestEmails] : [];
@@ -238,6 +242,7 @@ async function handleSubmit() {
 
     const payload = {
       title: title.value.trim(),
+      description: description.value.trim(),
       roomName,
       isScheduled: true,
       startTime: startDateTime.toISOString(),
@@ -316,6 +321,15 @@ async function handleSubmit() {
           <Transition name="tooltip-fade">
             <div v-if="titleError" class="custom-tooltip">Title is required</div>
           </Transition>
+        </div>
+
+        <div class="inputGroup">
+          <label>Description</label>
+          <NotesEditor
+            v-model="description"
+            placeholder="Agenda, objectives, links..."
+            class="descriptionEditor"
+          />
         </div>
 
         <div class="row">
@@ -464,7 +478,7 @@ async function handleSubmit() {
   border-radius: 20px;
   box-shadow: 0 30px 60px -15px rgba(30, 34, 64, 0.15), 0 10px 20px -5px rgba(30, 34, 64, 0.05);
   width: 100%;
-  max-width: 420px;
+  max-width: 480px;
   padding: 24px;
   position: relative;
   display: flex;
@@ -521,6 +535,14 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.descriptionEditor {
+  height: 140px;
+  max-height: 140px;
 }
  
 .error {

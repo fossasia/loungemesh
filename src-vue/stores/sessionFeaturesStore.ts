@@ -59,6 +59,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
   state: () => ({
     isVerifiedHost: false,
     isVerifiedModerator: false,
+    isInvited: false,
     allowParticipantRecording: false,
     hostId: '',
     lobbyEnabled: false,
@@ -169,8 +170,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     isLobbyBlocked(): boolean {
       if (!this.lobbyEnabled) return false;
       if (this.isHost || this.isModerator) return false;
-      const auth = useAuthStore();
-      if (auth.isAuthenticated) return false;
+      if (this.isInvited) return false;
       const local = useLocalStore();
       if (!local.id) return this.localLobbyPending;
       return this.localLobbyPending || !this.lobbyApproved[local.id];
@@ -283,16 +283,20 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (!sessionId) return;
       this.hostSettingsSessionId = sessionId;
     },
-    setGridBackgroundUrl(url: string) {
+    async setGridBackgroundUrl(url: string) {
       this.gridBackgroundUrl = url;
       /* v8 ignore start */
       const roomName = window.location.pathname.split('/').pop();
       if (roomName) {
-        fetch(`/api/meetings/state/${roomName}/background`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ gridBackgroundUrl: url }),
-        }).catch((err) => console.error('Failed to save background:', err));
+        try {
+          await fetch(`/api/meetings/state/${roomName}/background`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gridBackgroundUrl: url }),
+          });
+        } catch (err) {
+          console.error('Failed to save background:', err);
+        }
       }
       /* v8 ignore stop */
     },
@@ -342,7 +346,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           fetch(`/api/meetings/state/${roomName}/background`)
             .then((res) => res.json())
             .then((data) => {
-              if (data && data.backgroundUrl !== undefined) {
+              if (data && data.gridBackgroundUrl !== undefined) {
+                this.gridBackgroundUrl = data.gridBackgroundUrl || '';
+              } else if (data && data.backgroundUrl !== undefined) {
                 this.gridBackgroundUrl = data.backgroundUrl || '';
               }
             })
@@ -605,6 +611,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           const data = await roleRes.json();
           this.isVerifiedHost = data.role === 'host';
           this.isVerifiedModerator = data.role === 'moderator';
+          this.isInvited = !!data.isInvited;
           if (data.hostId) {
             this.hostId = data.hostId;
           }

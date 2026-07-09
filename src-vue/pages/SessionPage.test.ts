@@ -732,15 +732,20 @@ describe('SessionPage', () => {
     });
     await flushPromises();
 
-    // Check banner render
-    const banner = wrapper.find('.lobbyNotificationBanner');
-    expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('Bob');
-    expect(banner.text()).toContain('bob@example.com');
-    expect(banner.text()).toContain('To present');
+    // Click trigger to open dropdown
+    const trigger = wrapper.find('.lobbyMenuBtn');
+    expect(trigger.exists()).toBe(true);
+    await trigger.trigger('click');
+
+    // Check dropdown render
+    const dropdown = wrapper.find('.lobbyDropdownCard');
+    expect(dropdown.exists()).toBe(true);
+    expect(dropdown.text()).toContain('Bob');
+    expect(dropdown.text()).toContain('bob@example.com');
+    expect(dropdown.text()).toContain('To present');
 
     // Click Admit
-    await banner.find('.btnAdmit').trigger('click');
+    await dropdown.find('.btnAdmit').trigger('click');
     expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"approve"'));
     expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-1"'));
 

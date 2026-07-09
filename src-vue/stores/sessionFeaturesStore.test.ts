@@ -45,14 +45,19 @@ describe('sessionFeaturesStore', () => {
     expect(features.isLobbyBlocked).toBe(false);
   });
 
-  it('allows authenticated users to bypass the lobby', () => {
+  it('allows invited or host/moderator users to bypass the lobby, but blocks uninvited users', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
-    const auth = useAuthStore();
     features.lobbyEnabled = true;
     features.setHost('real-host');
     local.setMyID('guest');
-    auth.isAuthenticated = true;
+    
+    // Uninvited is blocked
+    features.isInvited = false;
+    expect(features.isLobbyBlocked).toBe(true);
+
+    // Invited bypasses
+    features.isInvited = true;
     expect(features.isLobbyBlocked).toBe(false);
   });
 

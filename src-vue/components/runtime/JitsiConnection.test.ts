@@ -10,6 +10,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
+import { useAuthStore } from '@/stores/authStore';
 import { SESSION_ERROR_CODES } from '@/services/sessionErrorCodes';
 import JitsiConnection from './JitsiConnection.vue';
 
@@ -321,5 +322,15 @@ describe('JitsiConnection', () => {
     
     vi.spyOn(engine, 'isJoined').mockReturnValue(true);
     engine.emit('conferenceError', 'err');
+  });
+
+  it('syncs authenticated user display name', async () => {
+    const auth = useAuthStore();
+    auth.user = { displayName: 'John Doe' } as any;
+    const { wrapper } = await mountConnection();
+    await flushPromises();
+    const conference = useConferenceStore();
+    expect(conference.displayName).toBe("John Doe's Sphere");
+    wrapper.unmount();
   });
 });

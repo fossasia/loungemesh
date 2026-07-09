@@ -161,12 +161,13 @@ async function exitLobby() {
           </div>
 
           <div class="inputGroup">
-            <label for="lobbyGuestEmail">Email Address (optional)</label>
+            <label for="lobbyGuestEmail">Email Address *</label>
             <input
               id="lobbyGuestEmail"
               v-model="guestEmail"
               type="email"
               placeholder="e.g. john@example.com"
+              required
             />
           </div>
 

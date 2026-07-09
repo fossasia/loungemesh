@@ -61,23 +61,27 @@ const emit = defineEmits<{
 }
 
 .recordBtn:hover {
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.4);
+  background: #fee2e2;
+  border-color: #fca5a5;
   color: #ef4444;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+  box-shadow: none;
 }
 
 .recordBtn.recording {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.6);
-  color: #ef4444;
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
   box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
   animation: recRingPulse 2s ease-in-out infinite;
 }
 
+.recordBtn.recording .dot {
+  background: #ffffff;
+}
+
 @keyframes recRingPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
   50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
 }
 
@@ -95,7 +99,7 @@ const emit = defineEmits<{
 }
 
 .dot.live {
-  background: #ef4444;
+  background: #ffffff;
   animation: dotPulse 1.2s ease-in-out infinite;
 }
 
@@ -130,12 +134,15 @@ const emit = defineEmits<{
 }
 
 .qualityPicker:not(:disabled):hover {
-  border-color: rgba(79, 110, 247, 0.5);
+  border-color: #a5b4fc;
   background: var(--btn-default-bg-hover, #e2e8f0);
 }
 
 .qualityPicker:disabled {
-  opacity: 0.45;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #94a3b8;
   cursor: not-allowed;
+  opacity: 1;
 }
 </style>

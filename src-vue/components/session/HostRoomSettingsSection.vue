@@ -36,7 +36,7 @@ async function onBackgroundSelected(event: Event) {
   backgroundBusy.value = true;
   try {
     const dataUrl = await processGridBackgroundFile(file);
-    features.setGridBackgroundUrl(dataUrl);
+    await features.setGridBackgroundUrl(dataUrl);
     syncBackground();
   } catch (e) {
     backgroundError.value =

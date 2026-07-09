@@ -5,6 +5,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import UserBackdrop from './overlays/UserBackdrop.vue';
+import { useAuthStore } from '@/stores/authStore';
 import LocalAudioRing from './overlays/LocalAudioRing.vue';
 import LocalNameContainer from './LocalNameContainer.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
@@ -25,6 +26,7 @@ const props = withDefaults(
 const local = useLocalStore();
 const conference = useConferenceStore();
 const features = useSessionFeaturesStore();
+const auth = useAuthStore();
 const videoEl = ref<HTMLVideoElement | null>(null);
 const audioEl = ref<HTMLAudioElement | null>(null);
 const dragSurface = ref<HTMLElement | null>(null);
@@ -184,7 +186,7 @@ defineExpose({ attach, videoEl });
           onStageOccupant: isStageOccupant,
         }"
       >
-        <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" :displayName="conference.displayName" />
+        <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" :displayName="conference.displayName" :avatarUrl="auth.user?.avatarUrl" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
         <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
         <span v-if="reaction" class="floatReact">{{ reaction }}</span>
