@@ -24,6 +24,11 @@ const joinRoomName = ref('');
 const errorMsg = ref('');
 const infoMsg = ref('');
 
+const showInstantModal = ref(false);
+const instantTitle = ref('Instant Meeting');
+const instantGuestEmails = ref('');
+const instantModEmails = ref('');
+
 const meetingDefaults = ref({
   lobbyEnabled: false,
   stagePromotionEnabled: true,
@@ -156,18 +161,39 @@ function goSessionAuth(room: string) {
 }
 
 // Create an instant meeting
-async function startInstantMeeting() {
+function startInstantMeeting() {
   showNewMenu.value = false;
+  instantTitle.value = 'Instant Meeting';
+  instantGuestEmails.value = '';
+  instantModEmails.value = '';
+  showInstantModal.value = true;
+}
+
+async function submitInstantMeeting() {
+  showInstantModal.value = false;
   const roomName = `meet-${Math.random().toString(36).substring(2, 9)}`;
+  const title = instantTitle.value.trim() || 'Instant Meeting';
   
+  const guestList = instantGuestEmails.value
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+    
+  const modList = instantModEmails.value
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+
   try {
     const response = await fetch('/api/meetings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: 'Instant Meeting',
+        title,
         roomName,
         isScheduled: false,
+        guestEmails: guestList,
+        moderatorEmails: modList,
         lobbyEnabled: meetingDefaults.value.lobbyEnabled,
         stagePromotionEnabled: meetingDefaults.value.stagePromotionEnabled,
         allowParticipantRecording: meetingDefaults.value.allowParticipantRecording,
@@ -178,7 +204,6 @@ async function startInstantMeeting() {
     if (response.ok) {
       goSessionAuth(roomName);
     } else {
-      // Fallback directly to room join if database failed
       goSessionAuth(roomName);
     }
   } catch (err) {
@@ -618,6 +643,50 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
       @close="showScheduleModal = false"
       @saved="fetchUpcoming"
     />
+
+    <!-- Instant Start Modal -->
+    <div v-if="showInstantModal" class="instantModalBackdrop" @click.self="showInstantModal = false">
+      <div class="instantModalCard">
+        <div class="modalHeader">
+          <h2>Start Instant Meeting</h2>
+          <button type="button" class="closeBtn" @click="showInstantModal = false">&times;</button>
+        </div>
+        <form @submit.prevent="submitInstantMeeting" class="modalForm">
+          <div class="formField">
+            <label for="instantTitle">Meeting Title</label>
+            <input
+              id="instantTitle"
+              v-model="instantTitle"
+              type="text"
+              placeholder="e.g. Brainstorming Session"
+              required
+            />
+          </div>
+          <div class="formField">
+            <label for="instantGuestEmails">Guest Emails (optional, comma-separated)</label>
+            <textarea
+              id="instantGuestEmails"
+              v-model="instantGuestEmails"
+              placeholder="e.g. guest1@example.com, guest2@example.com"
+              rows="2"
+            />
+          </div>
+          <div class="formField">
+            <label for="instantModEmails">Moderator Emails (optional, comma-separated)</label>
+            <textarea
+              id="instantModEmails"
+              v-model="instantModEmails"
+              placeholder="e.g. mod1@example.com, mod2@example.com"
+              rows="2"
+            />
+          </div>
+          <div class="modalActions">
+            <button type="button" class="btnCancel" @click="showInstantModal = false">Cancel</button>
+            <button type="submit" class="btnSubmit">Start Now</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1727,5 +1796,139 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
   line-height: 1.5;
   color: var(--color-mono30, #6970a0);
   font-weight: 500;
+}
+
+.instantModalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.instantModalCard {
+  width: min(480px, 100% - 32px);
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 24px;
+  animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-sizing: border-box;
+}
+
+@keyframes modalSlideUp {
+  from { transform: translateY(20px) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modalHeader h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formField label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+}
+
+.formField input,
+.formField textarea {
+  padding: 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.formField input:focus,
+.formField textarea:focus {
+  outline: none;
+  border-color: #4f6ef7;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.1);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btnCancel {
+  padding: 10px 18px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btnCancel:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.btnSubmit {
+  padding: 10px 22px;
+  border: none;
+  background: #4f6ef7;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(79, 110, 247, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btnSubmit:hover {
+  background: #3e5cd9;
+  box-shadow: 0 6px 14px rgba(79, 110, 247, 0.35);
 }
 </style>
