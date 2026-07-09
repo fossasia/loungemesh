@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { EditorContent } from '@tiptap/vue-3';
 import { toRef } from 'vue';
+import * as Y from 'yjs';
 import { useNotesEditor } from '@/composables/useNotesEditor';
 
 const model = defineModel<string>({ default: '' });
@@ -9,6 +10,7 @@ const props = withDefaults(
   defineProps<{
     readonly?: boolean;
     placeholder?: string;
+    ydoc?: Y.Doc;
   }>(),
   {
     readonly: false,
@@ -25,6 +27,7 @@ const { editor, toolbarGroups } = useNotesEditor({
   readonly: toRef(props, 'readonly'),
   placeholder: props.placeholder,
   onBlur: () => emit('blur'),
+  ydoc: props.ydoc,
 });
 </script>
 

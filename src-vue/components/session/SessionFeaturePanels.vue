@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import * as Y from 'yjs';
 import { useRoute } from 'vue-router';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -48,23 +49,13 @@ const { engine } = useMediaEngine();
 const route = useRoute();
 const roomId = computed(() => String(route.params.id || ''));
 
-import { threeWayMerge } from '@/utils/threeWayMerge';
-
 const activeNotesTab = ref<'shared' | 'private'>('shared');
 const notesDraft = ref(features.sharedNotes);
-const notesDirty = ref(false);
-/** Shared notes snapshot when the user started their current edit session. */
-const notesEditBase = ref(features.sharedNotes);
 
 watch(
   () => features.sharedNotes,
   (t) => {
-    if (notesDirty.value) {
-      notesDraft.value = threeWayMerge(notesEditBase.value, t, notesDraft.value);
-    } else {
-      notesDraft.value = t;
-    }
-    notesEditBase.value = t;
+    notesDraft.value = t;
   },
 );
 
@@ -73,8 +64,6 @@ watch(
   (panel, prev) => {
     if (panel === 'notes' && prev !== 'notes') {
       notesDraft.value = features.sharedNotes;
-      notesDirty.value = false;
-      notesEditBase.value = features.sharedNotes;
       
       const saved = localStorage.getItem(`loungemesh:private_notes:${roomId.value}`);
       local.privateNotes = saved || '';
@@ -102,28 +91,15 @@ function downloadPrivateNotes() {
 }
 
 function onNotesInput() {
-  if (!notesDirty.value) {
-    notesEditBase.value = features.sharedNotes;
-  }
-  notesDirty.value = true;
   pushNotes();
 }
 
 function onNotesBlur() {
-  const remoteChangedDuringEdit =
-    notesDirty.value && features.sharedNotes !== notesEditBase.value;
-  if (
-    notesDirty.value &&
-    !remoteChangedDuringEdit &&
-    shouldPublishNotesDraft(notesDraft.value, features.sharedNotes)
-  ) {
+  if (shouldPublishNotesDraft(notesDraft.value, features.sharedNotes)) {
     flushNotes();
   } else {
     cancelNotes();
   }
-  notesDirty.value = false;
-  notesEditBase.value = features.sharedNotes;
-  notesDraft.value = features.sharedNotes;
 }
 
 const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: disposeNotesPush } =
@@ -132,11 +108,7 @@ const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: dispos
   () => notesDraft.value,
     (text) => {
       if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
-      if (features.sharedNotes !== notesEditBase.value) return;
       features.updateSharedNotes(text, true);
-      broadcastSharedNotes(engine, text);
-      notesDirty.value = false;
-      notesEditBase.value = text;
     },
 );
 
@@ -148,9 +120,19 @@ function resetNotesToTemplate() {
   cancelNotes();
   features.resetSharedNotesToTemplate();
   notesDraft.value = features.sharedNotes;
-  notesEditBase.value = features.sharedNotes;
-  notesDirty.value = false;
-  broadcastSharedNotes(engine, features.sharedNotes);
+
+  const state = Y.encodeStateAsUpdate(features.ydoc);
+  const base64 = btoa(String.fromCharCode(...state));
+  const NOTES_CHUNK_SIZE = 8000;
+  const total = Math.ceil(base64.length / NOTES_CHUNK_SIZE);
+  engine.sendCommand('notes', JSON.stringify({ action: 'yjs_begin', total }));
+  for (let i = 0, offset = 0; offset < base64.length; i += 1, offset += NOTES_CHUNK_SIZE) {
+    engine.sendCommand('notes', JSON.stringify({
+      action: 'yjs_chunk',
+      index: i,
+      data: base64.slice(offset, offset + NOTES_CHUNK_SIZE),
+    }));
+  }
 }
 
 function syncLobby() {
@@ -479,6 +461,7 @@ const featureCardStyle = computed(() => {
           v-model="notesDraft"
           class="notesEditorWrap"
           :readonly="!features.canUseNotes"
+          :ydoc="features.ydoc"
           @update:model-value="onNotesInput"
           @blur="onNotesBlur"
         />
