@@ -23,7 +23,7 @@
     "fix:jvb": "bash scripts/loungemesh.sh fix-jvb"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^25.9.1",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vitest/coverage-v8": "^4.1.7",
