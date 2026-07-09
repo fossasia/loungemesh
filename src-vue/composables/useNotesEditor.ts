@@ -1,8 +1,10 @@
 import { computed, onBeforeUnmount, ref, watch, type Component, type Ref } from 'vue';
-import { useEditor, type Editor } from '@tiptap/vue-3';
+import { useEditor, Editor } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
+import Collaboration from '@tiptap/extension-collaboration';
+import * as Y from 'yjs';
 import {
   Bold,
   Code,
@@ -124,7 +126,19 @@ export function applyRemoteNotesContent(
   if (!editor.value) return;
   const current = getMarkdown(editor.value);
   if (current === next) return;
+
+  const state = editor.value.state;
+  const selection = state?.selection;
+  const { from, to } = selection || { from: 1, to: 1 };
+
   editor.value.commands.setContent(next, { emitUpdate: false });
+
+  if (state && editor.value.commands.setTextSelection) {
+    const maxPos = state.doc?.content?.size ?? 0;
+    const newFrom = Math.max(1, Math.min(from, maxPos + 1));
+    const newTo = Math.max(1, Math.min(to, maxPos + 1));
+    editor.value.commands.setTextSelection({ from: newFrom, to: newTo });
+  }
 }
 
 export type NotesEditorOptions = {
@@ -132,26 +146,37 @@ export type NotesEditorOptions = {
   readonly: Ref<boolean>;
   placeholder: string;
   onBlur: () => void;
+  ydoc?: Y.Doc;
 };
 
-export function useNotesEditor({ model, readonly, placeholder, onBlur }: NotesEditorOptions) {
+export function useNotesEditor({ model, readonly, placeholder, onBlur, ydoc }: NotesEditorOptions) {
   const toolbarEpoch = ref(0);
+
+  const extensions: any[] = [
+    StarterKit.configure({
+      heading: { levels: [2, 3] },
+      codeBlock: false,
+      horizontalRule: false,
+    }),
+    Placeholder.configure({ placeholder }),
+    Markdown.configure({
+      html: false,
+      transformPastedText: true,
+      transformCopiedText: true,
+    }),
+  ];
+
+  if (ydoc) {
+    extensions.push(
+      Collaboration.configure({
+        document: ydoc,
+      }),
+    );
+  }
 
   const editor = useEditor({
     content: model.value,
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [2, 3] },
-        codeBlock: false,
-        horizontalRule: false,
-      }),
-      Placeholder.configure({ placeholder }),
-      Markdown.configure({
-        html: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
+    extensions,
     editable: !readonly.value,
     editorProps: {
       attributes: {
