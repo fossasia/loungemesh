@@ -39,18 +39,14 @@ test.describe('Session feature controls', () => {
     await expect(page.getByText('No messages yet.')).not.toBeVisible();
 
     const notesBtn = footer.getByRole('button', { name: 'Shared notes' });
-    await expect(notesBtn).toHaveAttribute('title', /Notes — ask host for access/i);
-    await notesBtn.click();
-    await expect(page.getByRole('heading', { name: 'Shared notes' })).not.toBeVisible();
+    await expect(notesBtn).not.toBeVisible();
 
     await footer.getByRole('button', { name: 'Poll' }).click();
     await expect(page.getByText('Poll', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Ask the host for poll access.')).toBeVisible();
 
     const boardBtn = footer.getByRole('button', { name: 'Whiteboard' });
-    await expect(boardBtn).toHaveAttribute('title', /Whiteboard — ask host for access/i);
-    await boardBtn.click();
-    await expect(page.locator('canvas').first()).not.toBeVisible();
+    await expect(boardBtn).not.toBeVisible();
   });
 
   test('can use interactions (Raise Hand, Reactions)', async ({ page }) => {
