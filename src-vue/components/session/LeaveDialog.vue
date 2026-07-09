@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { playUiSound } from '@/utils/uiSounds';
 
 defineProps<{
@@ -20,6 +21,8 @@ const emit = defineEmits<{
   (e: 'update:quality', value: '720p' | '480p'): void;
 }>();
 
+const notesFormat = ref<'md' | 'rtf'>('md');
+
 function onCancel() {
   playUiSound('tap');
   emit('cancel');
@@ -32,17 +35,21 @@ function onLeave() {
 
 function onExport(type: string) {
   playUiSound('tap');
-  if (type === 'notes') emit('export-notes');
-  else if (type === 'notes-rtf') emit('export-notes-rtf');
-  else if (type === 'whiteboard') emit('export-whiteboard');
+  if (type === 'whiteboard') emit('export-whiteboard');
   else if (type === 'recording') emit('export-recording');
+}
+
+function downloadNotes() {
+  playUiSound('tap');
+  if (notesFormat.value === 'md') emit('export-notes');
+  else emit('export-notes-rtf');
 }
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="backdrop">
-      <div class="leaveBackdrop" @click.self="onCancel">
+      <div class="leaveBackdrop">
         <Transition name="card" appear>
           <div class="leaveCard" role="dialog" aria-modal="true" aria-labelledby="leaveTitle">
 
@@ -65,7 +72,7 @@ function onExport(type: string) {
             <!-- Host export section -->
             <template v-if="isHost">
               <div class="exportGrid">
-                <button type="button" class="export" @click="onExport('notes')">
+                <div class="exportNotesRow">
                   <div class="exportLeft">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="exportIcon">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -75,21 +82,20 @@ function onExport(type: string) {
                     </svg>
                     <span>Public Notes</span>
                   </div>
-                  <span class="ext">.md</span>
-                </button>
-
-                <button type="button" class="export" @click="onExport('notes-rtf')">
-                  <div class="exportLeft">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="exportIcon">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                    <span>Public Notes (RTF)</span>
+                  <div class="exportActionGroup">
+                    <select v-model="notesFormat" class="formatSelect" aria-label="Notes format">
+                      <option value="md">Markdown (.md)</option>
+                      <option value="rtf">Rich Text (.rtf)</option>
+                    </select>
+                    <button type="button" class="btnDownload" title="Download Notes" @click="downloadNotes">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                    </button>
                   </div>
-                  <span class="ext">.rtf</span>
-                </button>
+                </div>
 
                 <button type="button" class="export" @click="onExport('whiteboard')">
                   <div class="exportLeft">
@@ -231,6 +237,65 @@ function onExport(type: string) {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 20px;
+}
+
+.exportNotesRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border: 1px solid var(--line-light, #e2e8f0);
+  border-radius: 10px;
+  background: var(--color-mono95, #f8fafc);
+  font-family: var(--font-body);
+  font-size: var(--fs-small, 0.875rem);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-default);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.exportActionGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.formatSelect {
+  padding: 6px 10px;
+  border: 1px solid var(--line-light, #cbd5e1);
+  border-radius: 8px;
+  background: #ffffff;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: var(--fw-medium, 500);
+  color: var(--color-text-default, #1e293b);
+  cursor: pointer;
+}
+
+.btnDownload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: var(--btn-primary-bg, #4f6ef7);
+  color: var(--btn-primary-fg, #ffffff);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(79, 110, 247, 0.2);
+  transition: all 0.2s ease;
+}
+
+.btnDownload:hover {
+  background: var(--btn-primary-bg-hover, #3e5cd9);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(79, 110, 247, 0.3);
+}
+
+.btnDownload:active {
+  transform: translateY(0);
 }
 
 .export {

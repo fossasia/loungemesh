@@ -46,6 +46,12 @@ export const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
+    path: '/kicked',
+    name: 'kicked',
+    /* v8 ignore next */
+    component: () => import('@/pages/KickedPage.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     /* v8 ignore next */
