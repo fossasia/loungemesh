@@ -606,7 +606,16 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     async fetchRoomConfigAndRole(roomName: string, engine?: any) {
       this.isFetchingConfig = true;
       try {
-        const roleRes = await fetch(`/api/meetings/role/${roomName}`);
+        const [roleRes, configRes, wbRes, notesRes, accessRes, pollRes, bgRes] = await Promise.all([
+          fetch(`/api/meetings/role/${roomName}`),
+          fetch(`/api/meetings/config/${roomName}`),
+          fetch(`/api/meetings/state/${roomName}/whiteboard`),
+          fetch(`/api/meetings/state/${roomName}/notes`),
+          fetch(`/api/meetings/state/${roomName}/access`),
+          fetch(`/api/meetings/state/${roomName}/poll`),
+          fetch(`/api/meetings/state/${roomName}/background`),
+        ]);
+
         if (roleRes.ok) {
           const data = await roleRes.json();
           this.isVerifiedHost = data.role === 'host';
@@ -616,7 +625,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
             this.hostId = data.hostId;
           }
         }
-        const configRes = await fetch(`/api/meetings/config/${roomName}`);
         if (configRes.ok) {
           this.meetingExists = true;
           const config = await configRes.json();
@@ -627,23 +635,19 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         } else {
           this.meetingExists = false;
         }
-        const wbRes = await fetch(`/api/meetings/state/${roomName}/whiteboard`);
         if (wbRes.ok) {
           const wbData = await wbRes.json();
           this.whiteboardStrokes = wbData.strokes || [];
         }
-        const notesRes = await fetch(`/api/meetings/state/${roomName}/notes`);
         if (notesRes.ok) {
           const notesData = await notesRes.json();
           this.sharedNotes = notesData.notes || '';
         }
-        const accessRes = await fetch(`/api/meetings/state/${roomName}/access`);
         if (accessRes.ok) {
           const accessData = await accessRes.json();
           if (accessData.defaults) this.roomDefaults = accessData.defaults;
           if (accessData.grants) this.userGrants = accessData.grants;
         }
-        const pollRes = await fetch(`/api/meetings/state/${roomName}/poll`);
         if (pollRes.ok) {
           const pollData = await pollRes.json();
           if (pollData.poll) {
@@ -651,7 +655,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
             this.syncMyPollVoteFromPoll();
           }
         }
-        const bgRes = await fetch(`/api/meetings/state/${roomName}/background`);
         if (bgRes.ok) {
           const bgData = await bgRes.json();
           this.gridBackgroundUrl = bgData.gridBackgroundUrl || '';

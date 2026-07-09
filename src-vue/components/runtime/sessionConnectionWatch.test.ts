@@ -166,4 +166,20 @@ describe('handleSessionConnectionWatch', () => {
     await handleSessionConnectionWatch('room-a', false, deps);
     expect(conferenceStore.error).toBe(SESSION_ERROR_CODES.CONNECTION_FAILED);
   });
+
+  it('leaves the room when disconnecting while joined', async () => {
+    const { deps } = makeDeps();
+    vi.mocked(deps.engine.isJoined).mockReturnValue(true);
+    await handleSessionConnectionWatch('room-a', false, deps);
+    expect(deps.leaveRoom).toHaveBeenCalled();
+  });
+
+  it('returns early when active in the target room', async () => {
+    const { deps, conferenceStore } = makeDeps();
+    conferenceStore.isJoined = true;
+    conferenceStore.conferenceName = 'room-a';
+    vi.mocked(deps.engine.isJoined).mockReturnValue(true);
+    await handleSessionConnectionWatch('room-a', true, deps);
+    expect(deps.joinRoom).not.toHaveBeenCalled();
+  });
 });

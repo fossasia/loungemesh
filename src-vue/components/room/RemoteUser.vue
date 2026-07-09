@@ -129,6 +129,7 @@ const isStageOccupant = computed(() => {
 .userContainer {
   animation: tileEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   transition: left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), top 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: left, top;
 }
 
 @keyframes tileEnter {
