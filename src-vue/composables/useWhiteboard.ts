@@ -65,7 +65,7 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
 
     const now = Date.now();
     /* v8 ignore next 4 */
-    if (now - lastPublishTime > 50) {
+    if (now - lastPublishTime > 100) {
       lastPublishTime = now;
       publishStroke(currentStroke, false);
     }
