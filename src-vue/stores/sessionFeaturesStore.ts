@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import * as Y from 'yjs';
 import { getStageOccupantId } from '@/components/stage/getStageOccupantId';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
@@ -77,6 +78,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     hostSettingsSessionId: '',
     roomBgAssembly: null as { total: number; parts: Record<number, string> } | null,
     notesAssembly: null as { total: number; parts: Record<number, string> } | null,
+    ydoc: new Y.Doc(),
+    yjsAssembly: null as { total: number; parts: Record<number, string> } | null,
+    _yjsListener: null as ((update: Uint8Array, origin: any) => void) | null,
     whiteboardStrokes: [] as WhiteboardStroke[],
     whiteboardSnapshots: [] as Array<WhiteboardStroke[]>,
     roomDefaults: defaultUserGrants(),
@@ -524,6 +528,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.hostSettingsSessionId = '';
       this.roomBgAssembly = null;
       this.notesAssembly = null;
+      this.ydoc.destroy();
+      this.ydoc = new Y.Doc();
+      this.yjsAssembly = null;
       this.notesActivitySeq = 0;
       this.notesSeenSeq = 0;
       this.whiteboardActivitySeq = 0;
@@ -667,6 +674,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         const conferenceStore = useConferenceStore();
         if (engine && conferenceStore.isJoined) {
           this.syncOrClaimHostOnLoaded(engine);
+          this.setupYjsSync(engine);
+          if (Object.keys(conferenceStore.users).length > 0) {
+            engine.sendCommand('notes', JSON.stringify({ action: 'yjs_request' }));
+          }
         }
       }
     },
@@ -691,6 +702,44 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         }
       } catch (err) {
         console.error('Failed to update room config:', err);
+      }
+    },
+    setupYjsSync(engine: any) {
+      if (this._yjsListener) {
+        this.ydoc.off('update', this._yjsListener);
+      }
+      this._yjsListener = (update: Uint8Array, origin: any) => {
+        if (origin === 'remote') return;
+        if (!this.canUseNotes) return;
+        const base64 = btoa(String.fromCharCode(...update));
+        engine.sendCommand('notes', JSON.stringify({ action: 'yjs_update', update: base64 }));
+      };
+      this.ydoc.on('update', this._yjsListener);
+    },
+    applyYjsCommand(command: any) {
+      if (command.action === 'yjs_begin') {
+        this.yjsAssembly = { total: command.total, parts: {} };
+        return;
+      }
+      if (command.action === 'yjs_chunk') {
+        if (!this.yjsAssembly) return;
+        this.yjsAssembly.parts[command.index] = command.data;
+        if (Object.keys(this.yjsAssembly.parts).length !== this.yjsAssembly.total) return;
+        const encoded = Array.from({ length: this.yjsAssembly.total }, (_, index) => {
+          return this.yjsAssembly?.parts[index] ?? '';
+        }).join('');
+        this.yjsAssembly = null;
+        const binary = new Uint8Array(
+          atob(encoded).split('').map((c) => c.charCodeAt(0)),
+        );
+        Y.applyUpdate(this.ydoc, binary, 'remote');
+        return;
+      }
+      if (command.action === 'yjs_update') {
+        const binary = new Uint8Array(
+          atob(command.update).split('').map((c) => c.charCodeAt(0)),
+        );
+        Y.applyUpdate(this.ydoc, binary, 'remote');
       }
     },
     /* v8 ignore stop */

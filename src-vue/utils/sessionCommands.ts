@@ -1,4 +1,5 @@
 import { canApplyChatEdit } from '@/utils/chatMessage';
+import * as Y from 'yjs';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
@@ -146,12 +147,32 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       break;
     }
     case 'notes': {
-      const data = parse<
-        import('@/utils/notesSync').NotesCommand | { text?: string }
-      >(payload);
+      const data = parse<any>(payload);
       if (!data) break;
       if ('action' in data && data.action) {
-        features.applyNotesCommand(data);
+        if (data.action === 'yjs_request') {
+          const state = Y.encodeStateAsUpdate(features.ydoc);
+          const base64 = btoa(String.fromCharCode(...state));
+          const engine = getMediaEngineInstance();
+          const NOTES_CHUNK_SIZE = 8000;
+          const total = Math.ceil(base64.length / NOTES_CHUNK_SIZE);
+          engine.sendCommand('notes', JSON.stringify({ action: 'yjs_begin', total }));
+          for (let i = 0, offset = 0; offset < base64.length; i += 1, offset += NOTES_CHUNK_SIZE) {
+            engine.sendCommand('notes', JSON.stringify({
+              action: 'yjs_chunk',
+              index: i,
+              data: base64.slice(offset, offset + NOTES_CHUNK_SIZE),
+            }));
+          }
+        } else if (
+          data.action === 'yjs_begin' ||
+          data.action === 'yjs_chunk' ||
+          data.action === 'yjs_update'
+        ) {
+          features.applyYjsCommand(data);
+        } else {
+          features.applyNotesCommand(data);
+        }
         break;
       }
       if (data.text != null) {
