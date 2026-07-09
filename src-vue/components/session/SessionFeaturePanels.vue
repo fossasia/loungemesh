@@ -38,7 +38,8 @@ const featureLabels: Record<FeatureKey, string> = {
 };
 
 import { useLocalStore } from '@/stores/localStore';
-import { downloadBlob } from '@/utils/sessionExport';
+import { useAuthStore } from '@/stores/authStore';
+import { downloadBlob, markdownToRtf } from '@/utils/sessionExport';
 
 const features = useSessionFeaturesStore();
 const conference = useConferenceStore();
@@ -86,9 +87,18 @@ function onPrivateNotesInput(text: string) {
   localStorage.setItem(`loungemesh:private_notes:${roomId.value}`, text);
 }
 
+const privateNotesFormat = ref<'md' | 'rtf'>('md');
+
 function downloadPrivateNotes() {
-  const blob = new Blob([local.privateNotes], { type: 'text/markdown' });
-  downloadBlob(blob, `private-notes-${roomId.value}.md`);
+  if (privateNotesFormat.value === 'md') {
+    const blob = new Blob([local.privateNotes], { type: 'text/markdown' });
+    downloadBlob(blob, `private-notes-${roomId.value}.md`);
+  } else {
+    const titleText = `Private Notes - ${roomId.value}`;
+    const rtfContent = markdownToRtf(local.privateNotes, titleText);
+    const blob = new Blob([rtfContent], { type: 'application/rtf' });
+    downloadBlob(blob, `private-notes-${roomId.value}.rtf`);
+  }
 }
 
 function onNotesInput() {
@@ -229,6 +239,24 @@ const participantIds = computed(() => {
 });
 
 onBeforeUnmount(disposeNotesPush);
+
+watch(
+  () => [features.panel, features.canUseNotes, features.isHost, features.isModerator] as const,
+  ([panel, canUseNotes, isHost, isModerator]) => {
+    if (panel === 'notes' && !canUseNotes && !isHost && !isModerator) {
+      features.panel = '';
+    }
+  }
+);
+
+watch(
+  () => [features.panel, features.canUseWhiteboard, features.isHost, features.isModerator] as const,
+  ([panel, canUseWhiteboard, isHost, isModerator]) => {
+    if (panel === 'whiteboard' && !canUseWhiteboard && !isHost && !isModerator) {
+      features.panel = '';
+    }
+  }
+);
 
 const panelOpen = computed(
   () =>
@@ -463,9 +491,15 @@ const featureCardStyle = computed(() => {
           @update:model-value="onPrivateNotesInput"
         />
         <div class="privateActions">
-          <button type="button" class="notesDownloadBtn" @click="downloadPrivateNotes">
-            <AppIcon name="download" :size="14" /> Download Markdown
-          </button>
+          <div class="notesDownloadGroup">
+            <select v-model="privateNotesFormat" class="formatSelect" aria-label="Notes format">
+              <option value="md">Markdown (.md)</option>
+              <option value="rtf">Rich Text (.rtf)</option>
+            </select>
+            <button type="button" class="notesDownloadBtn" @click="downloadPrivateNotes">
+              <AppIcon name="download" :size="14" /> Download
+            </button>
+          </div>
         </div>
       </template>
     </div>
@@ -781,5 +815,21 @@ const featureCardStyle = computed(() => {
 }
 .notesDownloadBtn:hover {
   opacity: 0.9;
+}
+.notesDownloadGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.formatSelect {
+  padding: 6px 10px;
+  border: 1px solid var(--line-light, #cbd5e1);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg-card, #ffffff);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-default, #1e293b);
+  cursor: pointer;
 }
 </style>

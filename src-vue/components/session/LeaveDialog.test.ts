@@ -22,31 +22,48 @@ function mountDialog(props: Record<string, unknown>) {
 describe('LeaveDialog', () => {
   it('shows export options and emits each action for hosts', async () => {
     const wrapper = mountDialog({ hasRecording: true });
+    
+    // Notes row exists
+    expect(wrapper.find('.exportNotesRow').exists()).toBe(true);
+    
+    // Non-notes exports: Whiteboard and Recording buttons
     const buttons = wrapper.findAll('.export');
-    expect(buttons).toHaveLength(4);
+    expect(buttons).toHaveLength(2);
+    
+    // Test notes md download
+    const formatSelect = wrapper.find('.formatSelect');
+    await formatSelect.setValue('md');
+    await wrapper.find('.btnDownload').trigger('click');
+    expect(wrapper.emitted('export-notes')).toHaveLength(1);
+    
+    // Test notes rtf download
+    await formatSelect.setValue('rtf');
+    await wrapper.find('.btnDownload').trigger('click');
+    expect(wrapper.emitted('export-notes-rtf')).toHaveLength(1);
+
+    // Test whiteboard download
     await buttons[0].trigger('click');
+    expect(wrapper.emitted('export-whiteboard')).toHaveLength(1);
+
+    // Test recording download
     await buttons[1].trigger('click');
-    await buttons[2].trigger('click');
-    await buttons[3].trigger('click');
+    expect(wrapper.emitted('export-recording')).toHaveLength(1);
+
     await wrapper.find('.btn.leave').trigger('click');
     await wrapper.find('.btn.cancel').trigger('click');
-    expect(wrapper.emitted('export-notes')).toHaveLength(1);
-    expect(wrapper.emitted('export-notes-rtf')).toHaveLength(1);
-    expect(wrapper.emitted('export-whiteboard')).toHaveLength(1);
-    expect(wrapper.emitted('export-recording')).toHaveLength(1);
     expect(wrapper.emitted('leave')).toHaveLength(1);
     expect(wrapper.emitted('cancel')).toHaveLength(1);
   });
 
   it('disables the recording download until a recording exists', () => {
     const wrapper = mountDialog({ hasRecording: false });
-    const recordingBtn = wrapper.findAll('.export')[3];
+    const recordingBtn = wrapper.findAll('.export')[1];
     expect((recordingBtn.element as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('hides the recording export when recording is unsupported', () => {
     const wrapper = mountDialog({ recordingSupported: false });
-    expect(wrapper.findAll('.export')).toHaveLength(3);
+    expect(wrapper.findAll('.export')).toHaveLength(1);
   });
 
   it('shows LIVE pill on the recording export button while recording is active', () => {
@@ -60,10 +77,10 @@ describe('LeaveDialog', () => {
     expect(exts[exts.length - 1].text()).toBe('.mp4');
   });
 
-  it('emits cancel when the backdrop is clicked', async () => {
+  it('does not emit cancel when the backdrop is clicked', async () => {
     const wrapper = mountDialog({});
     await wrapper.find('.leaveBackdrop').trigger('click');
-    expect(wrapper.emitted('cancel')).toHaveLength(1);
+    expect(wrapper.emitted('cancel')).toBeUndefined();
   });
 
   it('shows a simple confirmation for non-hosts', () => {
