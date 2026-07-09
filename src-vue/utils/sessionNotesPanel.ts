@@ -68,8 +68,12 @@ export function createNotesPushScheduler(
   };
   const push = () => {
     if (!canPublishSharedNotes(canUseNotes())) return;
-    window.clearTimeout(timer);
-    timer = window.setTimeout(runPublish, delayMs);
+    if (!timer) {
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        runPublish();
+      }, delayMs);
+    }
   };
   const flush = () => {
     window.clearTimeout(timer);
