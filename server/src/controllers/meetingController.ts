@@ -189,7 +189,11 @@ export async function createMeeting(req: Request, res: Response) {
     return res.status(400).json({ error: 'Title and roomName are required' });
   }
 
-  const hostId = req.user!.id;
+  const hostId = req.user?.id;
+  if (!hostId) {
+    return res.status(401).json({ error: 'Unauthorized: Account required to create meeting' });
+  }
+
   const guests = Array.isArray(guestEmails) ? guestEmails : [];
   const moderators = Array.isArray(moderatorEmails) ? moderatorEmails : [];
 
@@ -230,7 +234,7 @@ export async function createMeeting(req: Request, res: Response) {
     });
 
     // Sync to Google Calendar if requested
-    if (isScheduled && start && end && syncGoogleCal) {
+    if (isScheduled && start && end && syncGoogleCal && req.user) {
       const eventId = await syncGoogleCalendarEvent(hostId, {
         title,
         description: description || null,
@@ -554,10 +558,17 @@ export async function getMeetingRole(req: Request, res: Response) {
   try {
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
-      select: { hostId: true }
+      select: { hostId: true, guestEmails: true, moderatorEmails: true }
     });
+    if (!meeting) {
+      return res.json({ role: 'guest', hostId: null, isInvited: false });
+    }
     const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    return res.json({ role, hostId: meeting?.hostId || null });
+    let isInvited = false;
+    if (req.user?.email) {
+      isInvited = meeting.guestEmails.includes(req.user.email) || meeting.moderatorEmails.includes(req.user.email);
+    }
+    return res.json({ role, hostId: meeting.hostId, isInvited });
   } catch (err) {
     console.error('Get meeting role error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -600,17 +611,25 @@ export async function updateMeetingConfig(req: Request, res: Response) {
   const { lobbyEnabled, stagePromotionEnabled, allowParticipantRecording, notesTemplate } = req.body;
 
   try {
-    const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    if (role !== 'host' && role !== 'moderator') {
-      return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update config' });
-    }
-
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
     });
 
     if (!meeting) {
       return res.status(404).json({ error: 'Meeting not found' });
+    }
+
+    const anonUser = await prisma.user.findFirst({
+      where: { email: 'anonymous@loungemesh.local' },
+    });
+
+    const isAnonymousMeeting = anonUser && meeting.hostId === anonUser.id;
+
+    if (!isAnonymousMeeting) {
+      const role = await getMeetingRoleForUser(roomName, req.user?.id);
+      if (role !== 'host' && role !== 'moderator') {
+        return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update config' });
+      }
     }
 
     const updatedConfig = await prisma.meetingConfig.upsert({
@@ -782,9 +801,22 @@ export async function updateAccessDefaults(req: Request, res: Response) {
     return res.status(400).json({ error: 'Missing defaults payload' });
   }
   try {
-    const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    if (role !== 'host' && role !== 'moderator') {
-      return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update access defaults' });
+    const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+    if (!meeting) {
+      return res.status(404).json({ error: 'Meeting not found' });
+    }
+
+    const anonUser = await prisma.user.findFirst({
+      where: { email: 'anonymous@loungemesh.local' },
+    });
+
+    const isAnonymousMeeting = anonUser && meeting.hostId === anonUser.id;
+
+    if (!isAnonymousMeeting) {
+      const role = await getMeetingRoleForUser(roomName, req.user?.id);
+      if (role !== 'host' && role !== 'moderator') {
+        return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update access defaults' });
+      }
     }
 
     const cacheKey = `meeting:state:${roomName}:access`;
@@ -792,7 +824,6 @@ export async function updateAccessDefaults(req: Request, res: Response) {
     const access = raw ? JSON.parse(raw) : { defaults: null, grants: {} };
     access.defaults = defaults;
     await redisClient.setEx(cacheKey, 86400, JSON.stringify(access));
-    const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (meeting) {
       await prisma.meetingConfig.upsert({
         where: { meetingId: meeting.id },
@@ -814,9 +845,25 @@ export async function updateAccessGrants(req: Request, res: Response) {
     return res.status(400).json({ error: 'Missing userId or grants payload' });
   }
   try {
-    const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    if (role !== 'host' && role !== 'moderator') {
-      return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update access grants' });
+    const meeting = await prisma.meeting.findUnique({
+      where: { roomName },
+      include: { configs: true },
+    });
+    if (!meeting) {
+      return res.status(404).json({ error: 'Meeting not found' });
+    }
+
+    const anonUser = await prisma.user.findFirst({
+      where: { email: 'anonymous@loungemesh.local' },
+    });
+
+    const isAnonymousMeeting = anonUser && meeting.hostId === anonUser.id;
+
+    if (!isAnonymousMeeting) {
+      const role = await getMeetingRoleForUser(roomName, req.user?.id);
+      if (role !== 'host' && role !== 'moderator') {
+        return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update access grants' });
+      }
     }
 
     const cacheKey = `meeting:state:${roomName}:access`;
@@ -825,10 +872,6 @@ export async function updateAccessGrants(req: Request, res: Response) {
     if (raw) {
       access = JSON.parse(raw);
     } else {
-      const meeting = await prisma.meeting.findUnique({
-        where: { roomName },
-        include: { configs: true },
-      });
       const defaults = meeting?.configs?.roomDefaults ? JSON.parse(meeting.configs.roomDefaults) : null;
       const grantsDb = meeting?.configs?.userGrants ? JSON.parse(meeting.configs.userGrants) : {};
       access = { defaults, grants: grantsDb };
@@ -836,7 +879,6 @@ export async function updateAccessGrants(req: Request, res: Response) {
     access.grants = access.grants || {};
     access.grants[userId] = grants;
     await redisClient.setEx(cacheKey, 86400, JSON.stringify(access));
-    const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (meeting) {
       await prisma.meetingConfig.upsert({
         where: { meetingId: meeting.id },
@@ -922,7 +964,16 @@ export async function getBackgroundState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   const cacheKey = `meeting:state:${roomName}:background`;
   try {
-    const gridBackgroundUrl = await redisClient.get(cacheKey) || '';
+    const cached = await redisClient.get(cacheKey);
+    if (cached !== null) {
+      return res.json({ gridBackgroundUrl: cached });
+    }
+    const meeting = await prisma.meeting.findUnique({
+      where: { roomName },
+      include: { configs: true },
+    });
+    const gridBackgroundUrl = meeting?.configs?.gridBackgroundUrl || '';
+    await redisClient.setEx(cacheKey, 86400, gridBackgroundUrl);
     return res.json({ gridBackgroundUrl });
   } catch (err) {
     console.error('Get background state error:', err);
@@ -939,6 +990,14 @@ export async function updateBackgroundState(req: Request, res: Response) {
   const cacheKey = `meeting:state:${roomName}:background`;
   try {
     await redisClient.setEx(cacheKey, 86400, gridBackgroundUrl);
+    const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+    if (meeting) {
+      await prisma.meetingConfig.upsert({
+        where: { meetingId: meeting.id },
+        update: { gridBackgroundUrl },
+        create: { meetingId: meeting.id, gridBackgroundUrl },
+      });
+    }
     return res.json({ success: true });
   } catch (err) {
     console.error('Update background state error:', err);
@@ -951,6 +1010,14 @@ export async function clearBackgroundState(req: Request, res: Response) {
   const cacheKey = `meeting:state:${roomName}:background`;
   try {
     await redisClient.del(cacheKey);
+    const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+    if (meeting) {
+      await prisma.meetingConfig.upsert({
+        where: { meetingId: meeting.id },
+        update: { gridBackgroundUrl: null },
+        create: { meetingId: meeting.id, gridBackgroundUrl: null },
+      });
+    }
     return res.json({ success: true });
   } catch (err) {
     console.error('Clear background state error:', err);
