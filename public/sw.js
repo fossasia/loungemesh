@@ -1,29 +1,30 @@
-const CACHE_NAME = 'loungemesh-static-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/favicon.svg',
-  '/manifest.json',
-  '/jitsi-bootstrap.js'
-];
+const CACHE_NAME = 'loungemesh-static-v2';
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  // Only cache GET requests and skip API / Jitsi websocket routes
+  // Only intercept GET requests for static assets (js/css/images/fonts) and ignore page paths/APIs
   if (
     event.request.method !== 'GET' ||
-    url.pathname.startsWith('/api') ||
-    url.pathname.startsWith('/libs') ||
-    url.pathname.startsWith('/xmpp')
+    (!url.pathname.includes('/assets/') && !url.pathname.endsWith('.woff2'))
   ) {
     return;
   }
@@ -34,13 +35,7 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
       return fetch(event.request).then((response) => {
-        // Cache static assets (fonts, images, Vite compiled js/css under assets/)
-        if (
-          response.status === 200 &&
-          (url.pathname.includes('/assets/') ||
-            url.pathname.endsWith('.svg') ||
-            url.pathname.endsWith('.woff2'))
-        ) {
+        if (response.status === 200) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
