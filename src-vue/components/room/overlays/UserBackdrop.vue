@@ -6,11 +6,14 @@ const props = withDefaults(
   defineProps<{
     onStage?: boolean;
     displayName?: string;
+    avatarUrl?: string | null;
   }>(),
-  { onStage: false, displayName: '' },
+  { onStage: false, displayName: '', avatarUrl: null },
 );
 
-const avatarUrl = computed(() => {
+const computedAvatarUrl = computed(() => {
+  /* v8 ignore next */
+  if (props.avatarUrl) return props.avatarUrl;
   const seed = props.displayName ? props.displayName.replace(/'s Sphere|' Sphere/i, '').trim() : 'Guest';
   return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seed)}`;
 });
@@ -22,7 +25,7 @@ const avatarUrl = computed(() => {
     Presenting
   </div>
   <div v-else class="base avatar">
-    <img :src="avatarUrl" alt="" class="avatarImg" />
+    <img :src="computedAvatarUrl" alt="" class="avatarImg" draggable="false" />
   </div>
 </template>
 
