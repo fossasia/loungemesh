@@ -50,6 +50,7 @@ model MeetingConfig {
   activePoll                String?
   roomDefaults              String?
   userGrants                String?
+  gridBackgroundUrl         String?
 }
 
 model SessionLog {
