@@ -60,6 +60,7 @@ export interface MediaService {
   leaveRoom(): void;
   createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<MediaTrackHandle[]>;
   addLocalTrack(track: MediaTrackHandle): Promise<void>;
+  removeLocalTrack?(track: MediaTrackHandle): Promise<void>;
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;
   /** 0.0–1.0 gain for spatial audio */
   setParticipantVolume(userId: string, gain: number): void;

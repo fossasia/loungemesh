@@ -4,6 +4,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useAuthStore } from '@/stores/authStore';
 import { handleSessionCommand } from '@/utils/sessionCommands';
 import { grantsPayloadForSync } from '@/utils/sessionAccess';
 import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
@@ -57,6 +58,12 @@ export function wireStoreSync(engine: MediaService): void {
     const features = useSessionFeaturesStore();
     if (id) {
       local.setMyID(id);
+      const auth = useAuthStore();
+      /* v8 ignore start */
+      if (auth.isAuthenticated && auth.user?.avatarUrl) {
+        engine.setLocalParticipantProperty('avatarUrl', auth.user.avatarUrl);
+      }
+      /* v8 ignore stop */
       if (!features.isFetchingConfig) {
         features.syncOrClaimHostOnLoaded(engine);
       }

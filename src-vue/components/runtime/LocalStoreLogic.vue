@@ -106,6 +106,26 @@ async function addLocalTracksToConference() {
   publishingLocalTracks = true;
   try {
     const alreadyPublished = conf.getLocalTracks?.() ?? [];
+    const currentTracks = [localStore.audio, localStore.video, localStore.screenshare].filter(Boolean) as any[];
+
+    // Remove any published tracks that are no longer in our store
+    for (const published of alreadyPublished) {
+      const stillActive = currentTracks.some((t) => toRaw(t) === toRaw(published));
+      if (!stillActive) {
+        try {
+          /* v8 ignore start */
+          if (engine.removeLocalTrack) {
+            await engine.removeLocalTrack(published);
+          }
+          /* v8 ignore stop */
+        /* v8 ignore start */
+        } catch (err) {
+          mediaDebug('LocalStoreLogic', 'removeLocalTrack:failed', { error: err });
+        }
+        /* v8 ignore stop */
+      }
+    }
+
     for (const track of [localStore.audio, localStore.video, localStore.screenshare]) {
       if (!track) continue;
       if (

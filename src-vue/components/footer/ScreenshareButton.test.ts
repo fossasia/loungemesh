@@ -30,6 +30,7 @@ describe('ScreenshareButton', () => {
     await flushPromises();
     expect(getJitsiTestContext().jsMeet.createLocalTracks).toHaveBeenCalledWith({
       devices: ['desktop'],
+      desktopSharingSources: ['screen', 'window', 'tab'],
       firePermissionPromptIsShownEvent: true,
     });
     expect(addSpy).toHaveBeenCalled();
