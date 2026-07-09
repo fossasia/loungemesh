@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 import { setActivePinia, createPinia } from 'pinia';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { encodeNotesForWire } from './notesSync';
 import { handleSessionCommand } from './sessionCommands';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 
 vi.mock('@/utils/uiSounds', () => ({
   playUiSound: vi.fn(),
@@ -148,6 +150,25 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('notes', { value: JSON.stringify({ action: 'clear' }) });
     expect(features.sharedNotes).toBe('');
     expect(features.hasUnreadNotes).toBe(true);
+
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'yjs_request' }) });
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('yjs_begin'));
+
+    const doc2 = new Y.Doc();
+    doc2.getXmlFragment('default').insert(0, [new Y.XmlText('yjs test')]);
+    const update = Y.encodeStateAsUpdate(doc2);
+    const base64 = btoa(String.fromCharCode(...update));
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'yjs_update', update: base64 }) });
+    expect(features.ydoc.getXmlFragment('default').toString()).toContain('yjs test');
+
+    const doc3 = new Y.Doc();
+    doc3.getXmlFragment('default').insert(0, [new Y.XmlText('yjs chunk test')]);
+    const update3 = Y.encodeStateAsUpdate(doc3);
+    const base64_3 = btoa(String.fromCharCode(...update3));
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'yjs_begin', total: 1 }) });
+    handleSessionCommand('notes', { value: JSON.stringify({ action: 'yjs_chunk', index: 0, data: base64_3 }) });
+    expect(features.ydoc.getXmlFragment('default').toString()).toContain('yjs chunk test');
 
     handleSessionCommand('wb', {
       value: JSON.stringify({

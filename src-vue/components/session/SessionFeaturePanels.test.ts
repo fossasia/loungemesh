@@ -57,7 +57,7 @@ describe('SessionFeaturePanels', () => {
     await ta.trigger('blur');
     vi.advanceTimersByTime(500);
     expect(features.sharedNotes).toBe('blur published');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -181,18 +181,6 @@ describe('SessionFeaturePanels', () => {
     wrapper.unmount();
   });
 
-  it('does not overwrite notes draft while the user is typing', async () => {
-    const features = useSessionFeaturesStore();
-    features.panel = 'notes';
-    features.sharedNotes = 'initial';
-    const { wrapper } = await mountPanels();
-    await wrapper.find('.notesTa').setValue('typing');
-    features.sharedNotes = 'remote overwrite';
-    await flushPromises();
-    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('remote overwrite typing');
-    wrapper.unmount();
-  });
-
   it('does not publish stale notes when the user only focuses the textarea', async () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
@@ -217,24 +205,6 @@ describe('SessionFeaturePanels', () => {
     features.sharedNotes = 'after';
     await flushPromises();
     expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('after');
-    wrapper.unmount();
-  });
-
-  it('does not publish when remote notes changed during a local edit', async () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.setMyID('me');
-    features.setHost('me');
-    features.panel = 'notes';
-    features.sharedNotes = 'original';
-    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
-    const { wrapper } = await mountPanels();
-    await wrapper.find('.notesTa').setValue('original tweak');
-    features.sharedNotes = 'remote update';
-    await wrapper.find('.notesTa').trigger('blur');
-    vi.advanceTimersByTime(500);
-    expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.stringContaining('tweak'));
-    expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('remote update');
     wrapper.unmount();
   });
 
@@ -322,7 +292,7 @@ describe('SessionFeaturePanels', () => {
     await wrapper.find('.notesResetBtn').trigger('click');
     expect(features.sharedNotes).toBe('# Agenda');
     expect((wrapper.find('.notesTa').element as HTMLTextAreaElement).value).toBe('# Agenda');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'yjs_begin', total: 1 }));
     wrapper.unmount();
   });
 
@@ -442,13 +412,6 @@ describe('SessionFeaturePanels', () => {
 
     const { wrapper } = await mountPanels();
     await flushPromises();
-
-    // 1. Cover line 51 (notesDirty is true, then external notes change)
-    const ta = wrapper.find('.notesTa');
-    await ta.setValue('local change'); // notesDirty = true
-    features.sharedNotes = 'external change'; // triggers watch, notesDirty is true -> skips notesEditBase update
-    await flushPromises();
-
     // 2. Cover watch(panel) when panel is not notes
     features.panel = 'moderator';
     await flushPromises();
