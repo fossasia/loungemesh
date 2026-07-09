@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 import { defineComponent, nextTick, ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import {
@@ -69,6 +70,43 @@ describe('notes editor helpers', () => {
     expect(editor.value.commands.setContent).not.toHaveBeenCalled();
 
     applyRemoteNotesContent(ref(undefined), 'remote');
+  });
+
+  it('preserves selection when applying remote content', () => {
+    const mockSetTextSelection = vi.fn();
+    const editor = ref(
+      createMockEditor({
+        state: {
+          selection: { from: 5, to: 10 },
+          doc: { content: { size: 100 } },
+        },
+        commands: {
+          setContent: vi.fn(),
+          setTextSelection: mockSetTextSelection,
+        },
+      }),
+    );
+    applyRemoteNotesContent(editor, 'remote', () => 'local');
+    expect(editor.value.commands.setContent).toHaveBeenCalledWith('remote', { emitUpdate: false });
+    expect(mockSetTextSelection).toHaveBeenCalledWith({ from: 5, to: 10 });
+  });
+
+  it('handles missing selection or size gracefully', () => {
+    const mockSetTextSelection = vi.fn();
+    const editor = ref(
+      createMockEditor({
+        state: {
+          selection: null,
+          doc: null,
+        },
+        commands: {
+          setContent: vi.fn(),
+          setTextSelection: mockSetTextSelection,
+        },
+      }),
+    );
+    applyRemoteNotesContent(editor, 'remote', () => 'local');
+    expect(mockSetTextSelection).toHaveBeenCalledWith({ from: 1, to: 1 });
   });
 
   it('builds toolbar groups and runs actions', () => {
@@ -165,6 +203,31 @@ describe('useNotesEditor', () => {
         editorProps: expect.objectContaining({
           attributes: expect.objectContaining({ dir: 'ltr', 'data-testid': 'notes-editor' }),
         }),
+      }),
+    );
+  });
+
+  it('registers collaboration extension when ydoc is provided', async () => {
+    const model = ref('start');
+    const readonly = ref(false);
+    const onBlur = vi.fn();
+    const ydoc = new Y.Doc();
+
+    useNotesEditor({
+      model,
+      readonly,
+      placeholder: 'Placeholder',
+      onBlur,
+      ydoc,
+    });
+
+    expect(useEditorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extensions: expect.arrayContaining([
+          expect.objectContaining({
+            name: 'collaboration',
+          }),
+        ]),
       }),
     );
   });
