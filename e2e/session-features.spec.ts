@@ -41,9 +41,8 @@ test.describe('Session feature controls', () => {
     const notesBtn = footer.getByRole('button', { name: 'Shared notes' });
     await expect(notesBtn).not.toBeVisible();
 
-    await footer.getByRole('button', { name: 'Poll' }).click();
-    await expect(page.getByText('Poll', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Ask the host for poll access.')).toBeVisible();
+    const pollBtn = footer.getByRole('button', { name: 'Poll' });
+    await expect(pollBtn).not.toBeVisible();
 
     const boardBtn = footer.getByRole('button', { name: 'Whiteboard' });
     await expect(boardBtn).not.toBeVisible();
