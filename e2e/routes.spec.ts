@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Routes and navigation', () => {
   test('home form navigates to a named session', async ({ page }) => {
     await page.goto('/');
+    await page.getByPlaceholder('e.g. Alex').fill('Alex');
     await page.getByLabel('Session name').fill('e2e-room');
     await page.getByRole('button', { name: 'Join' }).click();
     await expect(page).toHaveURL(/\/session\/e2e-room$/);
