@@ -239,6 +239,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       const data = parse<{ action?: string; id?: string }>(payload);
       if (data?.action === 'kick' && data.id === local.id) {
         conference.leaveConference();
+        window.location.href = '/kicked';
       }
       if (data?.action === 'mute' && data.id) {
         if (data.id === local.id && !local.mute) {
