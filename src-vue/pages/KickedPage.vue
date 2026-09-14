@@ -11,7 +11,7 @@ onMounted(() => {
     countdown.value -= 1;
     if (countdown.value <= 0) {
       clearInterval(timer);
-      router.push('/');
+      goHome();
     }
   }, 1000);
 });
@@ -23,7 +23,11 @@ onUnmounted(() => {
 /* v8 ignore stop */
 
 function goHome() {
-  router.push('/');
+  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    window.parent.postMessage({ source: 'loungemesh', action: 'leave', event: 'hangup', type: 'hangup' }, '*');
+  } else {
+    router.push('/');
+  }
 }
 </script>
 

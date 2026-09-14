@@ -118,7 +118,11 @@ async function doLeave() {
   leaveRoom();
   conf.leaveConference();
   disconnect();
-  router.push('/');
+  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    window.parent.postMessage({ source: 'loungemesh', action: 'leave', event: 'hangup', type: 'hangup' }, '*');
+  } else {
+    router.push('/');
+  }
 }
 
 const showStagePreviewDialog = ref(false);

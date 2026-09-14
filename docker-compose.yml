@@ -29,6 +29,8 @@ services:
         condition: service_started
       server:
         condition: service_started
+    environment:
+      NGINX_ALLOW_IFRAME_FROM: ${NGINX_ALLOW_IFRAME_FROM:-http://localhost:8000 http://127.0.0.1:8000 http://localhost:8880 https://eventyay.com https://*.eventyay.com}
     restart: unless-stopped
     # Join the jitsi network so nginx can proxy /libs/ to the jitsi-web container
     # (lib-jitsi-meet is served from there, never bundled as a static file).

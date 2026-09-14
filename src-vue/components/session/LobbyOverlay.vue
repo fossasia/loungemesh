@@ -76,7 +76,11 @@ async function exitLobby() {
   leaveRoom();
   conference.leaveConference();
   disconnect();
-  router.push('/');
+  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    window.parent.postMessage({ source: 'loungemesh', action: 'leave', event: 'hangup', type: 'hangup' }, '*');
+  } else {
+    router.push('/');
+  }
 }
 </script>
 
