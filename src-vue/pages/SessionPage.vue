@@ -26,6 +26,7 @@ const SessionFeaturePanels = defineAsyncComponent(
   () => import('@/components/session/SessionFeaturePanels.vue'),
 );
 const LobbyOverlay = defineAsyncComponent(() => import('@/components/session/LobbyOverlay.vue'));
+import ReconnectingBanner from '@/components/session/ReconnectingBanner.vue';
 const WhiteboardOverlay = defineAsyncComponent(
   () => import('@/components/session/WhiteboardOverlay.vue'),
 );
@@ -187,6 +188,7 @@ onBeforeUnmount(() => {
   <JitsiConnection />
   <LocalStoreLogic />
   <LobbyOverlay />
+  <ReconnectingBanner />
   <PanWrapper :event-identifier="identifier">
     <Room :identifier="identifier">
       <RemoteUsers />

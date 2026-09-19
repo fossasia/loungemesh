@@ -216,11 +216,18 @@ export const useLocalStore = defineStore('local', {
       });
 
       if (conferenceOptions.openBridgeChannel) {
+        // Screen shares are a second video source per endpoint, so the bridge
+        // needs them named explicitly or it falls back to tile resolution.
+        const screenshareTracks: Record<string, JitsiTrack | undefined> = {};
+        for (const [uid, user] of Object.entries(users)) {
+          if (user?.screenshare) screenshareTracks[uid] = user.screenshare;
+        }
         const constraints = buildReceiverConstraints({
           localId: this.id,
           remoteUserIds: Object.keys(users),
           visibleUserIds: this.visibleUsers,
           stageIds: this.usersOnStage,
+          screenshareTracks,
         });
         if (constraints) {
           mediaDebug('localStore', 'setReceiverConstraints', {

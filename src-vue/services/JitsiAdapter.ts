@@ -237,6 +237,21 @@ export class JitsiAdapter implements MediaService {
       this.conference = undefined;
       this.joined = false;
     });
+    // The bridge connection can drop without the conference failing. Without
+    // these the SPA keeps rendering dead tracks until the user reloads, which is
+    // the main reason Office feels less reliable than classic Jitsi on flaky links.
+    if (ev.CONNECTION_INTERRUPTED) {
+      conference.on(ev.CONNECTION_INTERRUPTED, () => {
+        mediaDebug('JitsiAdapter', 'CONNECTION_INTERRUPTED', {});
+        this.emit('connectionInterrupted');
+      });
+    }
+    if (ev.CONNECTION_RESTORED) {
+      conference.on(ev.CONNECTION_RESTORED, () => {
+        mediaDebug('JitsiAdapter', 'CONNECTION_RESTORED', {});
+        this.emit('connectionRestored');
+      });
+    }
     conference.on(ev.TRACK_ADDED, (track: unknown) => {
       const t = track as JitsiTrack;
       mediaDebugTrack('JitsiAdapter', 'TRACK_ADDED', t);
@@ -334,6 +349,9 @@ export class JitsiAdapter implements MediaService {
     this.init();
     const options = { firePermissionPromptIsShownEvent: true };
     if (devices.includes('desktop')) {
+      // Do not set desktopSharingFrameRate. max > 5 tells Chrome to prefer fps
+      // over resolution and turns on screenshare simulcast, so JVB forwards a
+      // low layer (jitsi-meet#15611 / #14884). Unset = sharp share at ~5 fps.
       return this.jsMeet!.createLocalTracks({
         devices: ['desktop'],
         desktopSharingSources: ['screen', 'window', 'tab'],

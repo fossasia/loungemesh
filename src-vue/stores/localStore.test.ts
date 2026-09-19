@@ -152,6 +152,31 @@ describe('localStore', () => {
     constraintsSpy.mockRestore();
   });
 
+  it('calculateUsersOnScreen ignores missing remote user records', () => {
+    const conference = useConferenceStore();
+    conference.commitUsers({ ghost: undefined as never });
+    const store = useLocalStore();
+    store.id = 'me';
+    store.calculateUsersOnScreen();
+    expect(store.visibleUsers).toEqual([]);
+  });
+
+  it('calculateUsersOnScreen requests remote screen shares by source name', () => {
+    const conference = useConferenceStore();
+    conference.addUser('sharer');
+    const desktop = { getType: () => 'video', videoType: 'desktop', getSourceName: () => 'sharer-v1' } as never;
+    conference.patchUser('sharer', { screenshare: desktop });
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'me';
+    store.calculateUsersOnScreen();
+    const sent = constraintsSpy.mock.calls[0][0];
+    expect(sent.selectedSources).toEqual(expect.arrayContaining(['sharer-v0', 'sharer-v1']));
+    expect(sent.onStageSources).toEqual(expect.arrayContaining(['sharer-v1']));
+    constraintsSpy.mockRestore();
+  });
+
   it('toggleMute releases the mic on mute and re-acquires it on unmute', async () => {
     const existing = {
       getType: () => 'audio',

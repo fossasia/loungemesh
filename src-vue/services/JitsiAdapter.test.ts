@@ -358,6 +358,30 @@ describe('JitsiAdapter', () => {
     expect(adapter.isJoined()).toBe(true);
   });
 
+  it('skips restore listener when the library does not expose it', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    delete mock.jsMeet.events.conference.CONNECTION_RESTORED;
+    await adapter.joinRoom('room', 'A', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+    expect(adapter.isJoined()).toBe(true);
+  });
+
+  it('emits reconnect events when the bridge drops and recovers', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    const interrupted = vi.fn();
+    const restored = vi.fn();
+    adapter.on('connectionInterrupted', interrupted);
+    adapter.on('connectionRestored', restored);
+    const ev = mock.jsMeet.events.conference;
+    mock.conference._fire(ev.CONNECTION_INTERRUPTED);
+    mock.conference._fire(ev.CONNECTION_RESTORED);
+    expect(interrupted).toHaveBeenCalledTimes(1);
+    expect(restored).toHaveBeenCalledTimes(1);
+  });
+
   it('manages local tracks and conference commands', async () => {
     await adapter.connect();
     mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);

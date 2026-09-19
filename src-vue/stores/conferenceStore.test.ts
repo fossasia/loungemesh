@@ -251,11 +251,21 @@ describe('conferenceStore', () => {
     const store = useConferenceStore();
     store.addUser('u5');
     store.isJoined = true;
+    store.connectionInterrupted = true;
     store.messages = [{ id: 'u5', text: 'hi', nr: 1 }];
     store.leaveConference();
     expect(store.isJoined).toBe(false);
     expect(store.users).toEqual({});
     expect(store.messages).toEqual([]);
+    expect(store.connectionInterrupted).toBe(false);
+  });
+
+  it('setConnectionInterrupted toggles the reconnect flag', () => {
+    const store = useConferenceStore();
+    store.setConnectionInterrupted(true);
+    expect(store.connectionInterrupted).toBe(true);
+    store.setConnectionInterrupted(false);
+    expect(store.connectionInterrupted).toBe(false);
   });
 
   it('handles screenshareAudio track actions', () => {

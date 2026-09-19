@@ -49,6 +49,11 @@ export type ConferenceState = {
   displayName: string;
   error?: string;
   messages: ChatMessage[];
+  /**
+   * Bridge connection dropped while the conference is still alive. Media is
+   * stalled but recoverable, so this is a transient banner rather than an error.
+   */
+  connectionInterrupted: boolean;
 };
 
 /** Conference UI state — media events sync via useMediaEngine. */
@@ -63,8 +68,12 @@ export const useConferenceStore = defineStore('conference', {
     displayName: 'Friendly Sphere',
     error: undefined,
     messages: [],
+    connectionInterrupted: false,
   }),
   actions: {
+    setConnectionInterrupted(interrupted: boolean) {
+      this.connectionInterrupted = interrupted;
+    },
     setConferenceName(name: string) {
       this.conferenceName = name;
     },
@@ -225,6 +234,7 @@ export const useConferenceStore = defineStore('conference', {
       this.clearJoinState();
       this.messages = [];
       this.error = undefined;
+      this.connectionInterrupted = false;
       useSessionFeaturesStore().resetForLeave();
     },
   },

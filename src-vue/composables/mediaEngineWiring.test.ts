@@ -810,6 +810,26 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(syncSpy).not.toHaveBeenCalled();
   });
+
+  it('flags a dropped bridge and re-asks for sources on restore', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const refresh = vi.spyOn(local, 'calculateUsersOnScreen');
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    wireStoreSync(engine);
+    const emit = (engine as unknown as { emit: (event: string) => void }).emit.bind(engine);
+    emit('connectionInterrupted');
+    expect(conference.connectionInterrupted).toBe(true);
+    emit('connectionRestored');
+    expect(conference.connectionInterrupted).toBe(false);
+    expect(refresh).toHaveBeenCalled();
+    refresh.mockRestore();
+    vi.unstubAllGlobals();
+  });
 });
 
 
