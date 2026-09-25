@@ -4,6 +4,9 @@ import type { useLocalStore } from '@/stores/localStore';
 import { disposeJitsiTrack } from '@/utils/disposeJitsiTrack';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
+import { createPreferredLocalTracks } from '@/utils/createPreferredLocalTracks';
+import { applyAudioOutput } from '@/utils/applyAudioOutput';
+import { loadMediaDevicePrefs } from '@/utils/mediaDevicePrefs';
 
 type LocalStore = ReturnType<typeof useLocalStore>;
 
@@ -19,7 +22,7 @@ export async function ensureLocalTracks(
   if (!devices.length) return existing;
   let tracks: JitsiTrack[] = [];
   try {
-    tracks = await engine.createLocalTracks(devices);
+    tracks = await createPreferredLocalTracks(engine, devices);
     if (devices.includes('audio')) {
       local.audioError = !tracks.some(t => t.getType?.() === 'audio');
     }
@@ -50,6 +53,8 @@ export async function ensureLocalTracks(
     if (!used.has(track)) disposeJitsiTrack(track);
   }
   local.setLocalTracks(merged);
+  const outputId = loadMediaDevicePrefs().audiooutput;
+  if (outputId) await applyAudioOutput(outputId);
   mediaDebug('ensureLocalTracks', 'created', {
     devices,
     audio: !!local.audio,

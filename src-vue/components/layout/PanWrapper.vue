@@ -74,7 +74,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <ZoomControls class="zoomCorner" />
+  <ZoomControls />
   <div
     ref="wrapperRef"
     class="panRoot"
@@ -126,12 +126,5 @@ onMounted(() => {
 }
 .panScale:active {
   cursor: grabbing;
-}
-.zoomCorner {
-  position: fixed;
-  left: 14px;
-  bottom: 96px;
-  z-index: 6000;
-  pointer-events: auto;
 }
 </style>

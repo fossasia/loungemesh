@@ -379,6 +379,37 @@ describe('JitsiAdapter', () => {
     expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
       expect.objectContaining({ devices: ['video'] }),
     );
+    await adapter.createLocalTracks(['audio'], { audioDeviceId: 'mic-1' });
+    expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        devices: ['audio'],
+        micDeviceId: 'mic-1',
+        constraints: expect.objectContaining({
+          audio: expect.objectContaining({ deviceId: { exact: 'mic-1' } }),
+        }),
+      }),
+    );
+    await adapter.createLocalTracks(['video'], { videoDeviceId: 'cam-1' });
+    expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        devices: ['video'],
+        cameraDeviceId: 'cam-1',
+        constraints: expect.objectContaining({
+          video: { deviceId: { exact: 'cam-1' } },
+        }),
+      }),
+    );
+    await adapter.createLocalTracks(['audio', 'video'], {
+      audioDeviceId: 'mic-1',
+      videoDeviceId: 'cam-1',
+    });
+    expect(mock.jsMeet.createLocalTracks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        devices: ['audio', 'video'],
+        micDeviceId: 'mic-1',
+        cameraDeviceId: 'cam-1',
+      }),
+    );
     await adapter.replaceLocalTrack(tracks[0], tracks[0]);
     adapter.setDisplayName('A');
     adapter.setLocalParticipantProperty('k', 'v');

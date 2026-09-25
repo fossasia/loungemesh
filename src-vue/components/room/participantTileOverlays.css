@@ -95,3 +95,22 @@
 .videoContainer.onStageOccupant:not(.desktop) .vid {
   border-color: var(--color-blue100);
 }
+
+.videoContainer.megaphone {
+  transform: scale(1.35);
+  transform-origin: center center;
+  z-index: 6;
+  box-shadow: 0 0 0 6px rgba(79, 110, 247, 0.4);
+}
+
+.megaphoneBadge {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.6rem;
+  line-height: 1;
+  z-index: 10;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}

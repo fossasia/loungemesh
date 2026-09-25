@@ -131,6 +131,20 @@ describe('wireStoreSync', () => {
     expect(features.handRaised).toBe(false);
   });
 
+  it('syncs megaphone without creating unknown users', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    wireStoreSync(engine);
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit(
+      'participantPropertyChanged',
+      'stranger',
+      { megaphone: true },
+    );
+    expect(conference.users.stranger).toBeUndefined();
+    expect(features.megaphone).toBe(false);
+  });
+
   it('syncs speaking participant property', async () => {
     const engine = getMediaEngineInstance();
     const conference = useConferenceStore();
@@ -156,6 +170,11 @@ describe('wireStoreSync', () => {
       _properties: { handRaised: true },
     });
     expect(conference.users.u1.properties.handRaised).toBe(true);
+    jitsi.conference._fire(ev.conference.PARTICIPANT_PROPERTY_CHANGED, {
+      _id: 'u1',
+      _properties: { megaphone: true },
+    });
+    expect(conference.users.u1.properties.megaphone).toBe(true);
   });
 
   it('does not store muted video on trackAdded', async () => {
@@ -520,9 +539,10 @@ describe('wireStoreSync', () => {
     jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
     await engine.joinRoom('room', 'Alice', {});
     jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {
-      _properties: { handRaised: true },
+      _properties: { handRaised: true, megaphone: true },
     });
     expect(conference.users.guest.properties.handRaised).toBe(true);
+    expect(conference.users.guest.properties.megaphone).toBe(true);
   });
 
   it('rebroadcasts access when host sees a new participant', async () => {

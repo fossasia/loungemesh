@@ -13,6 +13,7 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { sendSessionReaction } from '@/utils/sessionReactions';
 import { playUiSound } from '@/utils/uiSounds';
 import { applyParticipantHandRaised } from '@/utils/sessionHandRaise';
+import { applyParticipantMegaphone } from '@/utils/sessionMegaphone';
 
 const features = useSessionFeaturesStore();
 const local = useLocalStore();
@@ -26,6 +27,16 @@ function toggleHand() {
   engine.setLocalParticipantProperty('handRaised', raised);
   engine.sendCommand('hand', JSON.stringify({ id, raised }));
   applyParticipantHandRaised(id, raised);
+}
+
+function toggleMegaphone() {
+  const id = local.id || engine.getLocalUserId();
+  if (!id) return;
+  const on = !features.megaphone;
+  features.megaphone = on;
+  engine.setLocalParticipantProperty('megaphone', on);
+  engine.sendCommand('megaphone', JSON.stringify({ id, on }));
+  applyParticipantMegaphone(id, on);
 }
 
 function toggleReactions() {
@@ -75,6 +86,22 @@ function openPanel(name: 'notes' | 'whiteboard') {
       @click="toggleHand"
     >
       <template #icon><AppIcon name="hand" /></template>
+    </IconButton>
+    <IconButton
+      :label="features.megaphone ? 'Stop speaking to all' : 'Speak to all'"
+      :highlight="features.megaphone"
+      :sound="features.megaphone ? 'toggleOff' : 'toggleOn'"
+      @click="toggleMegaphone"
+    >
+      <template #icon><AppIcon name="megaphone" /></template>
+    </IconButton>
+    <IconButton
+      :label="features.gridView ? 'Exit grid view' : 'Grid view'"
+      :highlight="features.gridView"
+      :sound="features.gridView ? 'toggleOff' : 'toggleOn'"
+      @click="features.gridView = !features.gridView"
+    >
+      <template #icon><AppIcon name="layout-grid" /></template>
     </IconButton>
     <div v-if="features.canUsePoll || features.isHost || features.isModerator" class="toolWrap">
       <IconButton

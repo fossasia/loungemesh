@@ -19,4 +19,9 @@ describe('playbackGainForUser', () => {
   it('returns full volume for presenter regardless of proximity', () => {
     expect(playbackGainForUser({ mute: false }, 0.2, true)).toBe(1.0);
   });
+
+  it('returns full volume for megaphone regardless of proximity', () => {
+    expect(playbackGainForUser({ mute: false, properties: { megaphone: true } }, 0.1)).toBe(1.0);
+    expect(playbackGainForUser({ mute: true, properties: { megaphone: true } }, 0.1)).toBe(0);
+  });
 });

@@ -59,6 +59,12 @@ describe('SessionTools', () => {
     expect(features.handRaised).toBe(true);
     expect(propSpy).toHaveBeenCalledWith('handRaised', true);
     expect(cmdSpy).toHaveBeenCalledWith('hand', JSON.stringify({ id: 'local-1', raised: true }));
+    await wrapper.find('[aria-label="Speak to all"]').trigger('click');
+    expect(features.megaphone).toBe(true);
+    expect(propSpy).toHaveBeenCalledWith('megaphone', true);
+    expect(cmdSpy).toHaveBeenCalledWith('megaphone', JSON.stringify({ id: 'local-1', on: true }));
+    await wrapper.find('[aria-label="Stop speaking to all"]').trigger('click');
+    expect(features.megaphone).toBe(false);
     await wrapper.find('[aria-label="Poll"]').trigger('click');
     expect(features.panel).toBe('poll');
     await wrapper.find('[aria-label="Shared notes"]').trigger('click');
@@ -192,6 +198,43 @@ describe('SessionTools', () => {
     const { wrapper } = await mountWithApp(SessionTools);
     await wrapper.find('[aria-label="Raise hand"]').trigger('click');
     expect(useSessionFeaturesStore().handRaised).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('toggles megaphone using the engine user id when local id is unset', async () => {
+    const local = useLocalStore();
+    local.setMyID('');
+    vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue('engine-user');
+    const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
+    const { wrapper } = await mountWithApp(SessionTools);
+    await wrapper.find('[aria-label="Speak to all"]').trigger('click');
+    expect(propSpy).toHaveBeenCalledWith('megaphone', true);
+    expect(useSessionFeaturesStore().megaphone).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('ignores megaphone toggle when no participant id is available', async () => {
+    const local = useLocalStore();
+    local.setMyID('');
+    const propSpy = vi.spyOn(getMediaEngineInstance(), 'setLocalParticipantProperty');
+    vi.spyOn(getMediaEngineInstance(), 'getLocalUserId').mockReturnValue(undefined);
+    const { wrapper } = await mountWithApp(SessionTools);
+    await wrapper.find('[aria-label="Speak to all"]').trigger('click');
+    expect(propSpy).not.toHaveBeenCalled();
+    expect(useSessionFeaturesStore().megaphone).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('toggles grid view locally without a conference command', async () => {
+    const features = useSessionFeaturesStore();
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(SessionTools);
+    await wrapper.find('[aria-label="Grid view"]').trigger('click');
+    expect(features.gridView).toBe(true);
+    expect(wrapper.find('[aria-label="Exit grid view"]').classes()).toContain('highlight');
+    expect(cmdSpy).not.toHaveBeenCalled();
+    await wrapper.find('[aria-label="Exit grid view"]').trigger('click');
+    expect(features.gridView).toBe(false);
     wrapper.unmount();
   });
 });

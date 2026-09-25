@@ -37,6 +37,10 @@ describe('handleSessionCommand', () => {
     conference.addUser('u2');
     handleSessionCommand('hand', { value: JSON.stringify({ id: 'u2', raised: true }) });
     expect(conference.users.u2.properties.handRaised).toBe(true);
+    handleSessionCommand('megaphone', { value: JSON.stringify({ id: 'u2', on: true }) });
+    expect(conference.users.u2.properties.megaphone).toBe(true);
+    handleSessionCommand('megaphone', { value: JSON.stringify({ id: 'u2' }) });
+    handleSessionCommand('megaphone', { value: 'not-json' });
   });
 
   it('plays hand raise sound only once per raise', async () => {

@@ -36,6 +36,8 @@ import {
   Settings,
   AlertTriangle,
   Download,
+  Megaphone,
+  LayoutGrid,
 } from '@lucide/vue';
 
 const props = withDefaults(
@@ -82,7 +84,9 @@ export type IconName =
   | 'info'
   | 'settings'
   | 'alert-triangle'
-  | 'download';
+  | 'download'
+  | 'megaphone'
+  | 'layout-grid';
 
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
@@ -120,6 +124,8 @@ const registry: Record<IconName, Component> = {
   settings: Settings,
   'alert-triangle': AlertTriangle,
   download: Download,
+  megaphone: Megaphone,
+  'layout-grid': LayoutGrid,
 };
 
 const icon = computed(() => registry[props.name]);

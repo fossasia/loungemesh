@@ -18,4 +18,11 @@ describe('applyWorkerVolume', () => {
     applyWorkerVolume('known', 0.8, users, vi.fn(), setVolume);
     expect(setVolume).toHaveBeenCalledWith('known', 0);
   });
+
+  it('forces full gain when the participant has megaphone', () => {
+    const users = { known: { mute: false, properties: { megaphone: true } } };
+    const setVolume = vi.fn();
+    applyWorkerVolume('known', 0.2, users, vi.fn(), setVolume);
+    expect(setVolume).toHaveBeenCalledWith('known', 1);
+  });
 });

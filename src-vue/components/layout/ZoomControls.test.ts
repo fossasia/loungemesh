@@ -12,6 +12,7 @@ describe('ZoomControls', () => {
     const start = local.scale;
     const { wrapper } = await mountWithApp(ZoomControls);
     const buttons = wrapper.findAll('button.ibtn');
+    expect(buttons).toHaveLength(2);
     await buttons[0].trigger('click');
     expect(local.scale).toBeGreaterThan(start);
     const mid = local.scale;

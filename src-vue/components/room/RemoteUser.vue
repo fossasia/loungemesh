@@ -11,6 +11,7 @@ import NameTag from './overlays/NameTag.vue';
 import UserBackdrop from './overlays/UserBackdrop.vue';
 import MuteIndicator from './overlays/MuteIndicator.vue';
 import { getVectorDistance } from '@/utils/vector';
+import { parseMegaphone } from '@/utils/sessionMegaphone';
 
 const props = defineProps<{
   id: string;
@@ -52,14 +53,15 @@ const distance = computed(() => {
   return getVectorDistance(local.pos, user.value.pos);
 });
 const isOutsideSphere = computed(() => distance.value > 650);
+const isMegaphone = computed(() => parseMegaphone(user.value?.properties?.megaphone));
 const showAvatar = computed(() => {
   if (isStageOccupant.value) return true;
   if (!videoTrack.value) return true;
-  if (isOutsideSphere.value && features.isStageModeActive) return true;
+  if (isOutsideSphere.value && features.isStageModeActive && !isMegaphone.value) return true;
   return false;
 });
 const speaking = computed(() => {
-  if (isOutsideSphere.value && !isPresenter.value) return false;
+  if (isOutsideSphere.value && !isPresenter.value && !isMegaphone.value) return false;
   return !!user.value?.speaking && !user.value?.mute;
 });
 const reaction = computed(() => features.userReactions[props.id]?.emoji);
@@ -89,14 +91,16 @@ const isStageOccupant = computed(() => {
         avatarTile: showAvatar,
         speaking: speaking && showAvatar,
         onStageOccupant: isStageOccupant,
+        megaphone: isMegaphone,
       }"
     >
       <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" :displayName="user?.user?._displayName || ''" :avatarUrl="(user?.properties?.avatarUrl as string | null | undefined)" />
-      <template v-if="videoTrack && !isStageOccupant && !(isOutsideSphere && features.isStageModeActive)">
+      <template v-if="videoTrack && !isStageOccupant && !(isOutsideSphere && features.isStageModeActive && !isMegaphone)">
         <RemoteVideo :key="videoTrackKey" :id="id" :track="videoTrack" :speaking="speaking" />
       </template>
       <span v-if="reaction" class="floatReact">{{ reaction }}</span>
       <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
+      <div v-if="isMegaphone" class="megaphoneBadge" title="Speaking to all">📣</div>
     </div>
     <RemoteAudio :id="id" :volume="user?.volume" />
     <MuteIndicator v-if="user.mute" />

@@ -51,6 +51,7 @@ const showCameraVideo = computed(() => hasVideo.value && !local.cameraOff);
 const showAvatar = computed(() => !showCameraVideo.value || isStageOccupant.value);
 const reaction = computed(() => (local.id ? features.userReactions[local.id]?.emoji : undefined));
 const handUp = computed(() => features.handRaised);
+const megaphoneOn = computed(() => features.megaphone);
 const isStageOccupant = computed(() => features.isLocalStageOccupant);
 
 function releaseVideoPreview() {
@@ -184,11 +185,13 @@ defineExpose({ attach, videoEl });
           avatarTile: showAvatar,
           speaking: local.speaking && !local.mute && showAvatar,
           onStageOccupant: isStageOccupant,
+          megaphone: megaphoneOn,
         }"
       >
         <UserBackdrop v-if="showAvatar" :onStage="isStageOccupant" :displayName="conference.displayName" :avatarUrl="auth.user?.avatarUrl" />
         <MuteIndicator v-if="local.mute" clickable @click="local.toggleMute()" />
         <div v-if="handUp" class="handBadge" title="Hand raised">✋</div>
+        <div v-if="megaphoneOn" class="megaphoneBadge" title="Speaking to all">📣</div>
         <span v-if="reaction" class="floatReact">{{ reaction }}</span>
         <video
           v-if="!showAvatar"

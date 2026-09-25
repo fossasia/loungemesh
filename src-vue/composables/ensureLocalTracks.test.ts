@@ -4,7 +4,10 @@ import { ensureLocalTracks } from './ensureLocalTracks';
 import { useLocalStore } from '@/stores/localStore';
 
 describe('ensureLocalTracks', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.removeItem('loungemesh.mediaDevices');
+  });
 
   it('requests audio and video together when both are missing', async () => {
     const local = useLocalStore();
@@ -95,5 +98,22 @@ describe('ensureLocalTracks', () => {
     await ensureLocalTracks(local, engine as never);
     expect(local.video).toBeUndefined();
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes stored device ids when requesting tracks', async () => {
+    const { saveMediaDevicePrefs } = await import('@/utils/mediaDevicePrefs');
+    saveMediaDevicePrefs({ audioinput: 'mic-1', videoinput: 'cam-1', audiooutput: 'spk-1' });
+    const local = useLocalStore();
+    const engine = {
+      createLocalTracks: vi.fn().mockResolvedValue([
+        { getType: () => 'audio' },
+        { getType: () => 'video', videoType: 'camera' },
+      ]),
+    };
+    await ensureLocalTracks(local, engine as never);
+    expect(engine.createLocalTracks).toHaveBeenCalledWith(['audio', 'video'], {
+      audioDeviceId: 'mic-1',
+      videoDeviceId: 'cam-1',
+    });
   });
 });

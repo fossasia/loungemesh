@@ -27,6 +27,7 @@ export default defineConfig({
           { text: 'Session error codes', link: '/guide/error-codes' },
           { text: 'Publishing docs', link: '/guide/publishing-docs' },
           { text: 'Implementation status', link: '/guide/status' },
+          { text: 'In-room controls', link: '/guide/in-room-controls' },
           { text: 'Contributing', link: '/guide/contributing' },
         ],
       },

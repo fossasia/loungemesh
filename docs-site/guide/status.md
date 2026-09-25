@@ -22,6 +22,9 @@ This page is a living snapshot of what is built, what is in progress, and what i
 | Chat panel | ✅ Complete |
 | Stage / screenshare support | ✅ Complete |
 | Mute/unmute controls | ✅ Complete |
+| In-session camera / mic / speaker picker | ✅ Complete |
+| Megaphone (speak to everyone in the room) | ✅ Complete |
+| Sphere grid view of people in hearing range | ✅ Complete |
 | Session prefix (`secureConferenceName`) | ✅ Complete |
 | `sessionConnectionWatch` lifecycle | ✅ Complete |
 | 100% Vitest coverage (lines/statements/functions/branches) | ✅ 268 tests |

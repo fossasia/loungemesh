@@ -58,7 +58,10 @@ export interface MediaService {
   disconnect(): void;
   joinRoom(room: string, displayName: string, conferenceOptions: Record<string, unknown>): Promise<void>;
   leaveRoom(): void;
-  createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<MediaTrackHandle[]>;
+  createLocalTracks(
+    devices: ('audio' | 'video' | 'desktop')[],
+    deviceIds?: { audioDeviceId?: string; videoDeviceId?: string },
+  ): Promise<MediaTrackHandle[]>;
   addLocalTrack(track: MediaTrackHandle): Promise<void>;
   removeLocalTrack?(track: MediaTrackHandle): Promise<void>;
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;

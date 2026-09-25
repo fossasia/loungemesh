@@ -103,6 +103,9 @@ export interface JitsiMeetJS {
   createLocalTracks(options: {
     devices: ('audio' | 'video' | 'desktop')[];
     firePermissionPromptIsShownEvent?: boolean;
+    micDeviceId?: string;
+    cameraDeviceId?: string;
+    constraints?: Record<string, unknown>;
   }): Promise<JitsiTrack[]>;
 }
 

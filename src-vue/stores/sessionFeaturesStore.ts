@@ -69,6 +69,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     localLobbyPending: false,
     lobbyRejected: false,
     handRaised: false,
+    megaphone: false,
+    gridView: false,
     userReactions: {} as Record<string, UserReaction>,
     activePoll: null as ActivePoll | null,
     myPollVote: '',

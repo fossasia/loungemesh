@@ -171,6 +171,17 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
+  it('shows megaphone styling when speaking to all', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('local-1');
+    features.megaphone = true;
+    const { wrapper } = await mountWithApp(LocalUser);
+    expect(wrapper.find('.videoContainer.megaphone').exists()).toBe(true);
+    expect(wrapper.find('.megaphoneBadge').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('detaches the previous camera track when the track changes', async () => {
     const local = useLocalStore();
     local.setMyID('local-1');

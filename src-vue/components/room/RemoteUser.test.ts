@@ -139,4 +139,24 @@ describe('RemoteUser', () => {
 
     wrapper.unmount();
   });
+
+  it('enlarges a megaphone speaker and keeps them audible outside the sphere', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.pos = { x: 0, y: 0 };
+    conference.addUser('loud', { _displayName: 'Loud' } as never);
+    const u = conference.users.loud;
+    u.pos = { x: 1000, y: 0 };
+    u.video = makeTrack('video');
+    u.speaking = true;
+    u.mute = false;
+    u.properties = { megaphone: true };
+    features.stageOccupantId = 'someone-else';
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'loud' } });
+    expect(wrapper.find('.videoContainer.megaphone').exists()).toBe(true);
+    expect(wrapper.find('.megaphoneBadge').exists()).toBe(true);
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

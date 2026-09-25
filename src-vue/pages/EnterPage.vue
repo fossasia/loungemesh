@@ -15,6 +15,7 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
 import { joinFromEnterPage } from '@/utils/enterPageJoin';
 import AppIcon from '@/components/ui/AppIcon.vue';
+import DeviceSettingsButton from '@/components/footer/DeviceSettingsButton.vue';
 import { playUiSound } from '@/utils/uiSounds';
 
 const props = defineProps<{ id: string }>();
@@ -84,6 +85,7 @@ onBeforeUnmount(() => {
         <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
+    <DeviceSettingsButton />
     <button type="button" class="btn-primary-round" @click="join">
       <AppIcon name="arrow-right" class="join-ico" />
       Join

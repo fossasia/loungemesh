@@ -6,6 +6,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+import { applyParticipantMegaphone } from '@/utils/sessionMegaphone';
 import { pollActivityChanged } from '@/utils/sessionPoll';
 import { playUiSound } from '@/utils/uiSounds';
 import {
@@ -116,6 +117,12 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       const data = parse<{ id?: string; raised?: boolean }>(payload);
       if (!data?.id || typeof data.raised !== 'boolean') break;
       applyParticipantHandRaised(data.id, data.raised, { notify: true });
+      break;
+    }
+    case 'megaphone': {
+      const data = parse<{ id?: string; on?: boolean }>(payload);
+      if (!data?.id || typeof data.on !== 'boolean') break;
+      applyParticipantMegaphone(data.id, data.on);
       break;
     }
     case 'poll': {

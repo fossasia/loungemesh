@@ -13,6 +13,8 @@ import AppHeader from '@/components/layout/AppHeader.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
+import DeviceSettingsButton from '@/components/footer/DeviceSettingsButton.vue';
+import SphereGridOverlay from '@/components/room/SphereGridOverlay.vue';
 import SharedScreens from '@/components/screenshare/SharedScreens.vue';
 import { demoteFromStage, applyStagePromote, broadcastStageLayout } from '@/utils/sessionStage';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
@@ -193,6 +195,7 @@ onBeforeUnmount(() => {
       <LocalUser />
     </Room>
   </PanWrapper>
+  <SphereGridOverlay v-if="features.gridView" />
   <SharedScreens v-if="!features.isStageModeActive" />
   <SessionFeaturePanels />
   <WhiteboardOverlay
@@ -304,6 +307,7 @@ onBeforeUnmount(() => {
         <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
+    <DeviceSettingsButton />
     <ScreenshareButton />
     <IconButton
       v-if="features.stageInvitationPending || features.isLocalStageOccupant"

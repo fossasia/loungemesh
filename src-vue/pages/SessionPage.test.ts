@@ -135,6 +135,7 @@ const sessionStubs = {
   LobbyOverlay: { template: '<div />' },
   ChatPanel: { template: '<div class="chat-stub" />' },
   WhiteboardOverlay: { template: '<div />' },
+  SphereGridOverlay: { template: '<div class="sphere-grid-stub" />' },
 };
 
 describe('SessionPage', () => {
@@ -142,6 +143,19 @@ describe('SessionPage', () => {
 
   afterEach(async () => {
     await flushPromises();
+  });
+
+  it('shows the sphere grid overlay when grid view is on', async () => {
+    const features = useSessionFeaturesStore();
+    features.gridView = true;
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('.sphere-grid-stub').exists()).toBe(true);
+    wrapper.unmount();
   });
 
   it('hides shared screens while stage mode is active', async () => {
