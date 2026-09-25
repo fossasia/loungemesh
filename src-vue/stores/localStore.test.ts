@@ -8,7 +8,9 @@ import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 
 describe('localStore', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     setActivePinia(createPinia());
+    localStorage.removeItem('loungemesh.mediaDevices');
   });
 
   it('expands room bounds when users move far from the center', () => {
@@ -644,5 +646,150 @@ describe('localStore', () => {
     store.onStage = true;
     store.calculateUsersOnScreen();
     el.remove();
+  });
+
+  it('switchAudioInput persists prefs and skips when muted', async () => {
+    const store = useLocalStore();
+    store.mute = true;
+    store.audio = undefined;
+    await store.switchAudioInput('mic-9');
+    const { loadMediaDevicePrefs } = await import('@/utils/mediaDevicePrefs');
+    expect(loadMediaDevicePrefs().audioinput).toBe('mic-9');
+  });
+
+  it('switchAudioInput replaces a live track while joined', async () => {
+    const old = { getType: () => 'audio', dispose: vi.fn() };
+    const created = { getType: () => 'audio', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    const replace = vi.spyOn(engine, 'replaceLocalTrack').mockResolvedValue(undefined);
+    const store = useLocalStore();
+    store.audio = old as never;
+    store.mute = false;
+    await store.switchAudioInput('mic-2');
+    expect(replace).toHaveBeenCalledWith(old, created);
+    expect(store.audio).toBeTruthy();
+    expect(store.mute).toBe(false);
+  });
+
+  it('switchAudioInput disposes the new track when replace fails', async () => {
+    const old = { getType: () => 'audio', dispose: vi.fn() };
+    const created = { getType: () => 'audio', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    vi.spyOn(engine, 'replaceLocalTrack').mockRejectedValue(new Error('busy'));
+    const store = useLocalStore();
+    store.audio = old as never;
+    store.mute = false;
+    await store.switchAudioInput('mic-3');
+    expect(created.dispose).toHaveBeenCalled();
+    expect(toRaw(store.audio)).toBe(old);
+  });
+
+  it('switchAudioInput swaps preview tracks when not joined', async () => {
+    const old = { getType: () => 'audio', dispose: vi.fn() };
+    const created = { getType: () => 'audio', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    const store = useLocalStore();
+    store.audio = old as never;
+    store.mute = false;
+    await store.switchAudioInput('mic-4');
+    expect(store.audio).toBeTruthy();
+    expect(old.dispose).toHaveBeenCalled();
+  });
+
+  it('switchAudioInput no-ops on empty create and records errors', async () => {
+    const old = { getType: () => 'audio', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    const create = vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([]);
+    const store = useLocalStore();
+    store.audio = old as never;
+    store.mute = false;
+    await store.switchAudioInput('mic-5');
+    expect(toRaw(store.audio)).toBe(old);
+    create.mockRejectedValue(new Error('denied'));
+    await store.switchAudioInput('mic-6');
+    expect(store.audioError).toBe(true);
+  });
+
+  it('switchVideoInput persists prefs and skips when camera is off', async () => {
+    const store = useLocalStore();
+    store.cameraOff = true;
+    store.video = undefined;
+    await store.switchVideoInput('cam-9');
+    const { loadMediaDevicePrefs } = await import('@/utils/mediaDevicePrefs');
+    expect(loadMediaDevicePrefs().videoinput).toBe('cam-9');
+  });
+
+  it('switchVideoInput replaces a live camera while joined', async () => {
+    const old = { getType: () => 'video', dispose: vi.fn() };
+    const created = { getType: () => 'video', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    const replace = vi.spyOn(engine, 'replaceLocalTrack').mockResolvedValue(undefined);
+    const store = useLocalStore();
+    store.video = old as never;
+    store.cameraOff = false;
+    await store.switchVideoInput('cam-2');
+    expect(replace).toHaveBeenCalledWith(old, created);
+    expect(store.video).toBeTruthy();
+    expect(store.cameraOff).toBe(false);
+  });
+
+  it('switchVideoInput disposes the new track when replace fails', async () => {
+    const old = { getType: () => 'video', dispose: vi.fn() };
+    const created = { getType: () => 'video', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    vi.spyOn(engine, 'replaceLocalTrack').mockRejectedValue(new Error('busy'));
+    const store = useLocalStore();
+    store.video = old as never;
+    store.cameraOff = false;
+    await store.switchVideoInput('cam-3');
+    expect(created.dispose).toHaveBeenCalled();
+    expect(toRaw(store.video)).toBe(old);
+  });
+
+  it('switchVideoInput swaps preview tracks when not joined', async () => {
+    const old = { getType: () => 'video', dispose: vi.fn() };
+    const created = { getType: () => 'video', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    const store = useLocalStore();
+    store.video = old as never;
+    store.cameraOff = false;
+    await store.switchVideoInput('cam-4');
+    expect(store.video).toBeTruthy();
+    expect(old.dispose).toHaveBeenCalled();
+  });
+
+  it('switchVideoInput no-ops on empty create and records errors', async () => {
+    const old = { getType: () => 'video', dispose: vi.fn() };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    const create = vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([]);
+    const store = useLocalStore();
+    store.video = old as never;
+    store.cameraOff = false;
+    await store.switchVideoInput('cam-5');
+    expect(toRaw(store.video)).toBe(old);
+    create.mockRejectedValue(new Error('denied'));
+    await store.switchVideoInput('cam-6');
+    expect(store.videoError).toBe(true);
+  });
+
+  it('switchAudioOutput persists the sink id', async () => {
+    const store = useLocalStore();
+    await store.switchAudioOutput('spk-1');
+    const { loadMediaDevicePrefs } = await import('@/utils/mediaDevicePrefs');
+    expect(loadMediaDevicePrefs().audiooutput).toBe('spk-1');
   });
 });

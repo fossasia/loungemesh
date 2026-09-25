@@ -36,6 +36,9 @@ import { mediaDebug } from '@/utils/mediaDebug';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { useConferenceStore } from './conferenceStore';
 import { useSessionFeaturesStore } from './sessionFeaturesStore';
+import { saveMediaDevicePrefs } from '@/utils/mediaDevicePrefs';
+import { createPreferredLocalTracks } from '@/utils/createPreferredLocalTracks';
+import { applyAudioOutput } from '@/utils/applyAudioOutput';
 
 function uniqueTracks(tracks: Array<JitsiTrack | undefined>): JitsiTrack[] {
   return [...new Set(tracks.filter(Boolean) as JitsiTrack[])];
@@ -251,7 +254,7 @@ export const useLocalStore = defineStore('local', {
         return;
       }
       try {
-        const tracks = await engine.createLocalTracks(['audio']);
+        const tracks = await createPreferredLocalTracks(engine, ['audio']);
         const created = tracks.find((t) => t.getType() === 'audio');
         if (!created) return;
         const conf = engine.getConference();
@@ -315,7 +318,7 @@ export const useLocalStore = defineStore('local', {
         return;
       }
       try {
-        const tracks = await engine.createLocalTracks(['video']);
+        const tracks = await createPreferredLocalTracks(engine, ['video']);
         const created = tracks.find((t) => t.getType() === 'video');
         if (!created) return;
         const conf = engine.getConference();
@@ -353,6 +356,62 @@ export const useLocalStore = defineStore('local', {
       await waitForMediaElementDetach();
       await releaseLocalMediaTracks(tracksToRelease, conf);
       stopMediaStreamTracks(rawTracks);
+    },
+    async switchAudioInput(deviceId: string) {
+      saveMediaDevicePrefs({ audioinput: deviceId });
+      if (!this.audio || this.mute) return;
+      const engine = getMediaEngineInstance();
+      try {
+        const tracks = await engine.createLocalTracks(['audio'], { audioDeviceId: deviceId });
+        const created = tracks.find((t) => t.getType() === 'audio');
+        if (!created) return;
+        const old = this.audio;
+        if (engine.isJoined()) {
+          try {
+            await engine.replaceLocalTrack(old, created);
+          } catch {
+            disposeJitsiTrack(created);
+            return;
+          }
+        }
+        disposeJitsiTrack(old);
+        this.audio = markRaw(created);
+        this.mute = false;
+        this.audioError = false;
+        engine.refreshRemoteAudio?.();
+      } catch {
+        this.audioError = true;
+      }
+    },
+    async switchVideoInput(deviceId: string) {
+      saveMediaDevicePrefs({ videoinput: deviceId });
+      if (!this.video || this.cameraOff) return;
+      const engine = getMediaEngineInstance();
+      try {
+        const tracks = await engine.createLocalTracks(['video'], { videoDeviceId: deviceId });
+        const created = tracks.find((t) => t.getType() === 'video');
+        if (!created) return;
+        const old = this.video;
+        if (engine.isJoined()) {
+          try {
+            await engine.replaceLocalTrack(old, created);
+          } catch {
+            disposeJitsiTrack(created);
+            return;
+          }
+        }
+        disposeJitsiTrack(old);
+        this.video = markRaw(created);
+        this.videoType = 'camera';
+        this.cameraOff = false;
+        this.videoError = false;
+      } catch {
+        this.videoError = true;
+      }
+    },
+    async switchAudioOutput(deviceId: string) {
+      saveMediaDevicePrefs({ audiooutput: deviceId });
+      await applyAudioOutput(deviceId);
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();
