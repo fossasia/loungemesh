@@ -45,7 +45,7 @@
     "@ffmpeg/util": "^0.12.2",
     "@lucide/vue": "^1.16.0",
     "@tiptap/extension-collaboration": "^3.25.0",
-    "@tiptap/extension-placeholder": "^3.25.0",
+    "@tiptap/extension-placeholder": "^3.27.4",
     "@tiptap/pm": "^3.25.0",
     "@tiptap/starter-kit": "^3.25.0",
     "@tiptap/vue-3": "^3.25.0",
