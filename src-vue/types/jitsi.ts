@@ -15,6 +15,11 @@ export interface JitsiTrack {
   id: string;
   getId(): string;
   getTrack(): MediaStreamTrack;
+  /**
+   * Multi-stream source name (`<endpointId>-v0` for camera, `-v1` for a screen
+   * share). Required to address a specific source in receiver constraints.
+   */
+  getSourceName?(): string;
 }
 
 export interface ReceiverConstraints {
@@ -81,6 +86,9 @@ export interface JitsiMeetJSEvents {
     CONFERENCE_JOINED: string;
     CONFERENCE_FAILED: string;
     CONFERENCE_ERROR: string;
+    /** Bridge channel lost / regained without the conference itself failing. */
+    CONNECTION_INTERRUPTED?: string;
+    CONNECTION_RESTORED?: string;
     TRACK_ADDED: string;
     TRACK_MUTE_CHANGED: string;
     TRACK_REMOVED: string;

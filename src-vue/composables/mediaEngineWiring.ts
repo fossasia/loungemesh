@@ -84,6 +84,17 @@ export function wireStoreSync(engine: MediaService): void {
       isJoining: false,
     });
   });
+  engine.on('connectionInterrupted', () => {
+    mediaDebug('wiring', 'connectionInterrupted', {});
+    conferenceStore.setConnectionInterrupted(true);
+  });
+  engine.on('connectionRestored', () => {
+    mediaDebug('wiring', 'connectionRestored', {});
+    conferenceStore.setConnectionInterrupted(false);
+    // The bridge forgets receiver constraints across the drop, so remote tiles
+    // stay black on reconnect unless we ask for the sources again.
+    scheduleReceiverRefresh();
+  });
   engine.on('userJoined', (id, user) => {
     conferenceStore.addUser(id, user);
     const props = sanitizeParticipantProperties(

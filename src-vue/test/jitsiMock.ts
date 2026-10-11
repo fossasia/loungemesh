@@ -92,6 +92,8 @@ export function installJitsiMock(): JitsiMockHandles {
       MESSAGE_RECEIVED: 'conference.messageReceived',
       PARTICIPANT_PROPERTY_CHANGED: 'conference.participantPropertyChanged',
       DISPLAY_NAME_CHANGED: 'conference.displayNameChanged',
+      CONNECTION_INTERRUPTED: 'conference.connectionInterrupted',
+      CONNECTION_RESTORED: 'conference.connectionRestored',
     },
   };
 
