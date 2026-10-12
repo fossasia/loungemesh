@@ -82,6 +82,7 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
   const supported = isRecordingSupported();
 
   let recorder: MediaRecorder | undefined;
+  let pendingStop: Promise<Blob | null> | undefined;
   let recordedMimeType: string | undefined;
   let chunks: Blob[] = [];
   let rafId: number | undefined;
@@ -268,7 +269,7 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
   }
 
   function start(quality: '720p' | '480p' = '720p'): boolean {
-    if (!supported || isRecording.value) return false;
+    if (!supported || isRecording.value || pendingStop) return false;
     const Recorder = getMediaRecorder();
     if (!Recorder) return false;
     let stream: MediaStream | null = null;
@@ -314,12 +315,10 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
   }
 
   function stop(): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      if (!recorder || !isRecording.value) {
-        resolve(null);
-        return;
-      }
-      const active = recorder;
+    if (pendingStop) return pendingStop;
+    const active = recorder;
+    if (!active || !isRecording.value) return Promise.resolve(null);
+    pendingStop = new Promise<Blob | null>((resolve) => {
       active.onstop = () => {
         cleanup();
         isRecording.value = false;
@@ -342,7 +341,10 @@ export function useSessionRecorder(sources: SessionRecorderSources): SessionReco
         isRecording.value = false;
         resolve(null);
       }
+    }).finally(() => {
+      pendingStop = undefined;
     });
+    return pendingStop;
   }
 
   return { isSupported: supported, isRecording, start, stop };
