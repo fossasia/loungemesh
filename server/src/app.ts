@@ -15,6 +15,9 @@ dotenv.config();
 
 const app = express();
 
+// Trust reverse proxies (Caddy, Nginx, Cloudflare) for accurate client IP, protocol, and secure cookie handling
+app.set('trust proxy', 1);
+
 // Configure CORS for local development and production
 const extraOrigins = (process.env.ALLOWED_OAUTH_ORIGINS || '')
   .split(',')
@@ -60,6 +63,7 @@ app.use(
   cors((req: any, callback) => {
     const origin = req.headers.origin;
     const host = req.headers.host;
+    const forwardedHost = (req.headers['x-forwarded-host'] as string)?.split(',')[0]?.trim();
 
     let isAllowed = false;
     if (!origin) {
@@ -70,7 +74,7 @@ app.use(
       } else {
         try {
           const originHost = new URL(origin).host;
-          if (host && originHost === host) {
+          if ((host && originHost === host) || (forwardedHost && originHost === forwardedHost)) {
             isAllowed = true;
           }
         } catch (err) {}

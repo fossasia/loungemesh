@@ -586,8 +586,8 @@ cmd_deploy() {
   echo "==> Pulling latest Jitsi images"
   docker compose pull
 
-  echo "==> Building LoungeMesh SPA (VITE_* vars are baked into the image)"
-  docker compose build --pull --no-cache loungemesh
+  echo "==> Building LoungeMesh SPA and backend server (VITE_* vars baked into SPA image)"
+  docker compose build --pull --no-cache loungemesh server
 
   # --force-recreate with NO service list restarts EVERY container so each one
   # picks up the fresh .env values and the rebuilt image. Docker Compose resolves
