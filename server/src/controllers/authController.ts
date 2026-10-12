@@ -5,7 +5,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../config/db.js';
 import { redisClient } from '../config/redis.js';
 import { encryptToken } from '../utils/crypto.js';
-import { cookieOptions, publicUrl } from '../config/deploy.js';
+import { cookieOptions } from '../config/deploy.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-jwt-secret-for-dev';
 const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -15,17 +15,24 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 function getBaseUri(req: Request): string {
-  const configured = publicUrl(req);
-  if (configured && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
-    return configured;
+  const allowedOriginsEnv = process.env.ALLOWED_OAUTH_ORIGINS || 'http://localhost:8780,https://loungemesh.com,https://www.loungemesh.com';
+  const allowedOrigins = allowedOriginsEnv.split(',').map(o => o.trim()).filter(Boolean);
+
+  const loungeUrl = (process.env.LOUNGEMESH_PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (loungeUrl) {
+    return loungeUrl;
   }
+
   const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
   const host = req.headers.host || 'localhost:8780';
   const origin = `${proto}://${host}`;
-  const allowedOriginsEnv = process.env.ALLOWED_OAUTH_ORIGINS || 'http://localhost:8780,https://loungemesh.com,https://www.loungemesh.com';
-  const allowedOrigins = allowedOriginsEnv.split(',').map(o => o.trim());
-  const isValid = allowedOrigins.includes(origin) || allowedOrigins.includes(`${proto}://${host.split(':')[0]}`);
-  return isValid ? origin : (allowedOrigins[0] || configured || 'http://localhost:8780');
+  const originNoPort = `${proto}://${host.split(':')[0]}`;
+
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes(originNoPort)) {
+    return origin;
+  }
+
+  return allowedOrigins[0] || origin || 'http://localhost:8780';
 }
 
 function getGoogleClient(req: Request): OAuth2Client {

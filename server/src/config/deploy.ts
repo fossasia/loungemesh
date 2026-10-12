@@ -2,7 +2,7 @@ import type { CookieOptions, Request } from 'express';
 
 /** Public base URL of this LoungeMesh deployment (e.g. https://lounge.example.com). */
 export function publicUrl(req?: Request): string {
-  const configured = (process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
+  const configured = (process.env.LOUNGEMESH_PUBLIC_URL || process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
   if (configured) return configured;
   const proto = (req?.headers['x-forwarded-proto'] as string) || req?.protocol || 'http';
   const host = req?.headers.host || 'localhost:8780';

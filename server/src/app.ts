@@ -24,6 +24,12 @@ const extraOrigins = (process.env.ALLOWED_OAUTH_ORIGINS || '')
   .map(o => o.trim())
   .filter(Boolean);
 
+const configuredPublicOrigins = [
+  process.env.LOUNGEMESH_PUBLIC_URL,
+]
+  .filter(Boolean)
+  .map(o => (o as string).trim().replace(/\/$/, ''));
+
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -33,6 +39,7 @@ const allowedOrigins = [
   'http://127.0.0.1:8000',
   'http://localhost:8880',
   'https://eventyay.com',
+  ...configuredPublicOrigins,
   ...extraOrigins,
 ];
 
@@ -62,23 +69,12 @@ export function isOriginAllowed(origin: string, extraList: string[] = allowedOri
 app.use(
   cors((req: any, callback) => {
     const origin = req.headers.origin;
-    const host = req.headers.host;
-    const forwardedHost = (req.headers['x-forwarded-host'] as string)?.split(',')[0]?.trim();
 
     let isAllowed = false;
     if (!origin) {
       isAllowed = true;
     } else {
-      if (isOriginAllowed(origin)) {
-        isAllowed = true;
-      } else {
-        try {
-          const originHost = new URL(origin).host;
-          if ((host && originHost === host) || (forwardedHost && originHost === forwardedHost)) {
-            isAllowed = true;
-          }
-        } catch (err) {}
-      }
+      isAllowed = isOriginAllowed(origin);
     }
 
     if (isAllowed) {

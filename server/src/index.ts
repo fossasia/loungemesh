@@ -13,21 +13,18 @@ async function bootstrap() {
       await prisma.$connect();
       console.log('Database connected successfully.');
 
-      // In production or containerized environments, ensure migrations are deployed
+      // In production or when AUTO_MIGRATE=true, ensure migrations are deployed
       if (process.env.AUTO_MIGRATE === 'true' || process.env.NODE_ENV === 'production') {
         console.log('Running prisma migrate deploy...');
-        try {
-          const { stdout, stderr } = await execAsync('npx prisma migrate deploy', {
-            timeout: 30000,
-          });
-          if (stdout) console.log(stdout.trim());
-          if (stderr) console.error(stderr.trim());
-        } catch (migErr: any) {
-          console.warn('Auto-migration notice (or already applied):', migErr?.message || migErr);
-        }
+        const { stdout, stderr } = await execAsync('npx prisma migrate deploy', {
+          timeout: 30000,
+        });
+        if (stdout) console.log(stdout.trim());
+        if (stderr) console.error(stderr.trim());
       }
     } catch (dbErr) {
-      console.error('Database connection failed during bootstrap:', dbErr);
+      console.error('Fatal: Database setup or migration deployment failed during bootstrap:', dbErr);
+      process.exit(1);
     }
   }
 
