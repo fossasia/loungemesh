@@ -197,6 +197,20 @@ export const useLocalStore = defineStore('local', {
       const users = useConferenceStore().users;
       const visibleUserIds: string[] = [];
       const features = useSessionFeaturesStore();
+      if (features.isLobbyBlocked) {
+        this.visibleUsers = [];
+        this.usersOnStage = [];
+        if (conferenceOptions.openBridgeChannel) {
+          const constraints = buildReceiverConstraints({
+            localId: this.id,
+            remoteUserIds: Object.keys(users).filter((id) => id && id !== this.id),
+            visibleUserIds: [],
+            stageIds: [],
+          });
+          if (constraints) engine.setReceiverConstraints(constraints);
+        }
+        return;
+      }
       const stageOccupantId = features.stageOccupantId;
 
       document.querySelectorAll('.userContainer').forEach((el) => {

@@ -40,6 +40,7 @@ export function installJitsiMock(): JitsiMockHandles {
     ]),
     setDisplayName: vi.fn(),
     sendTextMessage: vi.fn(),
+    sendMessage: vi.fn(),
     sendCommand: vi.fn(),
     removeCommand: vi.fn(),
     addCommandListener: vi.fn((name: string, handler: Handler) => {

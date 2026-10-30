@@ -15,6 +15,19 @@ describe('SharedScreens', () => {
     setActivePinia(createPinia());
   });
 
+  it('hides screenshares while the local person is waiting in the lobby', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.id = 'waiting';
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    local.screenshare = makeTrack('desktop');
+
+    const { wrapper } = await mountWithApp(SharedScreens);
+    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('renders nothing when no screenshares are active', async () => {
     const { wrapper } = await mountWithApp(SharedScreens);
     expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);

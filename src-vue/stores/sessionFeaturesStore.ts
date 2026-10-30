@@ -114,6 +114,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     userGrants: {} as Record<string, Partial<UserGrants>>,
     panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'participants' | 'notes' | 'whiteboard' | 'chat',
     pendingHostClaim: false,
+    hostEmail: '',
     notesActivitySeq: 0,
     notesSeenSeq: 0,
     whiteboardActivitySeq: 0,
@@ -156,15 +157,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (this.isVerifiedHost) return true;
       if (this.eventyayMeet) return false;
       const local = useLocalStore();
-      if (!local.id) return false;
-      if (this.isFetchingConfig) {
-        return false;
-      }
-      if (this.meetingExists) {
-        return this.hostId === local.id;
-      }
-      if (!this.hostId) return true;
-      return this.hostId === local.id;
+      if (!local.id || this.isFetchingConfig) return false;
+      return !!this.hostId && this.hostId === local.id;
     },
     isModerator(): boolean {
       if (this.isVerifiedHost || this.isVerifiedModerator) return true;
@@ -551,7 +545,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       /* v8 ignore stop */
     },
     setUserGrant(userId: string, key: FeatureKey, value: boolean) {
-      const current = this.grantsForUser(userId);
+      const current = this.userGrants[userId] ?? {};
       this.userGrants[userId] = { ...current, [key]: value };
       /* v8 ignore start */
       const roomName = window.location.pathname.split('/').pop();
@@ -572,9 +566,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (data.defaults) {
         this.roomDefaults = mergeGrants(this.roomDefaults, data.defaults);
       }
-      if (data.userId && data.grants) {
-        const base = this.grantsForUser(data.userId);
-        this.userGrants[data.userId] = mergeGrants(base, data.grants);
+      if (data.userId && data.grants && Object.keys(data.grants).length > 0) {
+        const current = this.userGrants[data.userId] ?? {};
+        this.userGrants[data.userId] = { ...current, ...data.grants };
       }
     },
     bumpNotesActivity() {
@@ -669,6 +663,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         return;
       }
       this.hostId = '';
+      this.hostEmail = '';
+      this.lobbyEnabled = true;
       this.pendingHostClaim = true;
       this.isFetchingConfig = false;
       this.meetingExists = false;
@@ -687,6 +683,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.isVerifiedModerator = false;
       this.allowParticipantRecording = false;
       this.hostId = '';
+      this.hostEmail = '';
+      this.lobbyEnabled = true;
       this.panel = '';
       this.localLobbyPending = false;
       this.lobbyWaiting = [];
@@ -790,6 +788,23 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     setAllowParticipantRecording(value: boolean) {
       this.allowParticipantRecording = value;
     },
+    announceLobbyPresence(engine: any) {
+      const local = useLocalStore();
+      if (!this.lobbyEnabled || !local.id || this.isLobbyBlocked) return;
+      engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: local.id }));
+    },
+    resendSessionIdentity(engine: any) {
+      this.announceLobbyPresence(engine);
+      if (!this.isVerifiedHost || this.eventyayMeet) return;
+      const local = useLocalStore();
+      if (!local.id) return;
+      const auth = useAuthStore();
+      engine.sendCommand('host', JSON.stringify({
+        hostId: local.id,
+        email: auth.user?.email || this.hostEmail,
+        at: Date.now(),
+      }));
+    },
     syncConfig(engine: any) {
       engine.sendCommand('config', JSON.stringify({
         allowParticipantRecording: this.allowParticipantRecording,
@@ -802,9 +817,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       const id = local.id;
       if (!id) return;
 
-      const isHost = this.isVerifiedHost || (!this.eventyayMeet && !this.meetingExists && !this.hostId);
-
-      if (isHost) {
+      if (this.isVerifiedHost && !this.eventyayMeet) {
         this.hostId = id;
         this.pendingHostClaim = false;
 
@@ -813,7 +826,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           if (savedDefaults) {
             try {
               const parsed = JSON.parse(savedDefaults);
-              this.lobbyEnabled = parsed.lobbyEnabled ?? false;
+              this.lobbyEnabled = parsed.lobbyEnabled ?? true;
               this.stagePromotionEnabled = parsed.stagePromotionEnabled ?? true;
               this.allowParticipantRecording = parsed.allowParticipantRecording ?? false;
               if (parsed.roomDefaults) {
@@ -831,7 +844,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           }
         }
 
-        engine.sendCommand('host', JSON.stringify({ hostId: id }));
+        const auth = useAuthStore();
+        const email = auth.user?.email || this.hostEmail;
+        engine.sendCommand('host', JSON.stringify({ hostId: id, email }));
         engine.sendCommand('access', JSON.stringify({ defaults: this.roomDefaults }));
         engine.sendCommand('lobby', JSON.stringify({ enabled: this.lobbyEnabled }));
         engine.sendCommand('stage', JSON.stringify({ action: 'settings', stagePromotionEnabled: this.stagePromotionEnabled }));
@@ -864,6 +879,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
               if (data.role.hostId) {
                 this.hostId = data.role.hostId;
               }
+              this.hostEmail = data.role.hostEmail || '';
               this.meetingExists = !!data.role.hostId;
               if (data.config) {
                 this.allowParticipantRecording = !!data.config.allowParticipantRecording;
@@ -917,6 +933,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
             if (data.hostId) {
               this.hostId = data.hostId;
             }
+            this.hostEmail = data.hostEmail || '';
           }
           if (configRes.ok) {
             this.meetingExists = true;
@@ -964,6 +981,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         const conferenceStore = useConferenceStore();
         if (engine && conferenceStore.isJoined) {
           this.syncOrClaimHostOnLoaded(engine);
+          this.resendSessionIdentity(engine);
           this.setupYjsSync(engine);
           if (Object.keys(conferenceStore.users).length > 0) {
             engine.sendCommand('notes', JSON.stringify({ action: 'yjs_request' }));

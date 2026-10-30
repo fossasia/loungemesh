@@ -1,6 +1,6 @@
 # LoungeMesh Backend API Server
 
-The LoungeMesh backend is built with Node.js, TypeScript, Express, Prisma ORM, PostgreSQL database, and Redis cache. It provides user management, authentication, scheduled call management, Google Calendar syncing, rate-limiting, and persistent state management for whiteboard drawing, session notes, active polls, and room permission settings.
+The LoungeMesh backend is built with Node.js, TypeScript, Express, Prisma ORM, PostgreSQL database, and Redis cache. It provides user management, authentication, scheduled call management, Google Calendar syncing, rate-limiting, and persistent state management for whiteboard drawing, session notes, active polls, and room permission settings. Live updates between people in the room are delivered by the browser over Jitsi (JSON messages for notes, whiteboard, chat, reactions, and polls). This API stores the durable copy that a joining participant loads.
 
 ---
 

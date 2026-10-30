@@ -20,6 +20,7 @@ const showLocalPreview = ref(false);
 const screenshares = computed(() => {
   // Access usersEpoch to reactivity trigger on remote user updates
   conference.usersEpoch;
+  if (features.isLobbyBlocked) return [];
   const list = [];
 
   if (local.screenshare) {

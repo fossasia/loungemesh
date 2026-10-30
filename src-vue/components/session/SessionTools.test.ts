@@ -68,11 +68,12 @@ describe('SessionTools', () => {
     wrapper.unmount();
   });
 
-  it('shows notes and whiteboard for host while alone before host sync', async () => {
+  it('shows notes and whiteboard for the verified host', async () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('solo-host');
     features.resetHostForJoin();
+    features.isVerifiedHost = true;
     const { wrapper } = await mountWithApp(SessionTools);
     expect(wrapper.find('[aria-label="Shared notes"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Whiteboard"]').exists()).toBe(true);

@@ -113,6 +113,7 @@ export async function exchangeGrant(req: Request, res: Response) {
           configs: {
             create: {
               roomDefaults: JSON.stringify({ notes: false, whiteboard: false, poll: false, moderator: false }),
+              lobbyEnabled: false,
               joinPin: grant.pin ? String(grant.pin).trim() : null,
             },
           },
@@ -252,7 +253,7 @@ export async function upsertMeet(req: Request, res: Response) {
         joinPin: joinPin ?? null,
         eventyayEventSlug: event,
         eventyayRoomId: room,
-        configs: { create: { roomDefaults: JSON.stringify({ notes: false, whiteboard: false, poll: false, moderator: false }), joinPin: joinPin ?? null } },
+        configs: { create: { roomDefaults: JSON.stringify({ notes: false, whiteboard: false, poll: false, moderator: false }), lobbyEnabled: false, joinPin: joinPin ?? null } },
       },
     });
     return res.status(existing ? 200 : 201).json({

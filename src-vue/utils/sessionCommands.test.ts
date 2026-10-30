@@ -5,6 +5,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { encodeNotesForWire } from './notesSync';
+import { encodeChatWireText } from './chatWireFormat';
 import { handleSessionCommand } from './sessionCommands';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 
@@ -28,7 +29,10 @@ describe('handleSessionCommand', () => {
     handleSessionCommand('name', { value: JSON.stringify({ id: 'u1', name: 'Renamed' }) });
     expect(conference.users.u1.user?._displayName).toBe('Renamed');
 
-    handleSessionCommand('host', { value: JSON.stringify({ hostId: 'host1' }) });
+    features.hostEmail = 'host@example.com';
+    handleSessionCommand('host', {
+      value: JSON.stringify({ hostId: 'host1', email: 'host@example.com' }),
+    });
     expect(features.hostId).toBe('host1');
 
     handleSessionCommand('react', { value: JSON.stringify({ id: 'u1', emoji: '👍' }) });
@@ -241,6 +245,33 @@ describe('handleSessionCommand', () => {
     );
     expect(features.grantsForUser('u2').poll).toBe(true);
     handleSessionCommand('access', { value: 'bad' });
+  });
+
+  it('delivers live chat posts once per message id', () => {
+    const conference = useConferenceStore();
+    const wire = encodeChatWireText('post-1', 'hello room');
+    handleSessionCommand('chat', { value: JSON.stringify({ action: 'post', text: wire }) });
+    expect(conference.messages).toHaveLength(0);
+    handleSessionCommand('chat', { value: JSON.stringify({ action: 'post' }) }, 'peer');
+    expect(conference.messages).toHaveLength(0);
+    handleSessionCommand(
+      'chat',
+      { value: JSON.stringify({ action: 'post', text: wire, nr: 4 }) },
+      'peer',
+    );
+    handleSessionCommand(
+      'chat',
+      { value: JSON.stringify({ action: 'post', text: wire, nr: 4 }) },
+      'peer',
+    );
+    expect(conference.messages).toHaveLength(1);
+    expect(conference.messages[0]).toMatchObject({ id: 'peer', text: 'hello room', nr: 4, messageId: 'post-1' });
+    handleSessionCommand(
+      'chat',
+      { value: JSON.stringify({ action: 'post', text: encodeChatWireText('post-2', 'no nr') }) },
+      'peer',
+    );
+    expect(conference.messages[1]).toMatchObject({ text: 'no nr', nr: -1 });
   });
 
   it('ignores incomplete chat edit payloads', () => {
@@ -646,6 +677,34 @@ describe('handleSessionCommand', () => {
     expect(features.lobbyRejected).toBe(true);
   });
 
+  it('lets the knocker cancel and ignores a deny from someone who is not host or moderator', () => {
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    features.hostId = 'host';
+    features.addLobbyWaiter({ id: 'guest', name: 'Guest' });
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'cancel', id: 'guest' }) }, 'other');
+    expect(features.lobbyWaiting).toHaveLength(1);
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'cancel', id: 'guest' }) }, 'guest');
+    expect(features.lobbyWaiting).toHaveLength(0);
+
+    features.addLobbyWaiter({ id: 'guest', name: 'Guest' });
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) }, 'stranger');
+    expect(features.lobbyWaiting).toHaveLength(1);
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) }, 'host');
+    expect(features.lobbyWaiting).toHaveLength(0);
+
+    features.addLobbyWaiter({ id: 'guest', name: 'Guest' });
+    features.userGrants = { mod: { moderator: true, notes: false, whiteboard: false, poll: false, chat: true } };
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) }, 'mod');
+    expect(features.lobbyWaiting).toHaveLength(0);
+
+    features.addLobbyWaiter({ id: 'guest', name: 'Guest' });
+    conference.addUser('mod-role');
+    conference.users['mod-role'].properties = { role: 'moderator' };
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) }, 'mod-role');
+    expect(features.lobbyWaiting).toHaveLength(0);
+  });
+
   it('ignores host commands while a join is claiming host', () => {
     const features = useSessionFeaturesStore();
     features.resetHostForJoin();
@@ -659,6 +718,71 @@ describe('handleSessionCommand', () => {
     features.hostId = 'db-host';
     handleSessionCommand('host', { value: JSON.stringify({ hostId: 'other-host' }) });
     expect(features.hostId).toBe('db-host');
+  });
+
+  it('accepts a host announcement only when the email matches the meeting host', () => {
+    const features = useSessionFeaturesStore();
+    features.pendingHostClaim = false;
+    features.meetingExists = true;
+    features.hostEmail = 'Host@Example.com';
+    features.setHost('db-host');
+    handleSessionCommand('host', {
+      value: JSON.stringify({ hostId: 'jitsi-stranger', email: 'other@example.com' }),
+    });
+    expect(features.hostId).toBe('db-host');
+    handleSessionCommand('host', {
+      value: JSON.stringify({ hostId: 'jitsi-host', email: 'host@example.com' }),
+    });
+    expect(features.hostId).toBe('jitsi-host');
+  });
+
+  it('ignores a host announcement from a verified host client', () => {
+    const features = useSessionFeaturesStore();
+    features.pendingHostClaim = false;
+    features.isVerifiedHost = true;
+    features.hostEmail = 'host@example.com';
+    features.setHost('local-jitsi');
+    handleSessionCommand('host', {
+      value: JSON.stringify({ hostId: 'someone-else', email: 'host@example.com' }),
+    });
+    expect(features.hostId).toBe('local-jitsi');
+  });
+
+  it('ignores access updates broadcast by someone other than the host', () => {
+    const features = useSessionFeaturesStore();
+    features.setHost('host-1');
+    handleSessionCommand(
+      'access',
+      {
+        value: JSON.stringify({
+          defaults: { notes: true, whiteboard: true, poll: true, moderator: false, chat: true },
+        }),
+      },
+      'host-1',
+    );
+    expect(features.roomDefaults.notes).toBe(true);
+    handleSessionCommand(
+      'access',
+      {
+        value: JSON.stringify({
+          defaults: { notes: false, whiteboard: false, poll: false, moderator: false, chat: true },
+          userId: 'host-1',
+          grants: {},
+        }),
+      },
+      'other',
+    );
+    expect(features.roomDefaults.notes).toBe(true);
+    expect(features.roomDefaults.whiteboard).toBe(true);
+    expect(features.roomDefaults.poll).toBe(true);
+    features.hostId = '';
+    features.roomDefaults = { ...features.roomDefaults, whiteboard: false };
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ whiteboard: true }) },
+      'someone',
+    );
+    expect(features.roomDefaults.whiteboard).toBe(true);
   });
 
   it('ignores partial command payloads', () => {

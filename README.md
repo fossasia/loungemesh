@@ -13,10 +13,11 @@ Spatial video lounge for informal online and hybrid events — move freely in a 
 - **Shared Session Notes**: Live collaborative markdown notes with optional templates, host broadcasting, and persistent state.
 - **Live Polling**: Create instant single/multi-choice polls, collect anonymous votes, and publish real-time results.
 - **Stage Presentation Mode**: Spotlight speakers on stage with elevated video resolution and full-screen desktop screensharing.
-- **Room Access Control**: Configurable host claiming, moderator promotion, room join PIN protection, lobby admission, and participant permission grants.
+- **Room Access Control**: The host is the account whose email owns the meeting. Moderator and guest lists are email mappings. Someone who opens a join link is not made host just because they arrived first. People with no email, and people whose email is not on the invite list, wait in the lobby even if they have an account. The waiting screen does not show or play the meeting. Lobby is on by default.
 - **Event Scheduling & Calendar Sync**: Schedule rooms with recurring rules and synchronize events directly to Google Calendar with AES-256 encrypted OAuth.
 - **Ultra-Low Resource Scaling**:
-  - Spatial viewport culling: only streams video for visible or on-stage peers; zero video bandwidth consumed for off-screen peers.
+  - Spatial viewport culling: camera and screenshare video are requested only for visible or on-stage peers (both the camera source and the screenshare source); off-screen peers receive no video.
+  - Live notes, whiteboard, chat, reactions, and polls use JSON messages so presence stays small and the XMPP connection stays up.
   - Efficient resolution budgeting: 360p avatar camera, 720p @ 15–30 fps screenshare.
   - Single-roundtrip `/api/meetings/state/:roomName/init` endpoint bundling room state, role verification, notes, polls, whiteboard, and background.
   - Nginx rate-limiting (50 r/s burst 100) with client real-IP forwarding (`X-Forwarded-For`).

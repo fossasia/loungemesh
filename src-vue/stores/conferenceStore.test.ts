@@ -240,12 +240,24 @@ describe('conferenceStore', () => {
     const store = useConferenceStore();
     const { encodeChatWireText } = await import('@/utils/chatWireFormat');
     store.ingestChatMessage('peer', encodeChatWireText('shared-id', 'hello'), 7);
+    store.ingestChatMessage('peer', encodeChatWireText('shared-id', 'hello'), 8);
+    expect(store.messages).toHaveLength(1);
     expect(store.messages[0]).toMatchObject({
       id: 'peer',
       text: 'hello',
       nr: 7,
       messageId: 'shared-id',
     });
+    store.appendChatMessage({
+      id: 'me',
+      text: 'queued',
+      nr: -5,
+      messageId: 'local-wire',
+      history: [],
+    });
+    store.ingestChatMessage('me', encodeChatWireText('local-wire', 'queued'), 11);
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[1]).toMatchObject({ nr: 11, text: 'queued' });
   });
 
   it('leaveConference resets state', () => {

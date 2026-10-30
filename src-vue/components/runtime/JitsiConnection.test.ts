@@ -11,6 +11,7 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useAuthStore } from '@/stores/authStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useReconnectStore } from '@/stores/reconnectStore';
 import { SESSION_ERROR_CODES } from '@/services/sessionErrorCodes';
 import JitsiConnection from './JitsiConnection.vue';
@@ -348,5 +349,23 @@ describe('JitsiConnection', () => {
     wrapper.unmount();
     expect(reconnect.isIntentionalLeave).toBe(true);
     expect((reconnect as any)._retryAction).toBeUndefined();
+  });
+
+  it('suppresses remote playback while the local person is in the lobby', async () => {
+    const engine = getMediaEngineInstance();
+    const spy = vi.spyOn(engine, 'setRemotePlaybackSuppressed');
+    const { wrapper } = await mountConnection();
+    await flushPromises();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('guest');
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    await nextTick();
+    expect(spy).toHaveBeenCalledWith(true);
+    features.lobbyEnabled = false;
+    await nextTick();
+    expect(spy).toHaveBeenCalledWith(false);
+    wrapper.unmount();
   });
 });

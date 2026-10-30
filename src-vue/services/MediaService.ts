@@ -30,6 +30,7 @@ export type MediaServiceEvent =
   | 'participantSpeakingChanged'
   | 'displayNameChanged'
   | 'command'
+  | 'bridgeChannelOpen'
   | 'tokenExpired';
 
 export type MediaServiceEventMap = {
@@ -48,6 +49,8 @@ export type MediaServiceEventMap = {
   participantSpeakingChanged: [id: string, speaking: boolean];
   displayNameChanged: [id: string, displayName: string];
   command: [name: string, payload: { value: string }, senderId?: string];
+  /** JVB bridge channel is up — receiver constraints can be delivered. */
+  bridgeChannelOpen: [];
   /** Fired when Jitsi reports AUTHENTICATION_REQUIRED (JWT expired) */
   tokenExpired: [];
 };
@@ -71,6 +74,8 @@ export interface MediaService {
   resumePlayback?(): void;
   /** Reconnect remote audio after the output graph was suspended (e.g. local mic off). */
   refreshRemoteAudio?(): void;
+  /** Drop remote playback while this client is waiting in the lobby. */
+  setRemotePlaybackSuppressed?(suppressed: boolean): void;
   setReceiverConstraints(constraints: ReceiverConstraints): void;
   setDisplayName(name: string): void;
   setLocalParticipantProperty(key: string, value: unknown): void;

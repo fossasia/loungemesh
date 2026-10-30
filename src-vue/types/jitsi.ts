@@ -46,6 +46,8 @@ export interface JitsiConference {
   getLocalVideoTrack?(): JitsiTrack | undefined;
   setDisplayName(name: string): void;
   sendTextMessage(text: string): void;
+  /** Broadcast a JSON MUC message (not presence). Optional on older stubs. */
+  sendMessage?(message: object, to?: string): void;
   sendCommand(name: string, payload: { value: string }): void;
   removeCommand(name: string): void;
   addCommandListener(name: string, handler: (payload: { value: string }, senderId: string) => void): void;

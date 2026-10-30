@@ -5,6 +5,7 @@ import { useLocalStore } from './localStore';
 import { useConferenceStore } from './conferenceStore';
 import { useSessionFeaturesStore } from './sessionFeaturesStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+import { conferenceOptions } from '@/config/jitsiOptions';
 
 describe('localStore', () => {
   beforeEach(() => {
@@ -149,6 +150,37 @@ describe('localStore', () => {
     const sent = constraintsSpy.mock.calls[0][0];
     expect(sent.selectedSources).toEqual(expect.arrayContaining(['u1-v0']));
     expect(sent).not.toHaveProperty('colibriClass');
+    constraintsSpy.mockRestore();
+  });
+
+  it('requests no video while the local person is waiting in the lobby', () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u1');
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'waiting';
+    store.calculateUsersOnScreen();
+    expect(store.visibleUsers).toEqual([]);
+    expect(constraintsSpy).toHaveBeenCalledTimes(1);
+    expect(constraintsSpy.mock.calls[0][0].selectedSources).toEqual([]);
+    expect(constraintsSpy.mock.calls[0][0].lastN).toBe(0);
+    constraintsSpy.mockRestore();
+  });
+
+  it('skips receiver constraints in the lobby when nobody else is present', () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'waiting';
+    store.calculateUsersOnScreen();
+    expect(constraintsSpy).not.toHaveBeenCalled();
     constraintsSpy.mockRestore();
   });
 
@@ -634,6 +666,22 @@ describe('localStore', () => {
     expect(constraintsSpy).not.toHaveBeenCalled();
     constraintsSpy.mockRestore();
     conferenceOptions.openBridgeChannel = original;
+  });
+
+  it('does not touch receiver constraints in the lobby when the bridge channel is off', () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    const original = conferenceOptions.openBridgeChannel;
+    conferenceOptions.openBridgeChannel = '' as never;
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'waiting';
+    store.calculateUsersOnScreen();
+    expect(constraintsSpy).not.toHaveBeenCalled();
+    conferenceOptions.openBridgeChannel = original;
+    constraintsSpy.mockRestore();
   });
 
   it('calculateUsersOnScreen skips elements without id', () => {

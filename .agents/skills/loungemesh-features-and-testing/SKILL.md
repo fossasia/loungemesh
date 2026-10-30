@@ -19,7 +19,7 @@ When developing or modifying features, verify that the following user flows func
    - Direct Join: Name input & avatar selection.
    - Eventyay Gated Entry: Opaque token exchange, Jitsi JWT generation, capability assignment.
    - PIN Protection: Modal challenge, verification against backend, rejection on invalid PIN without leaking `joinPin`.
-   - Lobby & Admission: `localLobbyPending` knock state, host approval, transition to canvas.
+   - Lobby & Admission: invited emails enter directly. Everyone else waits. The waiting screen does not show or play the meeting. Cancel and leave clear the host's knock list. Only the host or a moderator can deny entry.
    - Host Key Claim: Unlocking host privileges with host key.
 2. **Media Device Negotiation**:
    - Mic/Camera permission granting or graceful denial.
@@ -48,6 +48,8 @@ When developing or modifying features, verify that the following user flows func
    - Google Calendar two-way synchronization via AES-256 encrypted OAuth.
 8. **Network Resilience & Recovery**:
    - Automatic WebRTC reconnection on network drop.
+   - Live notes, whiteboard, chat, reactions, and polls travel as JSON messages, not presence, so a burst cannot drop the XMPP connection.
+   - The meeting owner's email is the host. Moderator and guest emails are invited. A join link does not promote the first arrival to host. People with no email, or an email that is not invited, are attendees and wait in the lobby. Lobby defaults to on.
    - Automatic token renewal on `AUTHENTICATION_REQUIRED`.
    - Graceful fallback from single-roundtrip `/init` to parallel individual endpoints.
 

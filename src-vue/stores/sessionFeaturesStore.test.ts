@@ -145,14 +145,47 @@ describe('sessionFeaturesStore', () => {
     expect(features.whiteboardStrokes).toEqual([]);
   });
 
-  it('treats first joiner as host before host id is assigned', () => {
+  it('treats a joiner without a verified host email as an attendee', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('first');
     features.resetHostForJoin();
-    expect(features.isHost).toBe(true);
-    expect(features.canUseNotes).toBe(true);
-    expect(features.canUseWhiteboard).toBe(true);
+    features.pendingHostClaim = false;
+    expect(features.isHost).toBe(false);
+    expect(features.canUseNotes).toBe(false);
+    expect(features.lobbyEnabled).toBe(true);
+  });
+
+  it('repeats lobby approval and the mapped host announcement', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const engine = { sendCommand: vi.fn() };
+    local.setMyID('guest');
+    features.lobbyEnabled = true;
+    features.isInvited = true;
+    features.resendSessionIdentity(engine);
+    expect(engine.sendCommand).toHaveBeenCalledWith(
+      'lobby',
+      JSON.stringify({ action: 'approve', id: 'guest' }),
+    );
+    expect(engine.sendCommand).not.toHaveBeenCalledWith('host', expect.any(String));
+
+    features.isVerifiedHost = true;
+    features.hostEmail = 'ada@example.com';
+    engine.sendCommand.mockClear();
+    features.resendSessionIdentity(engine);
+    expect(engine.sendCommand).toHaveBeenCalledWith(
+      'host',
+      expect.stringContaining('"email":"ada@example.com"'),
+    );
+    local.setMyID('');
+    engine.sendCommand.mockClear();
+    features.resendSessionIdentity(engine);
+    expect(engine.sendCommand).not.toHaveBeenCalled();
+    local.setMyID('guest');
+    features.eventyayMeet = true;
+    features.resendSessionIdentity(engine);
+    expect(engine.sendCommand).not.toHaveBeenCalledWith('host', expect.any(String));
   });
 
   it('claims host on join after resetHostForJoin', () => {
@@ -211,6 +244,25 @@ describe('sessionFeaturesStore', () => {
       grants: { poll: true },
     });
     expect(features.grantsForUser('u2').poll).toBe(true);
+  });
+
+  it('keeps later room defaults when a join sync sends empty per-user grants', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
+    features.setHost('host');
+    features.applyAccessUpdate({
+      defaults: { notes: false, whiteboard: false, poll: false, moderator: false, chat: true },
+      userId: 'guest',
+      grants: {},
+    });
+    features.applyAccessUpdate({
+      defaults: { notes: true, whiteboard: true, poll: true, moderator: false, chat: true },
+    });
+    expect(features.userGrants.guest).toBeUndefined();
+    expect(features.canUseNotes).toBe(true);
+    expect(features.canUseWhiteboard).toBe(true);
+    expect(features.canUsePoll).toBe(true);
   });
 
   it('dedupes lobby waiters', () => {
@@ -572,10 +624,10 @@ describe('sessionFeaturesStore', () => {
     const local = useLocalStore();
     local.setMyID('my-id');
     
-    // Default meetingExists: false
+    // A link join does not make the first person host.
     features.meetingExists = false;
     features.hostId = '';
-    expect(features.isHost).toBe(true); // Ad-hoc fallback
+    expect(features.isHost).toBe(false);
     
     features.hostId = 'my-id';
     expect(features.isHost).toBe(true);

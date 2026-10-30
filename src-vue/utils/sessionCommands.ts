@@ -29,6 +29,16 @@ function parse<T>(payload: CommandPayload): T | null {
 }
 
 /* v8 ignore start */
+function canModerateLobby(
+  senderId: string,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  conference: ReturnType<typeof useConferenceStore>,
+): boolean {
+  if (features.hostId === senderId) return true;
+  if (features.userGrants[senderId]?.moderator) return true;
+  return conference.users[senderId]?.properties?.role === 'moderator';
+}
+
 function isSenderModeratorOrHost(senderId: string | undefined, features: ReturnType<typeof useSessionFeaturesStore>): boolean {
   if (!senderId) return false;
   if (features.hostId === senderId) return true;
@@ -96,17 +106,12 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       break;
     }
     case 'host': {
-      const data = parse<{ hostId?: string }>(payload);
-      if (data?.hostId) {
-        if (features.meetingExists) {
-          // Keep DB host ID - do not let Jitsi clients overwrite it
-        } else {
-          // Ad-hoc fallback: accept if not claiming host and not already set
-          if (!features.pendingHostClaim && !features.hostId) {
-            features.setHost(data.hostId);
-          }
-        }
-      }
+      const data = parse<{ hostId?: string; email?: string }>(payload);
+      if (!data?.hostId || features.pendingHostClaim || features.isVerifiedHost) break;
+      const email = (data.email || '').trim().toLowerCase();
+      const expected = features.hostEmail.trim().toLowerCase();
+      if (!email || !expected || email !== expected) break;
+      features.setHost(data.hostId);
       break;
     }
     case 'lobby': {
@@ -131,11 +136,16 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
           playUiSound('lobbyKnock');
         }
       }
+      if (data.action === 'cancel' && data.id) {
+        if (senderId && senderId !== data.id) break;
+        features.rejectLobby(data.id);
+      }
       if (data.action === 'approve' && data.id) {
         features.approveLobby(data.id);
         if (data.id === local.id) features.localLobbyPending = false;
       }
       if (data.action === 'reject' && data.id) {
+        if (senderId && !canModerateLobby(senderId, features, conference)) break;
         features.rejectLobby(data.id);
         if (data.id === local.id) {
           features.localLobbyPending = false;
@@ -273,6 +283,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       >(payload);
       if (!data) break;
+      if (senderId && features.hostId && senderId !== features.hostId) break;
       features.applyAccessUpdate(data);
       break;
     }
@@ -293,13 +304,23 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       if (features.enabledFeatures.chat === false) break;
       const data = parse<{
         action?: string;
-        messageId?: string;
         text?: string;
+        nr?: number;
+        messageId?: string;
         editedAt?: number;
         editorId?: string;
-        nr?: number;
         senderId?: string;
       }>(payload);
+      if (data?.action === 'post') {
+        if (typeof data.text === 'string' && senderId) {
+          conference.ingestChatMessage(
+            senderId,
+            data.text,
+            typeof data.nr === 'number' ? data.nr : -1,
+          );
+        }
+        break;
+      }
       if (
         data?.action === 'edit' &&
         data.messageId &&

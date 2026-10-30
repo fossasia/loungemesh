@@ -26,11 +26,10 @@ This guide documents the comprehensive user flows and feature architectures impl
 4. Correct PIN entry unlocks media connection; incorrect attempts display immediate error feedback.
 
 ### Lobby & Waiting Room Flow
-1. When `lobbyEnabled` is active:
-2. Non-host, unauthenticated participants entering the room enter a "Waiting in Lobby" state (`localLobbyPending = true`).
-3. Active hosts receive an incoming knock notification with the guest's name.
-4. Hosts can approve or deny admission.
-5. On approval, the guest is transitioned onto the live 2D lounge canvas.
+1. Lobby is on by default. The host is the account whose email owns the meeting. Invited emails enter directly. Everyone else, including a signed-in account that was not invited, waits.
+2. The waiting screen asks for a name. Email is optional. It does not show the meeting, and it does not play anyone's audio or video.
+3. The host sees who is asking to join and can admit or deny them. Cancel, or leaving the page, removes that person from the host's list. A deny can only come from the host or a moderator.
+4. On approval, the guest is transitioned onto the live lounge.
 
 ### Host Key Claim Flow
 1. In un-moderated rooms without an Eventyay token, any user possessing the secret host key can claim host ownership.
@@ -88,13 +87,13 @@ This guide documents the comprehensive user flows and feature architectures impl
 1. Click the **Whiteboard Icon** in the sidebar.
 2. Select pen, line, rectangle, circle, or eraser tools.
 3. Pick stroke colors and stroke widths from the palette.
-4. All vector strokes are transmitted over the bridge data channel in real-time and cached in Redis.
+4. Strokes are sent as live JSON messages and shown on the other participant's canvas. The API keeps a durable copy in Redis.
 5. Hosts can clear the whiteboard for everyone; participants can export drawings as PNG.
 
 ### Shared Collaborative Notes
 1. Open the **Notes Panel**.
 2. Type live notes with markdown formatting support.
-3. Changes synchronize collaboratively with debounced transmission.
+3. Edits sync live to everyone who can open notes. The API keeps a durable copy for the next join.
 4. Hosts can load pre-configured meeting agendas or templates (`notesTemplate`).
 5. Notes can be downloaded as `.md` files at any time.
 
@@ -111,6 +110,8 @@ This guide documents the comprehensive user flows and feature architectures impl
 ### Host Room Settings
 Hosts can open the **Room Settings Modal** to configure:
 - Feature toggles: enable/disable Chat, Whiteboard, Notes, Polls, or Stage.
+- Default permissions for everyone. Notes, whiteboard, and polls stay off for attendees until the host turns them on. An empty per-user grant does not override that room default.
+- Lobby is on by default. The host is the meeting owner's email. Other people enter only when their email is invited, or after the host admits them from the lobby.
 - Lobby enable/disable.
 - Stage promotion permissions.
 - Notes template default text.

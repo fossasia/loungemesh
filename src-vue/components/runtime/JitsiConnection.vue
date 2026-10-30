@@ -10,6 +10,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useReconnectStore } from '@/stores/reconnectStore';
+import { applyLobbyPlayback } from '@/utils/lobbyPlayback';
 import { formatSphereName } from '@/utils/formatSphereName';
 
 const route = useRoute();
@@ -73,6 +74,15 @@ function syncSession(isReconnect = false) {
 /* v8 ignore stop */
 
 watch(() => route.params.id, () => void syncSession(), { immediate: true });
+
+const features = useSessionFeaturesStore();
+watch(
+  () => features.isLobbyBlocked,
+  (blocked) => {
+    applyLobbyPlayback(engine, blocked);
+  },
+  { immediate: true },
+);
 
 const onConnected = () => {
   const isReconnect = reconnectStore.attempt > 0 || reconnectStore.phase === 'attempting' || reconnectStore.phase === 'waiting';
