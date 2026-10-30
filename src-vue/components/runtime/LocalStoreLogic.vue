@@ -100,7 +100,24 @@ async function requestMedia() {
 
 let publishingLocalTracks = false;
 
+async function unpublishLocalTracks() {
+  const conf = engine.getConference();
+  const published = conf?.getLocalTracks?.() ?? [];
+  for (const publishedTrack of published) {
+    if (!engine.removeLocalTrack) continue;
+    try {
+      await engine.removeLocalTrack(publishedTrack);
+    } catch (err) {
+      mediaDebug('LocalStoreLogic', 'removeLocalTrack:failed', { error: err });
+    }
+  }
+}
+
 async function addLocalTracksToConference() {
+  if (features.isLobbyBlocked) {
+    await unpublishLocalTracks();
+    return;
+  }
   const conf = engine.getConference();
   if (!conferenceStore.isJoined || !conf || publishingLocalTracks) return;
   publishingLocalTracks = true;
@@ -192,6 +209,13 @@ watch(
     if (id) localStore.setMyID(id);
   },
   { immediate: true },
+);
+
+watch(
+  () => features.isLobbyBlocked,
+  () => {
+    void addLocalTracksToConference();
+  },
 );
 
 watch(

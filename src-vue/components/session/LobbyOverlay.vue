@@ -16,7 +16,7 @@ const { engine, leaveRoom, disconnect } = useMediaEngine();
 const router = useRouter();
 
 // Waiting form fields
-const guestName = ref(conference.displayName || '');
+const guestName = ref('');
 const guestEmail = ref('');
 const guestReason = ref('');
 const errorMsg = ref('');
@@ -32,6 +32,10 @@ const authLoading = ref(false);
 function requestJoin() {
   if (!guestName.value.trim()) {
     errorMsg.value = 'Please enter your name.';
+    return;
+  }
+  if (features.lobbyForm === 'details' && !guestEmail.value.trim()) {
+    errorMsg.value = 'Please enter your email.';
     return;
   }
   errorMsg.value = '';
@@ -187,36 +191,41 @@ async function exitLobby() {
         <form v-if="activeTab === 'guest'" class="form" @submit.prevent="requestJoin">
           <p v-if="errorMsg" class="errorAlert" role="alert">{{ errorMsg }}</p>
           <h2 class="title">Request Entry</h2>
-          <p class="sub">Enter your details to request access to the meeting room.</p>
+          <p class="sub">
+            {{ features.lobbyForm === 'details'
+              ? 'Enter your name and email. The host will admit you.'
+              : 'Enter your name. The host will admit you.' }}
+          </p>
           
           <div class="inputGroup">
-            <label for="lobbyGuestName">Your Name *</label>
+            <label for="lobbyGuestName">Name <span class="requiredMark">Required</span></label>
             <input
               id="lobbyGuestName"
               v-model="guestName"
               type="text"
-              placeholder="e.g. John Doe"
+              autocomplete="off"
               required
             />
           </div>
 
-          <div class="inputGroup">
-            <label for="lobbyGuestEmail">Email Address (optional)</label>
+          <div v-if="features.lobbyForm === 'details'" class="inputGroup">
+            <label for="lobbyGuestEmail">Email <span class="requiredMark">Required</span></label>
             <input
               id="lobbyGuestEmail"
               v-model="guestEmail"
               type="email"
-              placeholder="e.g. john@example.com"
+              autocomplete="off"
+              required
             />
           </div>
 
-          <div class="inputGroup">
-            <label for="lobbyGuestReason">Message to Host (optional)</label>
+          <div v-if="features.lobbyForm === 'details'" class="inputGroup">
+            <label for="lobbyGuestReason">Message to the host</label>
             <input
               id="lobbyGuestReason"
               v-model="guestReason"
               type="text"
-              placeholder="e.g. Asking to join presentation"
+              autocomplete="off"
             />
           </div>
 
@@ -332,9 +341,9 @@ async function exitLobby() {
 }
 
 .errorIcon {
-  background: #fff5f5;
-  border: 2px solid #ffc9c9;
-  color: #fa5252;
+  background: var(--color-bg-card);
+  border: 2px solid var(--color-red100);
+  color: var(--color-red100);
 }
 
 .spinner {
@@ -439,9 +448,9 @@ async function exitLobby() {
 }
 
 .errorAlert {
-  background: #fff5f5;
-  border: 1px solid #ffc9c9;
-  color: #fa5252;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-red100);
+  color: var(--color-red100);
   padding: 12px;
   border-radius: 10px;
   font-size: var(--fs-small, 14px);
@@ -462,7 +471,14 @@ async function exitLobby() {
 .inputGroup label {
   font-size: var(--fs-small, 13px);
   font-weight: 600;
-  color: #1e2240;
+  color: var(--color-mono10);
+}
+
+.requiredMark {
+  color: var(--color-red100);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 6px;
 }
 
 .inputGroup input {
@@ -535,7 +551,7 @@ async function exitLobby() {
 
 .btnExit {
   width: 100%;
-  background: #fa5252;
+  background: var(--color-red100);
   color: #fff;
   border: none;
   padding: 12px;
@@ -548,7 +564,7 @@ async function exitLobby() {
 }
 
 .btnExit:hover {
-  background: #e03131;
+  background: var(--btn-warning-bg-hover);
 }
 
 /* Google Meet style Waiting Lobby Radar & Device Controls */
@@ -630,9 +646,9 @@ async function exitLobby() {
 }
 
 .deviceBtn.warning {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
+  border-color: var(--color-red100);
+  background: var(--color-bg-card);
+  color: var(--color-red100);
 }
 
 .deviceBtn.active {

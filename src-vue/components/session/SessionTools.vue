@@ -156,9 +156,37 @@ function openPanel(name: 'notes' | 'whiteboard') {
 .pollPop {
   width: min(360px, calc(100vw - 32px));
   max-height: min(520px, 60vh);
+}
+@media (max-width: 768px) {
+  .sessionTools {
+    display: contents;
+  }
+  .toolWrap {
+    display: flex;
+    justify-content: center;
+    min-width: 0;
+  }
+  .pollPop,
+  .reactionsPop {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 112px;
+    width: auto;
+    transform: none;
+    max-height: min(70dvh, calc(100dvh - 140px));
+  }
+}
+.pollPop {
   overflow-x: visible;
   overflow-y: auto;
   padding: 14px;
+}
+@media (max-width: 768px) {
+  .pollPop,
+  .reactionsPop {
+    bottom: 112px;
+  }
 }
 .pollHeading {
   margin: 0 0 10px;

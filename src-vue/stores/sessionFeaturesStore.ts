@@ -11,26 +11,49 @@ import {
 import { REACTION_DISPLAY_MS } from '@/constants/sessionEmojis';
 import {
   defaultUserGrants,
+  fullUserGrants,
   type FeatureKey,
   type UserGrants,
 } from '@/types/userGrants';
 import {
-  effectiveGrants,
   legacyAccessToDefaults,
   mergeGrants,
   type AccessCommandPayload,
 } from '@/utils/sessionAccess';
 import {
-  featureAccess,
   DEFAULT_ENABLED_FEATURES,
   type GatedFeatureKey,
 } from '@/utils/featureAccess';
 import { mergePolls } from '@/utils/sessionPoll';
 
 import type { NotesCommand } from '@/utils/notesSync';
-import { decodeNotesFromWire, broadcastSharedNotes } from '@/utils/notesSync';
+import { decodeNotesFromWire } from '@/utils/notesSync';
 import type { RoomBackgroundCommand } from '@/utils/roomBackgroundSync';
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
+import { broadcastYjsState, notesDocumentHasContent, seedNotesDocument } from '@/utils/notesYjsSync';
+
+function gatedFeatureAllowed(
+  store: {
+    enabledFeatures: Partial<Record<GatedFeatureKey, boolean>>;
+    isHost: boolean;
+    isModerator: boolean;
+    eventyayMeet: boolean;
+    capabilities: string[];
+    userRole: 'host' | 'moderator' | 'attendee';
+    userGrants: Record<string, Partial<UserGrants>>;
+  },
+  feature: 'chat' | 'notes' | 'whiteboard' | 'poll',
+  capability?: string,
+): boolean {
+  if (store.enabledFeatures[feature] === false) return false;
+  if (store.isHost || store.isModerator) return true;
+  if (store.eventyayMeet && store.capabilities.length > 0) {
+    return capability ? store.capabilities.includes(capability) : true;
+  }
+  const local = useLocalStore();
+  if (!local.id) return true;
+  return store.userGrants[local.id]?.[feature] !== false;
+}
 
 export type LobbyEntry = { id: string; name: string; email?: string; reason?: string };
 export type PollOption = { id: string; label: string; votes: number; voters?: string[] };
@@ -87,7 +110,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     isInvited: false,
     allowParticipantRecording: false,
     hostId: '',
-    lobbyEnabled: false,
+    lobbyEnabled: true,
+    lobbyForm: 'name' as 'name' | 'details',
+    moderatorEmails: [] as string[],
+    guestEmails: [] as string[],
     lobbyApproved: {} as Record<string, boolean>,
     lobbyWaiting: [] as LobbyEntry[],
     localLobbyPending: false,
@@ -179,43 +205,17 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     isReviewer(): boolean {
       return this.eventyayRole === 'moderator' || this.eventyayRole === 'reviewer';
     },
-    localGrants(): UserGrants {
-      const local = useLocalStore();
-      return effectiveGrants(
-        local.id,
-        this.roomDefaults,
-        this.userGrants,
-        this.isHost,
-      );
-    },
     canUseNotes(): boolean {
-      if (this.enabledFeatures.notes === false) return false;
-      if (this.isHost || this.isModerator) return true;
-      if (this.eventyayMeet && this.capabilities.length > 0) {
-        return this.capabilities.includes('notes');
-      }
-      return this.localGrants.notes;
+      return gatedFeatureAllowed(this, 'notes', 'notes');
     },
     canUseWhiteboard(): boolean {
-      if (this.enabledFeatures.whiteboard === false) return false;
-      if (this.isHost || this.isModerator) return true;
-      if (this.eventyayMeet && this.capabilities.length > 0) {
-        return this.capabilities.includes('whiteboard');
-      }
-      return this.localGrants.whiteboard;
+      return gatedFeatureAllowed(this, 'whiteboard', 'whiteboard');
     },
     canUsePoll(): boolean {
-      if (this.enabledFeatures.poll === false) return false;
-      if (this.isHost || this.isModerator) return true;
-      if (this.eventyayMeet && this.capabilities.length > 0) {
-        return this.capabilities.includes('poll_manage');
-      }
-      return this.localGrants.poll;
+      return gatedFeatureAllowed(this, 'poll', 'poll_manage');
     },
     canUseChat(): boolean {
-      if (this.enabledFeatures.chat === false) return false;
-      if (this.isHost || this.isModerator) return true;
-      return this.localGrants.chat;
+      return gatedFeatureAllowed(this, 'chat');
     },
     canRequestPoll(): boolean {
       if (this.enabledFeatures.poll === false) return false;
@@ -281,12 +281,29 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     grantsForUser:
       (state) =>
-      (userId: string): UserGrants =>
-        effectiveGrants(userId, state.roomDefaults, state.userGrants, userId === state.hostId),
+      (userId: string): UserGrants => {
+        if (userId && userId === state.hostId) return fullUserGrants();
+        const grant = state.userGrants[userId] ?? {};
+        return {
+          notes: grant.notes !== false,
+          whiteboard: grant.whiteboard !== false,
+          poll: grant.poll !== false,
+          moderator: !!grant.moderator,
+          chat: grant.chat !== false,
+        };
+      },
   },
   actions: {
     setHost(id: string) {
       this.hostId = id;
+    },
+    admitParticipantEmail(id: string, email?: string) {
+      const known = (email || '').trim().toLowerCase();
+      if (!id || !known) return;
+      const allowed = [this.hostEmail, ...this.moderatorEmails, ...this.guestEmails];
+      if (allowed.some((item) => (item || '').trim().toLowerCase() === known)) {
+        this.approveLobby(id);
+      }
     },
     approveLobby(id: string) {
       this.lobbyApproved[id] = true;
@@ -521,13 +538,31 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     /** Pre-fill shared notes from the host template when the session is still blank. */
     applyNotesTemplateIfNeeded(): boolean {
-      if (!this.isHost || !this.notesTemplate.trim() || this.sharedNotes.trim()) return false;
+      if ((!this.isHost && !this.isModerator) || !this.notesTemplate.trim() || this.sharedNotes.trim()) return false;
+      seedNotesDocument(this.ydoc, this.notesTemplate);
       this.updateSharedNotes(this.notesTemplate, true);
       return true;
     },
-    /** Replace shared notes with the host template (host only). */
+    publishNotesTemplate(engine: { sendCommand: (name: string, value: string) => void }): boolean {
+      if ((!this.isHost && !this.isModerator) || !this.notesTemplate.trim()) return false;
+      seedNotesDocument(this.ydoc, this.notesTemplate);
+      this.updateSharedNotes(this.notesTemplate, true);
+      broadcastYjsState(engine, this.ydoc);
+      return true;
+    },
+    seedNotesDocumentIfEmpty() {
+      if (notesDocumentHasContent(this.ydoc)) return;
+      const seed = (this.sharedNotes || this.notesTemplate || '').trim();
+      if (!seed) return;
+      seedNotesDocument(this.ydoc, seed);
+    },
+    controlEmail(): string {
+      const auth = useAuthStore();
+      return (auth.user?.email || this.hostEmail || '').trim();
+    },
+    /** Replace shared notes with the room template. Host or moderator. */
     resetSharedNotesToTemplate(): boolean {
-      if (!this.isHost || !this.notesTemplate.trim()) return false;
+      if ((!this.isHost && !this.isModerator) || !this.notesTemplate.trim()) return false;
       this.updateSharedNotes(this.notesTemplate, true);
       return true;
     },
@@ -632,12 +667,13 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       }
       /* v8 ignore stop */
       if (engine && this.isHost) {
-        engine.sendCommand('config', JSON.stringify({ enabledFeatures: this.enabledFeatures }));
+        this.syncConfig(engine);
       }
     },
     applyConfigUpdate(data: {
       allowParticipantRecording?: boolean;
       lobbyEnabled?: boolean;
+      lobbyForm?: 'name' | 'details';
       stagePromotionEnabled?: boolean;
       enabledFeatures?: Partial<Record<GatedFeatureKey, boolean>>;
     }) {
@@ -646,6 +682,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       }
       if (data.lobbyEnabled !== undefined) {
         this.lobbyEnabled = data.lobbyEnabled;
+      }
+      if (data.lobbyForm === 'name' || data.lobbyForm === 'details') {
+        this.lobbyForm = data.lobbyForm;
       }
       if (data.stagePromotionEnabled !== undefined) {
         this.stagePromotionEnabled = data.stagePromotionEnabled;
@@ -795,21 +834,32 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     resendSessionIdentity(engine: any) {
       this.announceLobbyPresence(engine);
-      if (!this.isVerifiedHost || this.eventyayMeet) return;
+      if (this.eventyayMeet) return;
+      if (!this.isVerifiedHost && !this.isVerifiedModerator) return;
       const local = useLocalStore();
       if (!local.id) return;
-      const auth = useAuthStore();
-      engine.sendCommand('host', JSON.stringify({
-        hostId: local.id,
-        email: auth.user?.email || this.hostEmail,
-        at: Date.now(),
-      }));
+      const email = this.controlEmail();
+      if (this.isVerifiedHost) {
+        engine.sendCommand('host', JSON.stringify({
+          hostId: local.id,
+          email,
+          at: Date.now(),
+        }));
+        this.syncConfig(engine);
+      }
+      broadcastHostRoomSettings(engine, this);
+      for (const [userId, grants] of Object.entries(this.userGrants)) {
+        engine.sendCommand('access', JSON.stringify({ userId, grants, email }));
+      }
     },
     syncConfig(engine: any) {
       engine.sendCommand('config', JSON.stringify({
         allowParticipantRecording: this.allowParticipantRecording,
         lobbyEnabled: this.lobbyEnabled,
+        lobbyForm: this.lobbyForm,
         stagePromotionEnabled: this.stagePromotionEnabled,
+        enabledFeatures: this.enabledFeatures,
+        email: this.controlEmail(),
       }));
     },
     syncOrClaimHostOnLoaded(engine: any) {
@@ -853,7 +903,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         engine.sendCommand('config', JSON.stringify({ allowParticipantRecording: this.allowParticipantRecording }));
 
         if (this.applyNotesTemplateIfNeeded()) {
-          broadcastSharedNotes(engine, this.sharedNotes);
+          broadcastYjsState(engine, this.ydoc);
         }
         broadcastHostRoomSettings(engine, this);
       } else {
@@ -880,12 +930,15 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
                 this.hostId = data.role.hostId;
               }
               this.hostEmail = data.role.hostEmail || '';
+              this.moderatorEmails = Array.isArray(data.role.moderatorEmails) ? data.role.moderatorEmails : [];
+              this.guestEmails = Array.isArray(data.role.guestEmails) ? data.role.guestEmails : [];
               this.meetingExists = !!data.role.hostId;
               if (data.config) {
                 this.allowParticipantRecording = !!data.config.allowParticipantRecording;
                 this.lobbyEnabled = !!data.config.lobbyEnabled;
                 this.stagePromotionEnabled = !!data.config.stagePromotionEnabled;
                 this.notesTemplate = data.config.notesTemplate || '';
+                this.lobbyForm = data.config.lobbyForm === 'details' ? 'details' : 'name';
               }
               if (data.whiteboard) {
                 this.whiteboardStrokes = data.whiteboard.strokes || [];
@@ -934,6 +987,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
               this.hostId = data.hostId;
             }
             this.hostEmail = data.hostEmail || '';
+            this.moderatorEmails = Array.isArray(data.moderatorEmails) ? data.moderatorEmails : [];
+            this.guestEmails = Array.isArray(data.guestEmails) ? data.guestEmails : [];
           }
           if (configRes.ok) {
             this.meetingExists = true;
@@ -942,6 +997,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
             this.lobbyEnabled = !!config.lobbyEnabled;
             this.stagePromotionEnabled = !!config.stagePromotionEnabled;
             this.notesTemplate = config.notesTemplate || '';
+            this.lobbyForm = config.lobbyForm === 'details' ? 'details' : 'name';
           } else {
             this.meetingExists = false;
           }
@@ -978,6 +1034,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       } finally {
         this.isFetchingConfig = false;
         this.configLoaded = true;
+        this.seedNotesDocumentIfEmpty();
         const conferenceStore = useConferenceStore();
         if (engine && conferenceStore.isJoined) {
           this.syncOrClaimHostOnLoaded(engine);
@@ -991,7 +1048,13 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     async updateRoomConfig(
       roomName: string,
-      updates: { allowParticipantRecording?: boolean; lobbyEnabled?: boolean; stagePromotionEnabled?: boolean; notesTemplate?: string },
+      updates: {
+        allowParticipantRecording?: boolean;
+        lobbyEnabled?: boolean;
+        lobbyForm?: 'name' | 'details';
+        stagePromotionEnabled?: boolean;
+        notesTemplate?: string;
+      },
       engine: any
     ) {
       try {
@@ -1006,6 +1069,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           this.lobbyEnabled = !!config.lobbyEnabled;
           this.stagePromotionEnabled = !!config.stagePromotionEnabled;
           this.notesTemplate = config.notesTemplate || '';
+          this.lobbyForm = config.lobbyForm === 'details' ? 'details' : this.lobbyForm;
           this.syncConfig(engine);
         }
       } catch (err) {

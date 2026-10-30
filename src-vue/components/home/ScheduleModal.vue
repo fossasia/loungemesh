@@ -49,6 +49,7 @@ const emailInput = ref('');
 const emailError = ref('');
 
 const moderatorEmails = ref<string[]>([]);
+const lobbyForm = ref<'name' | 'details'>('name');
 const modEmailInput = ref('');
 const modEmailError = ref('');
 
@@ -147,6 +148,15 @@ function handleModEmailKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  const savedDefaults = localStorage.getItem('loungemesh:meeting_defaults');
+  if (savedDefaults) {
+    try {
+      const parsed = JSON.parse(savedDefaults);
+      lobbyForm.value = parsed.lobbyForm === 'details' ? 'details' : 'name';
+    } catch {
+      lobbyForm.value = 'name';
+    }
+  }
   if (props.meeting) {
     title.value = props.meeting.title;
     description.value = props.meeting.description || '';
@@ -252,6 +262,7 @@ async function handleSubmit() {
       guestEmails: guestEmails.value,
       moderatorEmails: moderatorEmails.value,
       lobbyEnabled,
+      lobbyForm: lobbyForm.value,
       stagePromotionEnabled,
       allowParticipantRecording,
       roomDefaults,
@@ -448,6 +459,14 @@ async function handleSubmit() {
             />
           </div>
           <span v-if="modEmailError" class="inputError" role="alert">{{ modEmailError }}</span>
+        </div>
+
+        <div class="inputGroup">
+          <label for="lobbyFormSelect">Lobby form</label>
+          <select id="lobbyFormSelect" v-model="lobbyForm" class="chipInput">
+            <option value="name">Name only</option>
+            <option value="details">Name and email</option>
+          </select>
         </div>
 
         <button type="submit" class="submitBtn" :disabled="loading">

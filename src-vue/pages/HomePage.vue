@@ -31,6 +31,7 @@ const instantModEmails = ref('');
 
 const meetingDefaults = ref({
   lobbyEnabled: true,
+  lobbyForm: 'name' as 'name' | 'details',
   stagePromotionEnabled: true,
   allowParticipantRecording: false,
   roomDefaults: {
@@ -78,6 +79,7 @@ onMounted(() => {
       const parsed = JSON.parse(saved);
       meetingDefaults.value = {
         lobbyEnabled: parsed.lobbyEnabled ?? true,
+        lobbyForm: parsed.lobbyForm === 'details' ? 'details' : 'name',
         stagePromotionEnabled: parsed.stagePromotionEnabled ?? true,
         allowParticipantRecording: parsed.allowParticipantRecording ?? false,
         roomDefaults: {
@@ -195,6 +197,7 @@ async function submitInstantMeeting() {
         guestEmails: guestList,
         moderatorEmails: modList,
         lobbyEnabled: meetingDefaults.value.lobbyEnabled,
+        lobbyForm: meetingDefaults.value.lobbyForm,
         stagePromotionEnabled: meetingDefaults.value.stagePromotionEnabled,
         allowParticipantRecording: meetingDefaults.value.allowParticipantRecording,
         roomDefaults: meetingDefaults.value.roomDefaults,
@@ -428,6 +431,17 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
                         <strong>Enable Lobby Room</strong>
                       </span>
                       <input type="checkbox" v-model="meetingDefaults.lobbyEnabled" class="toggleCheckbox" />
+                    </label>
+
+                    <label class="toggleRow">
+                      <span class="toggleLabel">
+                        <strong>Lobby form</strong>
+                        <small>{{ meetingDefaults.lobbyForm === 'details' ? 'Name and email' : 'Name only' }}</small>
+                      </span>
+                      <select v-model="meetingDefaults.lobbyForm" class="toggleCheckbox" aria-label="Lobby form">
+                        <option value="name">Name only</option>
+                        <option value="details">Name and email</option>
+                      </select>
                     </label>
 
                     <label class="toggleRow">

@@ -62,7 +62,7 @@ describe('useSessionPollControls', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
+    features.userGrants.guest = { poll: false };
     features.activePoll = {
       id: 'p1',
       question: 'Q',

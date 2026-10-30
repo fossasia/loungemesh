@@ -12,6 +12,8 @@ describe('RemoteUsers', () => {
 
   it('renders remote users and updates when positions change', async () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = false;
     conference.addUser('a');
     conference.addUser('b');
     conference.updateUserPosition('a', { x: 1, y: 2 });

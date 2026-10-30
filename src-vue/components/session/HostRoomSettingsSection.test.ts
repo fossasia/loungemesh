@@ -107,7 +107,7 @@ describe('HostRoomSettingsSection', () => {
     const features = useSessionFeaturesStore();
     expect(features.notesTemplate).toBe('# Agenda');
     expect(features.sharedNotes).toBe('# Agenda');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
     expect(wrapper.find('.templateStatus').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -123,8 +123,8 @@ describe('HostRoomSettingsSection', () => {
     await fileInput(wrapper, 1).trigger('change');
     await flushPromises();
     expect(features.notesTemplate).toBe('# Template');
-    expect(features.sharedNotes).toBe('existing');
-    expect(cmdSpy).not.toHaveBeenCalledWith('notes', expect.any(String));
+    expect(features.sharedNotes).toBe('# Template');
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
     await wrapper.findAll('.pill.subtle')[0]!.trigger('click');
     expect(features.notesTemplate).toBe('');
     wrapper.unmount();
@@ -189,6 +189,42 @@ describe('HostRoomSettingsSection', () => {
     expect(features.enabledFeatures.chat).toBe(true);
 
     cmdSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('shows background and notes template without room-wide switches', async () => {
+    const { wrapper } = await mountWithApp(HostRoomSettingsSection, {
+      props: { appearanceOnly: true },
+    });
+    expect(wrapper.text()).toContain('Room appearance');
+    expect(wrapper.text()).toContain('Notes template');
+    expect(wrapper.find('#lobbyFormSelect').exists()).toBe(false);
+    expect(wrapper.find('.featureToggleBtn').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('sends the lobby form to people already in the room', async () => {
+    const features = useSessionFeaturesStore();
+    features.isVerifiedHost = true;
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        lobbyEnabled: true,
+        lobbyForm: 'name',
+        stagePromotionEnabled: true,
+        allowParticipantRecording: false,
+        notesTemplate: '',
+      }),
+    }));
+    const { wrapper, router } = await mountWithApp(HostRoomSettingsSection);
+    await wrapper.find('#lobbyFormSelect').setValue('details');
+    expect(features.lobbyForm).toBe('details');
+    await router.push('/session/room-1');
+    await wrapper.find('#lobbyFormSelect').setValue('name');
+    expect(features.lobbyForm).toBe('name');
+    expect(cmdSpy).toHaveBeenCalledWith('config', expect.stringContaining('"lobbyForm":"name"'));
+    await flushPromises();
     wrapper.unmount();
   });
 });

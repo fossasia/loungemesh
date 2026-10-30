@@ -1027,6 +1027,23 @@ describe('JitsiAdapter', () => {
     }
   });
 
+  it('holds one participant until they are admitted', async () => {
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'A', {});
+    adapter.resumePlayback();
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, makeRemoteAudioTrack('held'));
+    expect(document.querySelector('audio[data-loungemesh-participant="held"]')).toBeTruthy();
+    adapter.setParticipantPlaybackSuppressed('', true);
+    adapter.setParticipantPlaybackSuppressed('held', true);
+    expect(document.querySelector('audio[data-loungemesh-participant="held"]')).toBeNull();
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, makeRemoteAudioTrack('held'));
+    expect(document.querySelector('audio[data-loungemesh-participant="held"]')).toBeNull();
+    adapter.setParticipantPlaybackSuppressed('held', false);
+    expect(document.querySelector('audio[data-loungemesh-participant="held"]')).toBeTruthy();
+    adapter.disconnect();
+  });
+
   it('drops remote audio while lobby playback is suppressed and restores it after', async () => {
     class FailingCtx {
       state = 'running';

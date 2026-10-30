@@ -9,6 +9,7 @@ import { useAccessGuard } from '@/composables/useAccessGuard';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { formatSphereName } from '@/utils/formatSphereName';
 import AccessDeniedPage from '@/pages/AccessDeniedPage.vue';
+import StatusScreen from '@/components/common/StatusScreen.vue';
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
@@ -49,16 +50,11 @@ onMounted(() => {
     </div>
   </template>
   <template v-else-if="deniedReason === 'pin_required' || deniedReason === 'invalid_pin'">
-    <div class="pin-entry-shell">
-      <div class="pin-card">
-        <div class="pin-icon-circle">
-          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
-        </div>
-        <h2 class="pin-title">Meeting PIN Required</h2>
-        <p class="pin-desc">This meeting requires a security PIN to join. Enter the PIN provided by the organizer.</p>
+    <StatusScreen
+      title="Meeting PIN Required"
+      message="This meeting requires a security PIN to join. Enter the PIN provided by the organizer."
+      icon="shield"
+    >
         <form @submit.prevent="attemptJoin(pinInput)" class="pin-form">
           <input
             v-model="pinInput"
@@ -74,8 +70,7 @@ onMounted(() => {
             {{ isSubmittingPin ? 'Verifying PIN…' : 'Enter Meeting' }}
           </button>
         </form>
-      </div>
-    </div>
+    </StatusScreen>
   </template>
   <template v-else-if="state.status === 'denied'">
     <AccessDeniedPage :reason="deniedReason" />
@@ -106,58 +101,6 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.pin-entry-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at 50% 50%, #1e1b4b 0%, #0f0c1b 100%);
-  font-family: var(--font-body, system-ui, sans-serif);
-  padding: 24px;
-  box-sizing: border-box;
-}
-
-.pin-card {
-  width: 100%;
-  max-width: 420px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  padding: 40px 32px;
-  text-align: center;
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
-  box-sizing: border-box;
-}
-
-.pin-icon-circle {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.15);
-  border: 2px solid rgba(99, 102, 241, 0.4);
-  color: #818cf8;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.pin-title {
-  color: #ffffff;
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin: 0 0 8px;
-}
-
-.pin-desc {
-  color: #94a3b8;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  margin: 0 0 24px;
-}
-
 .pin-form {
   display: flex;
   flex-direction: column;
@@ -172,20 +115,20 @@ onMounted(() => {
   letter-spacing: 2px;
   text-align: center;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  border: 1px solid var(--line-light);
+  background: var(--color-mono100);
+  color: var(--color-mono10);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .pin-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+  border-color: var(--color-blue100);
+  box-shadow: 0 0 0 3px var(--color-mono95);
 }
 
 .pin-error {
-  color: #f87171;
+  color: var(--color-red100);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -194,10 +137,10 @@ onMounted(() => {
   padding: 12px 20px;
   font-size: 1rem;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: var(--radius-round);
   border: none;
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-  color: #ffffff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
   cursor: pointer;
   transition: opacity 0.2s, transform 0.1s;
 }

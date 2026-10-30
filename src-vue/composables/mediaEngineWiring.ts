@@ -7,7 +7,7 @@ import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useReconnectStore } from '@/stores/reconnectStore';
-import { handleSessionCommand } from '@/utils/sessionCommands';
+import { buildHelloCommand, handleSessionCommand } from '@/utils/sessionCommands';
 import { grantsPayloadForSync } from '@/utils/sessionAccess';
 import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 import { spreadInitialUserPosition } from '@/constants/pan';
@@ -19,6 +19,8 @@ import { normalizeSessionError } from '@/services/sessionErrorCodes';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
+import { broadcastYjsState, notesDocumentHasContent } from '@/utils/notesYjsSync';
+import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import { isOnStage } from '@/components/stage/isOnStage';
 import { defaultStageLayout } from '@/stores/sessionFeaturesStore';
@@ -34,7 +36,21 @@ export function wireStoreSync(engine: MediaService): void {
 
   let heartbeatTimer: number | undefined;
 
+  const heldRemoteTracks = new Map<string, JitsiTrack[]>();
+
   function applyRemoteTrackToStore(id: string, track: JitsiTrack) {
+    const features = useSessionFeaturesStore();
+    if (!isAdmittedParticipant(features, id)) {
+      const held = heldRemoteTracks.get(id) ?? [];
+      held.push(track);
+      heldRemoteTracks.set(id, held);
+      conferenceStore.clearUserTrack(id, 'video');
+      conferenceStore.clearUserTrack(id, 'screenshare');
+      conferenceStore.clearUserTrack(id, 'screenshareAudio');
+      engine.setParticipantPlaybackSuppressed?.(id, true);
+      return;
+    }
+    engine.setParticipantPlaybackSuppressed?.(id, false);
     const kind: 'audio' | 'video' | 'screenshareAudio' =
       track.getType() === 'audio' ? remoteAudioSlot(track) : 'video';
 
@@ -59,6 +75,17 @@ export function wireStoreSync(engine: MediaService): void {
     if (kind === 'video') emitMediaStateSnapshot('trackAdded');
     scheduleReceiverRefresh();
   }
+
+  useSessionFeaturesStore().$subscribe(() => {
+    const features = useSessionFeaturesStore();
+    for (const id of [...heldRemoteTracks.keys()]) {
+      if (!isAdmittedParticipant(features, id)) continue;
+      const tracks = heldRemoteTracks.get(id)!;
+      heldRemoteTracks.delete(id);
+      engine.setParticipantPlaybackSuppressed?.(id, false);
+      for (const track of tracks) applyRemoteTrackToStore(id, track);
+    }
+  });
 
   engine.on('connected', () => {
     useConnectionStore().$patch({ connected: true, error: undefined });
@@ -122,15 +149,7 @@ export function wireStoreSync(engine: MediaService): void {
       scheduleReceiverRefresh();
       emitMediaStateSnapshot('conferenceJoined');
 
-      engine.sendCommand(
-        'hello',
-        JSON.stringify({
-          id,
-          userKey: local.userKey,
-          pos: local.pos,
-          name: conferenceStore.displayName,
-        }),
-      );
+      engine.sendCommand('hello', buildHelloCommand(id));
       features.resendSessionIdentity(engine);
       engine.sendCommand('hello_req', JSON.stringify({ from: id }));
 
@@ -139,15 +158,7 @@ export function wireStoreSync(engine: MediaService): void {
         if (!engine.isJoined()) return;
         const myId = local.id || engine.getLocalUserId();
         if (myId) {
-          engine.sendCommand(
-            'hello',
-            JSON.stringify({
-              id: myId,
-              userKey: local.userKey,
-              pos: local.pos,
-              name: conferenceStore.displayName,
-            }),
-          );
+          engine.sendCommand('hello', buildHelloCommand(myId));
         }
         const conf = engine.getConference();
         const liveIds = conf ? conf.getParticipants().map((p) => p.getId()) : [];
@@ -178,15 +189,7 @@ export function wireStoreSync(engine: MediaService): void {
     }
     const local = useLocalStore();
     if (local.id && local.id !== id) {
-      engine.sendCommand(
-        'hello',
-        JSON.stringify({
-          id: local.id,
-          userKey: local.userKey,
-          pos: local.pos,
-          name: conferenceStore.displayName,
-        }),
-      );
+      engine.sendCommand('hello', buildHelloCommand(local.id));
     }
     const features = useSessionFeaturesStore();
     if (features.isHost) {
@@ -198,6 +201,11 @@ export function wireStoreSync(engine: MediaService): void {
       if (features.sharedNotes) {
         broadcastSharedNotes(engine, features.sharedNotes);
       }
+      if (notesDocumentHasContent(features.ydoc)) {
+        broadcastYjsState(engine, features.ydoc);
+      }
+    }
+    if (features.isHost || features.isModerator) {
       broadcastHostRoomSettings(engine, features);
     }
     scheduleReceiverRefresh();

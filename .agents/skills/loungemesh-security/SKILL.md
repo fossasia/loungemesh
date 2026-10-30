@@ -23,6 +23,7 @@ function sanitizeMeetingConfig(configs: any) {
   if (!configs) return null;
   return {
     lobbyEnabled: !!configs.lobbyEnabled,
+    lobbyForm: configs.lobbyForm === 'details' ? 'details' : 'name',
     stagePromotionEnabled: configs.stagePromotionEnabled !== undefined ? configs.stagePromotionEnabled : true,
     allowParticipantRecording: !!configs.allowParticipantRecording,
     notesTemplate: configs.notesTemplate || '',
@@ -42,6 +43,8 @@ function sanitizeMeetingConfig(configs: any) {
   Protected actions (updating room settings, changing lobby admission, kicking attendees) must verify that `role === 'host'` or `role === 'moderator'`.
 - **Email-mapped host**:
   The host is the meeting owner's email. Do not grant host because someone joined a link first. Moderator and guest emails are the invite lists. Missing or unlisted emails are attendees and stay in the lobby, which is on by default.
+- **Feature revoke**: Room-wide tools are the host's switch. A moderator can revoke or restore one person, not change the room-wide switch. Apply an access or config command only from the host, a moderator grant, a moderator email, or the matching host email. Ignore a command from anyone else.
+- **Lobby media**: Until a person is admitted, do not publish their camera or microphone, and do not play or show their tracks to people already in the room. The client treats the lobby as on until room config says otherwise.
 
 ---
 

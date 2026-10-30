@@ -12,7 +12,10 @@ import { wireStoreSync } from './mediaEngineWiring';
 import { handleSessionCommand } from '@/utils/sessionCommands';
 
 describe('wireStoreSync', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
+  });
 
   it('syncs connection, conference, tracks, and position commands', async () => {
     const engine = getMediaEngineInstance();
@@ -616,7 +619,7 @@ describe('wireStoreSync', () => {
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue('host');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Agenda');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
     expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
@@ -637,7 +640,7 @@ describe('wireStoreSync', () => {
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue('solo');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Kickoff');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
     expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
@@ -659,6 +662,26 @@ describe('wireStoreSync', () => {
     expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
+  it('rebroadcasts room background when a moderator sees a new participant', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    local.setMyID('mod');
+    features.setHost('host');
+    features.userGrants.mod = { moderator: true };
+    features.gridBackgroundUrl = 'data:image/jpeg;base64,wall';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Mod', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+    expect(cmdSpy).not.toHaveBeenCalledWith('access', expect.any(String));
+  });
+
   it('rebroadcasts shared notes when host sees a new participant', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
@@ -674,7 +697,7 @@ describe('wireStoreSync', () => {
     await engine.joinRoom('room', 'Host', {});
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"begin"'));
   });
 
   it('announces lobby approval when an invited person joins', async () => {
@@ -955,6 +978,40 @@ describe('wireStoreSync', () => {
     jitsi.connection._fire(ev.connection.CONNECTION_DISCONNECTED);
 
     vi.useRealTimers();
+  });
+
+  it('holds a waiting person and plays them after admission', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    local.setMyID('host');
+    features.setHost('host');
+    features.isVerifiedHost = true;
+    const { seedNotesDocument } = await import('@/utils/notesYjsSync');
+    seedNotesDocument(features.ydoc, 'Hello');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, makeRemoteAudioTrack('guest'));
+    expect(conference.users.guest?.audio).toBeUndefined();
+    features.$patch({ lobbyForm: 'details' });
+    expect(conference.users.guest?.audio).toBeUndefined();
+    features.$patch({ lobbyApproved: { guest: true } });
+    await flushPromises();
+    expect(conference.users.guest?.audio).toBeTruthy();
+    const muted = makeRemoteAudioTrack('guest2');
+    muted.isMuted = () => true;
+    features.lobbyApproved = { ...features.lobbyApproved, guest2: true };
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, muted);
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'late', {});
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
   });
 });
 

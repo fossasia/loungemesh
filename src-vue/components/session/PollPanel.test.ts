@@ -141,7 +141,7 @@ describe('PollPanel', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
+    features.userGrants.guest = { notes: false, whiteboard: false, poll: false };
     const { wrapper } = await mountWithApp(PollPanel);
     expect(wrapper.text()).toContain('Ask the host for poll access');
 
@@ -208,36 +208,18 @@ describe('PollPanel', () => {
     wrapper.unmount();
   });
 
-  it('allows attendees to submit and cancel poll requests', async () => {
+  it('hides poll requests from attendees', async () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('attendee-1');
     features.setHost('host-1');
     features.eventyayMeet = true;
     features.capabilities = ['notes'];
-    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
 
     const { wrapper } = await mountWithApp(PollPanel);
-    expect(wrapper.text()).toContain('Request a poll');
-
-    await wrapper.find('#poll-req-question').setValue('Break time?');
-    await wrapper.find('.textBtn').trigger('click');
-    expect(wrapper.findAll('.optionField')).toHaveLength(3);
-    const removeBtns = wrapper.findAll('.iconBtn');
-    await removeBtns[removeBtns.length - 1].trigger('click');
-    expect(wrapper.findAll('.optionField')).toHaveLength(2);
-
-    const optionFields = wrapper.findAll('.optionField');
-    await optionFields[0].setValue('10 mins');
-    await optionFields[1].setValue('15 mins');
-
-    await wrapper.find('.primaryBtn').trigger('click');
-    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"create"'));
-    expect(wrapper.text()).toContain('Poll Request Submitted');
-    expect(wrapper.text()).toContain('Waiting for a moderator to approve your poll');
-
-    await wrapper.find('.secondaryBtn').trigger('click');
-    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"cancel"'));
+    expect(wrapper.text()).toContain('Waiting for the host or a moderator to start a poll.');
+    expect(wrapper.text()).not.toContain('Request a poll');
+    expect(wrapper.find('.requestSection').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -276,6 +258,39 @@ describe('PollPanel', () => {
     await wrapper2.find('.declineBtn').trigger('click');
     expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"reject"'));
     wrapper2.unmount();
+  });
+
+  it('lets an attendee cancel a poll request that is already waiting', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    features.setHost('host-1');
+    features.addPollRequest({
+      id: 'mine',
+      question: 'Break time?',
+      options: ['10 mins', '15 mins'],
+      requesterId: 'attendee-1',
+      requesterName: 'Attendee',
+      createdAt: 1,
+    });
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.text()).toContain('Poll Request Submitted');
+    await wrapper.find('.secondaryBtn').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"cancel"'));
+    wrapper.unmount();
+  });
+
+  it('lets an attendee wait for a poll without requesting approval', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    features.setHost('host-1');
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.text()).toContain('Waiting for the host or a moderator to start a poll.');
+    expect(wrapper.find('.requestSection').exists()).toBe(false);
+    expect(wrapper.find('#poll-question').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('shows and dismisses decline notice banner', async () => {

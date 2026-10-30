@@ -146,6 +146,14 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
   box-sizing: border-box;
   pointer-events: none;
 }
+@media (max-width: 768px) {
+  .wbShell {
+    top: 56px !important;
+    right: 8px !important;
+    bottom: 112px !important;
+    left: 8px !important;
+  }
+}
 .wbOverlay {
   display: flex;
   flex-direction: column;

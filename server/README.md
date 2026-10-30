@@ -131,7 +131,7 @@ DATABASE_URL="postgresql://<db_user>:<db_password>@postgres:5432/loungemesh?sche
 | `POST` | `/api/meetings` | Create a new scheduled or ad-hoc room. Caches sanitized config in Redis. |
 | `GET` | `/api/meetings/upcoming` | Fetch upcoming scheduled meetings for authenticated user. |
 | `GET` | `/api/meetings/role/:roomName` | Resolve caller's role (`host`, `moderator`, `attendee`). |
-| `GET` | `/api/meetings/config/:roomName` | Fetch sanitized room settings (`lobbyEnabled`, `stagePromotionEnabled`, `allowParticipantRecording`, `notesTemplate`). |
+| `GET` | `/api/meetings/config/:roomName` | Fetch sanitized room settings (`lobbyEnabled`, `lobbyForm` of `name` or `details`, `stagePromotionEnabled`, `allowParticipantRecording`, `notesTemplate`). |
 | `PUT` | `/api/meetings/config/:roomName` | Update room settings (host/moderator only). |
 
 ### Real-Time Session Features (Redis-Backed)

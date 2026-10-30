@@ -19,7 +19,7 @@ When developing or modifying features, verify that the following user flows func
    - Direct Join: Name input & avatar selection.
    - Eventyay Gated Entry: Opaque token exchange, Jitsi JWT generation, capability assignment.
    - PIN Protection: Modal challenge, verification against backend, rejection on invalid PIN without leaking `joinPin`.
-   - Lobby & Admission: invited emails enter directly. Everyone else waits. The waiting screen does not show or play the meeting. Cancel and leave clear the host's knock list. Only the host or a moderator can deny entry.
+   - Lobby & Admission: invited emails enter directly. Everyone else waits. The default form asks only for a name; the details form also requires an email. Nothing is prefilled. A waiting client does not publish camera or microphone, and people already inside do not see or hear them. Cancel and leave clear the host's knock list. Only the host or a moderator can deny entry. Admit and deny apply as the command arrives.
    - Host Key Claim: Unlocking host privileges with host key.
 2. **Media Device Negotiation**:
    - Mic/Camera permission granting or graceful denial.
@@ -36,7 +36,7 @@ When developing or modifying features, verify that the following user flows func
    - Screensharing with system audio captured at 720p @ 15–30 fps.
 5. **In-Room Collaborative Tools**:
    - Collaborative Whiteboard: Freehand pen, lines, rectangles, circles, eraser, palette, stroke sync, clear/reset.
-   - Shared Notes: Real-time debounced markdown editing, host template broadcasting, markdown export.
+   - Shared Notes: Real-time debounced markdown editing. A host template is written into the Y.Doc and broadcast immediately. Attendees publish notes without a moderation queue. Markdown export.
    - Live Polling: Create poll, anonymous voting, real-time vote tally, reveal/close.
 6. **Moderation & Room Administration**:
    - Host room settings modal: Feature toggles (chat, notes, whiteboard, poll, stage).
@@ -49,7 +49,8 @@ When developing or modifying features, verify that the following user flows func
 8. **Network Resilience & Recovery**:
    - Automatic WebRTC reconnection on network drop.
    - Live notes, whiteboard, chat, reactions, and polls travel as JSON messages, not presence, so a burst cannot drop the XMPP connection.
-   - The meeting owner's email is the host. Moderator and guest emails are invited. A join link does not promote the first arrival to host. People with no email, or an email that is not invited, are attendees and wait in the lobby. Lobby defaults to on.
+   - The meeting owner's email is the host. Moderator and guest emails are invited. A join link does not promote the first arrival to host. People with no email, or an email that is not invited, are attendees and wait in the lobby. Lobby defaults to on. When the host enables notes, whiteboard, polls, or chat, attendees can use them. The host changes room-wide settings, including presenter promotion. Host and moderator start and end polls, change the floor background and notes template, and can revoke or restore one person. Attendees vote. A control that role cannot use is hidden. Grants, the notes template, and the floor background are delivered live and repeated on the host heartbeat.
+   - Narrow screens open at a smaller floor scale (0.4 under 480px, 0.5 under 768px). Session panels, chat, whiteboard, and the screenshare strip use the width above the footer. Phone screenshare capture omits desktop source locks and falls back to `getDisplayMedia`. Distant shares stay visible on viewports at or under 768px.
    - Automatic token renewal on `AUTHENTICATION_REQUIRED`.
    - Graceful fallback from single-roundtrip `/init` to parallel individual endpoints.
 

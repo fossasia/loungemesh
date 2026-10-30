@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import {
@@ -13,10 +14,18 @@ import {
   processNotesTemplateFile,
 } from '@/utils/notesTemplateFile';
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
-import { broadcastSharedNotes } from '@/utils/notesSync';
+
+const props = withDefaults(
+  defineProps<{
+    /** Background and notes template only. Room-wide switches stay with the host. */
+    appearanceOnly?: boolean;
+  }>(),
+  { appearanceOnly: false },
+);
 
 const features = useSessionFeaturesStore();
 const { engine } = useMediaEngine();
+const route = useRoute();
 
 const backgroundError = ref('');
 const templateError = ref('');
@@ -62,16 +71,21 @@ async function onTemplateSelected(event: Event) {
   try {
     const text = await processNotesTemplateFile(file);
     features.setNotesTemplate(text);
-    if (!features.sharedNotes.trim()) {
-      features.sharedNotes = text;
-      broadcastSharedNotes(engine, text);
-    }
+    features.publishNotesTemplate(engine);
   } catch (e) {
     templateError.value =
       e instanceof NotesTemplateError ? e.message : 'Could not read that template.';
   } finally {
     templateBusy.value = false;
   }
+}
+
+function onLobbyFormChange(event: Event) {
+  const lobbyForm = (event.target as HTMLSelectElement).value === 'details' ? 'details' : 'name';
+  features.lobbyForm = lobbyForm;
+  features.syncConfig(engine);
+  const roomName = String(route.params.id || '');
+  if (roomName) void features.updateRoomConfig(roomName, { lobbyForm }, engine);
 }
 
 function clearTemplate() {
@@ -145,6 +159,15 @@ function applyConfirmedFeature() {
     </div>
     <p v-if="backgroundError" class="error">{{ backgroundError }}</p>
 
+    <h3 v-if="!props.appearanceOnly" class="sectionTitle sectionTitleSpaced">Lobby</h3>
+    <label v-if="!props.appearanceOnly" class="uploadRow" for="lobbyFormSelect">
+      <span>What people in the lobby enter</span>
+      <select id="lobbyFormSelect" class="pill" :value="features.lobbyForm" @change="onLobbyFormChange">
+        <option value="name">Name only</option>
+        <option value="details">Name and email</option>
+      </select>
+    </label>
+
     <h3 class="sectionTitle sectionTitleSpaced">Notes template</h3>
     <p class="sectionHint">{{ notesTemplateRequirementsHint() }}</p>
     <div class="uploadRow">
@@ -171,9 +194,9 @@ function applyConfirmedFeature() {
     <p v-if="features.notesTemplate" class="templateStatus">Template active</p>
     <p v-if="templateError" class="error">{{ templateError }}</p>
 
-    <h3 class="sectionTitle sectionTitleSpaced">Room features</h3>
-    <p class="sectionHint">Control which features are enabled room-wide. Disabled features are hidden from participants and cannot be used or moderated.</p>
-    <div class="featuresList">
+    <h3 v-if="!props.appearanceOnly" class="sectionTitle sectionTitleSpaced">Room features</h3>
+    <p v-if="!props.appearanceOnly" class="sectionHint">Control which features are enabled room-wide. Disabled features are hidden from participants and cannot be used or moderated.</p>
+    <div v-if="!props.appearanceOnly" class="featuresList">
       <div v-for="feat in availableFeatures" :key="feat.key" class="featureRow">
         <div class="featureInfo">
           <span class="featureName">{{ feat.label }}</span>

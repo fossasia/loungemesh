@@ -4,6 +4,7 @@ import {
   clampScale,
   computeRoomBounds,
   defaultScale,
+  preferredRoomScale,
   initialPanCenterOnUser,
   minRoomSize,
   randomInitialUserPosition,
@@ -15,6 +16,13 @@ import {
 } from './pan';
 
 describe('pan constants', () => {
+  it('starts further out on a phone', () => {
+    expect(preferredRoomScale(390)).toBe(0.4);
+    expect(preferredRoomScale(700)).toBe(0.5);
+    expect(preferredRoomScale(1200)).toBe(defaultScale);
+    expect(preferredRoomScale()).toBe(defaultScale);
+  });
+
   it('randomInitialUserPosition centers in room', () => {
     const pos = randomInitialUserPosition();
     expect(pos.x).toBe(roomSize.x / 2 - 100);

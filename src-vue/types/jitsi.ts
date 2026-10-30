@@ -106,6 +106,14 @@ export interface JitsiMeetJS {
     devices: ('audio' | 'video' | 'desktop')[];
     firePermissionPromptIsShownEvent?: boolean;
   }): Promise<JitsiTrack[]>;
+  createLocalTracksFromMediaStreams?(
+    items: Array<{
+      stream: MediaStream;
+      mediaType: 'video' | 'audio';
+      videoType?: 'desktop' | 'camera';
+      sourceType?: string;
+    }>,
+  ): Promise<JitsiTrack[]>;
 }
 
 declare global {

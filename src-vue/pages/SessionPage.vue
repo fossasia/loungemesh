@@ -46,7 +46,7 @@ import { useSessionRecording } from '@/composables/useSessionRecording';
 import { useSessionExport } from '@/composables/useSessionExport';
 import { makeRecorderSources } from '@/utils/sessionRecorderSources';
 import { playUiSound } from '@/utils/uiSounds';
-import { minScale, defaultScale } from '@/constants/pan';
+import { minScale, preferredRoomScale } from '@/constants/pan';
 
 /** Absorbs `props: true` route param so it is not forwarded as a stray DOM attribute (multi-root page). */
 /* v8 ignore next */
@@ -72,7 +72,7 @@ watch(
       route.query.zoom === 'out' ||
       route.query.zoom === 'min' ||
       (typeof window !== 'undefined' && window.self !== window.top && route.query.zoom !== 'in');
-    const targetScale = shouldZoomOut ? minScale : defaultScale;
+    const targetScale = shouldZoomOut ? minScale : preferredRoomScale();
     local.resetViewportForRoom(targetScale);
   },
   { immediate: true },
@@ -97,12 +97,12 @@ const showLeaveDialog = ref(false);
 const showLobbyDropdown = ref(false);
 
 function approve(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId }));
+  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId, email: features.controlEmail }));
   features.approveLobby(entryId);
 }
 
 function reject(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId }));
+  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId, email: features.controlEmail }));
   features.rejectLobby(entryId);
 }
 
@@ -496,6 +496,21 @@ onBeforeUnmount(() => {
 @media (max-width: 768px) {
   .stageToast {
     top: 56px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+  .gmeetLobbyBanner {
+    top: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 16px;
+    padding: 8px;
+    gap: 8px;
+  }
+  .lobbyMenuContainer {
+    top: 8px;
+    right: 8px;
   }
 }
 
@@ -556,7 +571,7 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  width: 360px;
+  width: min(360px, calc(100vw - 24px));
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(79, 110, 247, 0.15);
   border-radius: 16px;
@@ -764,13 +779,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: rgba(15, 23, 42, 0.94);
+  background: var(--color-bg-card);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 9999px;
+  border: 1px solid var(--line-light);
+  border-radius: 16px;
   padding: 8px 18px 8px 10px;
-  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(79, 110, 247, 0.25);
+  box-shadow: 0 12px 28px rgba(30, 34, 64, 0.12);
   animation: bannerEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   max-width: calc(100vw - 32px);
 }
@@ -799,17 +814,17 @@ onBeforeUnmount(() => {
 .bannerName {
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--color-mono10);
 }
 
 .bannerSubtitle {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-mono30);
 }
 
 .bannerReason {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-mono40);
   font-style: italic;
   max-width: 200px;
   overflow: hidden;
@@ -829,9 +844,9 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   border-radius: 9999px;
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
+  border: 1px solid var(--color-red100);
+  background: transparent;
+  color: var(--color-red100);
   cursor: pointer;
   transition: all 0.15s ease;
 }

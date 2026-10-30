@@ -11,6 +11,7 @@ import type {
 } from './MediaService';
 import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 import { decodeXmppCommandValue, encodeXmppCommandValue } from '@/utils/xmppCommandWire';
+import { acquireDesktopTracks } from '@/utils/screenshareCapture';
 import {
   isStickyPresenceCommand,
   LIVE_COMMAND_GAP_MS,
@@ -110,6 +111,7 @@ export class JitsiAdapter implements MediaService {
   private speakingMonitors = new Map<string, () => void>();
   private playbackUnlocked = false;
   private remotePlaybackSuppressed = false;
+  private suppressedParticipants = new Set<string>();
   private addedLocalTracks = new Set<any>();
   private liveQueue: { name: string; value: string }[] = [];
   private liveQueueTimer: number | undefined;
@@ -366,19 +368,7 @@ export class JitsiAdapter implements MediaService {
     this.init();
     const options = { firePermissionPromptIsShownEvent: true };
     if (devices.includes('desktop')) {
-      return this.jsMeet!.createLocalTracks({
-        devices: ['desktop'],
-        desktopSharingSources: ['screen', 'window', 'tab'],
-        desktopSharingFrameRate: { min: 15, max: 30 },
-        constraints: {
-          video: {
-            height: { ideal: 720, max: 720 },
-            width: { ideal: 1280, max: 1280 },
-            frameRate: { ideal: 24, max: 30 },
-          },
-        },
-        ...options,
-      } as any);
+      return acquireDesktopTracks(this.jsMeet!);
     }
     const av = devices.filter((d): d is 'audio' | 'video' => d === 'audio' || d === 'video');
     const trackOptions: any = {
@@ -519,6 +509,20 @@ export class JitsiAdapter implements MediaService {
 
   setReceiverConstraints(constraints: ReceiverConstraints): void {
     this.conference?.setReceiverConstraints(constraints);
+  }
+
+  setParticipantPlaybackSuppressed(userId: string, suppressed: boolean): void {
+    if (!userId) return;
+    if (suppressed) {
+      this.suppressedParticipants.add(userId);
+      const trackIds = this.participantTracks.get(userId);
+      if (trackIds) {
+        for (const trackId of [...trackIds]) this.removeTrackAudio(userId, trackId);
+      }
+      return;
+    }
+    this.suppressedParticipants.delete(userId);
+    this.refreshRemoteAudio();
   }
 
   setRemotePlaybackSuppressed(suppressed: boolean): void {
@@ -776,7 +780,7 @@ export class JitsiAdapter implements MediaService {
     }
     /* v8 ignore next */
     const trackId = (typeof track.getId === 'function') ? track.getId() : ((track as any).id || userId || 'mock-track-id');
-    if (this.remotePlaybackSuppressed) {
+    if (this.remotePlaybackSuppressed || this.suppressedParticipants.has(userId)) {
       this.pendingRemoteAudio.set(trackId, track);
       return;
     }

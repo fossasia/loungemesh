@@ -57,30 +57,35 @@ defineProps<{
   gap: 10px;
 }
 
-/* Phones / narrow viewports: the control row would otherwise overflow off-screen. */
+/* Phone footer: two even rows so mic, camera, screenshare, and leave stay on screen. */
 @media (max-width: 768px) {
   .footer {
-    flex-direction: column;
-    align-items: stretch;
-    padding-bottom: 4px;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+    background: color-mix(in srgb, var(--color-bg-page) 92%, white);
   }
   .left {
     display: none;
   }
-  .center {
-    flex-wrap: wrap;
-    justify-content: center;
-    margin: 6px;
-    gap: 6px;
-  }
-  .center :deep(button) {
-    margin: 0 2px;
-  }
+  .center,
   .right {
-    margin: 0 6px 2px;
+    display: contents;
+  }
+  .footer :deep(button) {
+    pointer-events: auto;
+    margin: 0;
+    width: 100%;
     min-width: 0;
-    justify-content: center;
-    flex-wrap: wrap;
+    min-height: 40px;
+    padding: 6px;
+    justify-self: stretch;
+  }
+  .footer :deep(.btn-leave-call) {
+    grid-column: span 2;
+    font-size: 0.8rem;
   }
 }
 </style>

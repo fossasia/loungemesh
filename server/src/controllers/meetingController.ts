@@ -78,10 +78,15 @@ function markdownToHtml(md: string): string {
 }
 
 // Helper: Sanitize meeting configuration to prevent exposing joinPin or internal fields
+function lobbyFormValue(value: unknown): 'name' | 'details' {
+  return value === 'details' ? 'details' : 'name';
+}
+
 function sanitizeMeetingConfig(configs: any) {
   if (!configs) return null;
   return {
     lobbyEnabled: !!configs.lobbyEnabled,
+    lobbyForm: lobbyFormValue(configs.lobbyForm),
     stagePromotionEnabled: configs.stagePromotionEnabled !== undefined ? configs.stagePromotionEnabled : true,
     allowParticipantRecording: !!configs.allowParticipantRecording,
     notesTemplate: configs.notesTemplate || '',
@@ -196,7 +201,8 @@ export async function createMeeting(req: Request, res: Response) {
     stagePromotionEnabled,
     allowParticipantRecording,
     roomDefaults,
-    description
+    description,
+    lobbyForm,
   } = req.body;
 
   if (!title || !roomName) {
@@ -237,6 +243,7 @@ export async function createMeeting(req: Request, res: Response) {
         configs: {
           create: {
             lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : true,
+            lobbyForm: lobbyFormValue(lobbyForm),
             stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : true,
             allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : false,
             roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : undefined,
@@ -353,7 +360,8 @@ export async function updateMeeting(req: Request, res: Response) {
     allowParticipantRecording,
     roomDefaults,
     syncGoogleCal,
-    description
+    description,
+    lobbyForm,
   } = req.body;
 
   try {
@@ -403,12 +411,14 @@ export async function updateMeeting(req: Request, res: Response) {
           upsert: {
             update: {
               lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : undefined,
+              lobbyForm: lobbyForm !== undefined ? lobbyFormValue(lobbyForm) : undefined,
               stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : undefined,
               allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : undefined,
               roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : undefined,
             },
             create: {
               lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : true,
+              lobbyForm: lobbyFormValue(lobbyForm),
               stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : true,
               allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : false,
               roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : JSON.stringify({ notes: false, whiteboard: false, poll: false, moderator: false }),
@@ -608,7 +618,7 @@ export async function getMeetingRole(req: Request, res: Response) {
       },
     });
     if (!meeting) {
-      return res.json({ role: 'attendee', hostId: null, hostEmail: null, isInvited: false });
+      return res.json({ role: 'attendee', hostId: null, hostEmail: null, isInvited: false, moderatorEmails: [], guestEmails: [] });
     }
 
     // For Eventyay-linked meets, role is determined solely by the validated grant session
@@ -619,6 +629,8 @@ export async function getMeetingRole(req: Request, res: Response) {
           hostId: meeting.hostId,
           hostEmail: meeting.host?.email || null,
           isInvited: !req.access.sub?.startsWith('guest:'),
+          moderatorEmails: meeting.moderatorEmails,
+          guestEmails: meeting.guestEmails,
         });
       }
       return res.json({
@@ -626,6 +638,8 @@ export async function getMeetingRole(req: Request, res: Response) {
         hostId: meeting.hostId,
         hostEmail: meeting.host?.email || null,
         isInvited: false,
+        moderatorEmails: meeting.moderatorEmails,
+        guestEmails: meeting.guestEmails,
       });
     }
 
@@ -636,6 +650,8 @@ export async function getMeetingRole(req: Request, res: Response) {
       hostId: meeting.hostId,
       hostEmail: meeting.host?.email || null,
       isInvited,
+      moderatorEmails: meeting.moderatorEmails,
+      guestEmails: meeting.guestEmails,
     });
   } catch (err) {
     console.error('Get meeting role error:', err);
@@ -678,7 +694,7 @@ export async function getMeetingConfig(req: Request, res: Response) {
 
 export async function updateMeetingConfig(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
-  const { lobbyEnabled, stagePromotionEnabled, allowParticipantRecording, notesTemplate } = req.body;
+  const { lobbyEnabled, lobbyForm, stagePromotionEnabled, allowParticipantRecording, notesTemplate } = req.body;
 
   try {
     const meeting = await prisma.meeting.findUnique({
@@ -706,6 +722,7 @@ export async function updateMeetingConfig(req: Request, res: Response) {
       where: { meetingId: meeting.id },
       update: {
         lobbyEnabled: lobbyEnabled !== undefined ? lobbyEnabled : undefined,
+        lobbyForm: lobbyForm !== undefined ? lobbyFormValue(lobbyForm) : undefined,
         stagePromotionEnabled: stagePromotionEnabled !== undefined ? stagePromotionEnabled : undefined,
         allowParticipantRecording: allowParticipantRecording !== undefined ? allowParticipantRecording : undefined,
         notesTemplate: notesTemplate !== undefined ? notesTemplate : undefined,
@@ -713,6 +730,7 @@ export async function updateMeetingConfig(req: Request, res: Response) {
       create: {
         meetingId: meeting.id,
         lobbyEnabled: !!lobbyEnabled,
+        lobbyForm: lobbyFormValue(lobbyForm),
         stagePromotionEnabled: stagePromotionEnabled !== undefined ? stagePromotionEnabled : true,
         allowParticipantRecording: !!allowParticipantRecording,
         notesTemplate: notesTemplate !== undefined ? notesTemplate : null,
@@ -1294,7 +1312,7 @@ export async function getRoomInitialState(req: Request, res: Response) {
       rawBg !== null ? rawBg : meeting?.configs?.gridBackgroundUrl || '';
 
     return res.json({
-      role: { role, hostId, hostEmail, isInvited },
+      role: { role, hostId, hostEmail, isInvited, moderatorEmails: meeting?.moderatorEmails ?? [], guestEmails: meeting?.guestEmails ?? [] },
       config,
       whiteboard: { strokes },
       notes: { notes },
