@@ -2,6 +2,31 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Session feature controls', () => {
   test.beforeEach(async ({ page }) => {
+    await page.route('**/api/meetings/state/*/init', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          role: { role: 'attendee', hostId: 'host-1', isInvited: true },
+          config: {
+            lobbyEnabled: false,
+            stagePromotionEnabled: true,
+            allowParticipantRecording: false,
+            notesTemplate: '',
+            lobbyForm: 'name',
+          },
+          access: {
+            enabledFeatures: {
+              chat: true,
+              notes: false,
+              whiteboard: false,
+              poll: false,
+              stage: true,
+            },
+          },
+        }),
+      });
+    });
     await page.goto('/session/e2e-features');
     await expect(page.locator('[data-testid="footer-bar"], footer, .footer-bar, .footer').first()).toBeVisible({ timeout: 10000 });
   });
@@ -76,5 +101,85 @@ test.describe('Session feature controls', () => {
       await page.getByRole('button', { name: 'Stay' }).click();
       await expect(dialog).not.toBeVisible();
     }
+  });
+
+  test('host sees Host header badge and opens clean Room and People controls', async ({ page }) => {
+    // Attendee from beforeEach does not see host/moderator Add or Share quick buttons
+    await expect(page.getByTestId('quick-add-attendee-btn')).not.toBeVisible();
+    await expect(page.getByTestId('quick-share-link-btn')).not.toBeVisible();
+
+    let invitedEmailsPayload: string[] = [];
+    await page.route('**/api/meetings/state/*/invite', async (route) => {
+      const body = route.request().postDataJSON() as { emails?: string[] };
+      invitedEmailsPayload = body.emails || [];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          addedEmails: invitedEmailsPayload,
+          guestEmails: invitedEmailsPayload,
+          emailSent: true,
+        }),
+      });
+    });
+
+    await page.route('**/api/meetings/state/*/init', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          role: { role: 'host', hostId: 'host-1', hostEmail: 'host@example.com', isInvited: true },
+          config: {
+            lobbyEnabled: true,
+            stagePromotionEnabled: true,
+            allowParticipantRecording: false,
+            notesTemplate: '',
+            lobbyForm: 'name',
+          },
+          access: {
+            enabledFeatures: {
+              chat: true,
+              notes: true,
+              whiteboard: true,
+              poll: true,
+              stage: true,
+            },
+          },
+        }),
+      });
+    });
+
+    await page.goto('/session/e2e-host-controls');
+    await expect(page.getByTestId('header-role-badge')).toContainText('Host');
+    await expect(page.getByTestId('quick-add-attendee-btn')).toBeVisible();
+    await expect(page.getByTestId('quick-share-link-btn')).toBeVisible();
+
+    const footer = page.locator('.footer');
+    await footer.getByRole('button', { name: 'Moderator' }).click();
+    await expect(page.getByText('Host Controls & Settings')).toBeVisible();
+    await expect(page.getByText('Room appearance')).toBeVisible();
+    await expect(page.getByText('Feature access')).toBeVisible();
+
+    await page.getByRole('tab', { name: 'People' }).click();
+    await expect(page.getByRole('heading', { name: 'Participants' })).toBeVisible();
+
+    // Invite an attendee by email via the Add action
+    await page.getByTestId('people-add-btn').click();
+    await page.locator('#session-invite-emails').fill('newguest@example.com');
+    await page.getByRole('button', { name: 'Send invite' }).click();
+    await expect(page.getByText('Invitation email sent to newguest@example.com.')).toBeVisible();
+    expect(invitedEmailsPayload).toEqual(['newguest@example.com']);
+
+    // Share meeting link via the Share action
+    await page.getByTestId('people-share-btn').click();
+    await expect(page.locator('#session-share-link')).toHaveValue(/\/session\/e2e-host-controls$/);
+    await page.getByTestId('people-copy-link-btn').click();
+  });
+
+  test('renders screenshare button in footer when stage is not occupied', async ({ page }) => {
+    const footer = page.locator('.footer');
+    const screenshareBtn = footer.getByRole('button', { name: /Screenshare/i });
+    await expect(screenshareBtn).toBeVisible();
   });
 });

@@ -48,6 +48,7 @@ import { useSessionExport } from '@/composables/useSessionExport';
 import { makeRecorderSources } from '@/utils/sessionRecorderSources';
 import { playUiSound } from '@/utils/uiSounds';
 import { minScale, preferredRoomScale } from '@/constants/pan';
+import { buildSessionShareUrl, copyMeetingShareLink } from '@/utils/sessionInviteShare';
 
 /** Absorbs `props: true` route param so it is not forwarded as a stray DOM attribute (multi-root page). */
 /* v8 ignore next */
@@ -97,16 +98,53 @@ const selectedQuality = ref<'720p' | '480p'>('720p');
 
 const showLeaveDialog = ref(false);
 const showLobbyDropdown = ref(false);
+const quickShareCopied = ref(false);
+
+function openAddAttendeeQuick() {
+  showLobbyDropdown.value = false;
+  features.openModeratorPeoplePane('add');
+}
+
+async function quickShareMeetingLink() {
+  showLobbyDropdown.value = false;
+  features.openModeratorPeoplePane('share');
+  const url = buildSessionShareUrl(sessionId.value);
+  const copied = await copyMeetingShareLink(url);
+  if (copied) {
+    quickShareCopied.value = true;
+    features.setStageMessage('Meeting link copied to clipboard!');
+    window.setTimeout(() => {
+      quickShareCopied.value = false;
+    }, 2000);
+  }
+}
 
 function approve(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId, email: features.controlEmail }));
+  const email = features.controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ action: 'approve', id: entryId, ...(email ? { email } : {}) }),
+  );
   features.approveLobby(entryId);
 }
 
 function reject(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId, email: features.controlEmail }));
+  const email = features.controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ action: 'reject', id: entryId, ...(email ? { email } : {}) }),
+  );
   features.rejectLobby(entryId);
 }
+
+watch(
+  () => [conf.isJoined, features.userRole] as const,
+  ([joined, role]) => {
+    if (!joined) return;
+    engine.setLocalParticipantProperty('role', role);
+  },
+  { immediate: true },
+);
 
 const latestLobbyWaiter = computed(() => features.lobbyWaiting[0] || null);
 
@@ -318,24 +356,47 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <!-- Top-right Lobby Queue Dropdown Menu -->
+  <!-- Top-right Host & Moderator Quick Actions (Add, Share, Lobby) -->
   <div
     v-if="features.isHost || features.isModerator"
     class="lobbyMenuContainer"
   >
-    <button
-      type="button"
-      class="lobbyMenuBtn"
-      :class="{ hasWaiters: features.lobbyWaiting.length > 0 }"
-      @click="showLobbyDropdown = !showLobbyDropdown"
-      title="Lobby Queue"
-    >
-      <AppIcon name="user" :size="16" />
-      <span class="lobbyBtnLabel">Lobby</span>
-      <span v-if="features.lobbyWaiting.length > 0" class="lobbyBadge">
-        {{ features.lobbyWaiting.length }}
-      </span>
-    </button>
+    <div class="hostQuickBar">
+      <button
+        type="button"
+        class="quickActionBtn"
+        data-testid="quick-add-attendee-btn"
+        title="Invite attendee by email"
+        @click="openAddAttendeeQuick"
+      >
+        <AppIcon name="user-plus" :size="15" />
+        <span class="quickActionLabel">Add</span>
+      </button>
+      <button
+        type="button"
+        class="quickActionBtn"
+        :class="{ copied: quickShareCopied }"
+        data-testid="quick-share-link-btn"
+        title="Copy and share meeting link"
+        @click="quickShareMeetingLink"
+      >
+        <AppIcon :name="quickShareCopied ? 'check' : 'share'" :size="15" />
+        <span class="quickActionLabel">{{ quickShareCopied ? 'Copied' : 'Share' }}</span>
+      </button>
+      <button
+        type="button"
+        class="lobbyMenuBtn"
+        :class="{ hasWaiters: features.lobbyWaiting.length > 0 }"
+        @click="showLobbyDropdown = !showLobbyDropdown"
+        title="Lobby Queue"
+      >
+        <AppIcon name="user" :size="16" />
+        <span class="lobbyBtnLabel">Lobby</span>
+        <span v-if="features.lobbyWaiting.length > 0" class="lobbyBadge">
+          {{ features.lobbyWaiting.length }}
+        </span>
+      </button>
+    </div>
     <div v-if="showLobbyDropdown" class="lobbyDropdownCard">
       <div class="lobbyDropdownHeader">
         <h3>Waiting Room</h3>
@@ -403,25 +464,27 @@ onBeforeUnmount(() => {
   <FooterBar v-if="roomOpen">
     <SessionTools />
     <IconButton
-      :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
-      :warning="local.cameraOff"
-      :error="local.videoError"
+      :label="features.isLocalCameraLocked ? 'Camera locked' : local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
+      :title="features.isLocalCameraLocked ? 'Camera locked by a moderator' : undefined"
+      :warning="local.cameraOff || features.isLocalCameraLocked"
+      :error="local.videoError || features.isLocalCameraLocked"
       :sound="local.cameraOff ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleCamera()"
     >
       <template #icon>
-        <AppIcon :name="local.cameraOff ? 'video-off' : 'video'" />
+        <AppIcon :name="features.isLocalCameraLocked ? 'lock' : local.cameraOff ? 'video-off' : 'video'" />
       </template>
     </IconButton>
     <IconButton
-      :label="local.mute ? 'Unmute' : 'Mute'"
-      :warning="local.mute"
-      :error="local.audioError"
+      :label="features.isLocalMicLocked ? 'Mic locked' : local.mute ? 'Unmute' : 'Mute'"
+      :title="features.isLocalMicLocked ? 'Microphone locked by a moderator' : undefined"
+      :warning="local.mute || features.isLocalMicLocked"
+      :error="local.audioError || features.isLocalMicLocked"
       :sound="local.mute ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleMute()"
     >
       <template #icon>
-        <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
+        <AppIcon :name="features.isLocalMicLocked ? 'lock' : local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
     <ScreenshareButton />
@@ -527,6 +590,40 @@ onBeforeUnmount(() => {
   top: 14px;
   right: 18px;
   z-index: 6000;
+}
+
+.hostQuickBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quickActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--line-light, #cbd5e1);
+  background: var(--btn-default-bg, #ffffff);
+  color: var(--color-text-default, #1e293b);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: var(--fw-medium, 500);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.quickActionBtn:hover {
+  background: var(--btn-default-bg-hover, #f8fafc);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.quickActionBtn.copied {
+  border-color: rgba(22, 163, 74, 0.45);
+  color: #15803d;
 }
 
 .lobbyMenuBtn {

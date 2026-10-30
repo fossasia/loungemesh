@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
 import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useLocalStore } from '@/stores/localStore';
@@ -28,6 +28,7 @@ export type RemoteUser = {
   properties: Record<string, unknown>;
   /** Plain display-name snapshot — never store a Jitsi participant object. */
   user?: { _displayName?: string };
+  email?: string;
   userKey?: string;
   lastSeen?: number;
 };
@@ -164,20 +165,31 @@ export const useConferenceStore = defineStore('conference', {
       } else if (kind === 'screenshareAudio') {
         this.patchUser(id, { screenshareAudio: markRaw(track) });
       } else if (track.isMuted?.()) {
-        if (isDesktopShareTrack(track)) {
+        const current = this.users[id];
+        if (
+          isDesktopShareTrack(track) ||
+          Boolean(current.screenshare && toRaw(current.screenshare) === toRaw(track))
+        ) {
           this.clearUserTrack(id, 'screenshare');
         } else {
           this.clearUserTrack(id, 'video');
         }
       } else {
+        const current = this.users[id];
         if (isDesktopShareTrack(track)) {
+          const movedFromCamera = Boolean(current.video && toRaw(current.video) === toRaw(track));
           this.patchUser(id, {
             screenshare: markRaw(track),
+            ...(movedFromCamera ? { video: undefined, videoType: undefined } : {}),
           });
         } else {
+          const movedFromScreen = Boolean(
+            current.screenshare && toRaw(current.screenshare) === toRaw(track),
+          );
           this.patchUser(id, {
             video: markRaw(track),
             videoType: 'camera',
+            ...(movedFromScreen ? { screenshare: undefined } : {}),
           });
         }
         mediaDebug('conferenceStore', 'setUserTrack:video', {

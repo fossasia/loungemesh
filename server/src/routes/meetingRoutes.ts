@@ -22,6 +22,7 @@ import {
   getBackgroundState,
   updateBackgroundState,
   clearBackgroundState,
+  inviteMeetingAttendees,
   getRoleSnapshot,
   getRoomInitialState,
 } from '../controllers/meetingController.js';
@@ -69,8 +70,11 @@ router.delete('/state/:roomName/poll', noCache, requireCapability('poll_manage')
 
 // In-Memory Background Persistence (Large base64 payload, stored in Redis to avoid DB bloat)
 router.get('/state/:roomName/background', noCache, getBackgroundState);
-router.post('/state/:roomName/background', noCache, requireCapability('settings'), updateBackgroundState);
-router.delete('/state/:roomName/background', noCache, requireCapability('settings'), clearBackgroundState);
+router.post('/state/:roomName/background', noCache, requireCapability('moderate'), updateBackgroundState);
+router.delete('/state/:roomName/background', noCache, requireCapability('moderate'), clearBackgroundState);
+
+// In-Session Attendee Invitations (Host & Moderator)
+router.post('/state/:roomName/invite', noCache, requireCapability('moderate'), inviteMeetingAttendees);
 
 // Bundled Room Initial State (Ultra-fast single-roundtrip load)
 router.get('/state/:roomName/init', noCache, getRoomInitialState);

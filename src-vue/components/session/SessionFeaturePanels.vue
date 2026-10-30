@@ -8,7 +8,12 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import MenuCard from '@/components/common/MenuCard.vue';
 import NotesEditor from '@/components/session/NotesEditor.vue';
 import { notesPanelWidth, sessionPanelLayout } from '@/constants/sessionPanels';
-import { kickParticipant, muteParticipant } from '@/utils/sessionModeration';
+import {
+  disableParticipantCamera,
+  kickParticipant,
+  muteParticipant,
+  setParticipantMediaLock,
+} from '@/utils/sessionModeration';
 import type { FeatureKey } from '@/types/userGrants';
 import {
   demoteFromStage,
@@ -19,27 +24,27 @@ import {
 import {
   createNotesPushScheduler,
   featureCardStyleForPanel,
-  nextNotesDraft,
   shouldPublishNotesDraft,
 } from '@/utils/sessionNotesPanel';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import HostRoomSettingsSection from '@/components/session/HostRoomSettingsSection.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
+import { useLocalStore } from '@/stores/localStore';
+import { useAuthStore } from '@/stores/authStore';
+import { downloadBlob, markdownToRtf } from '@/utils/sessionExport';
+import {
+  buildSessionShareUrl,
+  canNativeShareLink,
+  copyMeetingShareLink,
+  inviteAttendeesToSession,
+  nativeShareMeetingLink,
+  syncEmailInputAriaInvalid,
+} from '@/utils/sessionInviteShare';
 
 const panelHeight = sessionPanelLayout.height;
 const panelBottom = sessionPanelLayout.bottom;
 const panelRight = sessionPanelLayout.right;
 const notesWidth = notesPanelWidth;
-
-const settingsView = ref<'room' | 'people'>('room');
-
-const grantKeys = computed(() => {
-  const keys = Object.keys(featureLabels) as FeatureKey[];
-  return keys.filter((key) => {
-    if (key === 'moderator') return features.isHost;
-    return features.enabledFeatures[key] !== false;
-  });
-});
 
 const featureLabels: Record<FeatureKey, string> = {
   notes: 'Notes',
@@ -49,10 +54,6 @@ const featureLabels: Record<FeatureKey, string> = {
   chat: 'Chat',
 };
 
-import { useLocalStore } from '@/stores/localStore';
-import { useAuthStore } from '@/stores/authStore';
-import { downloadBlob, markdownToRtf } from '@/utils/sessionExport';
-
 const features = useSessionFeaturesStore();
 const conference = useConferenceStore();
 const local = useLocalStore();
@@ -60,6 +61,93 @@ const auth = useAuthStore();
 const { engine } = useMediaEngine();
 const route = useRoute();
 const roomId = computed(() => String(route.params.id || ''));
+
+const settingsView = computed({
+  get: () => features.moderatorTab,
+  set: (tab: 'room' | 'people') => {
+    features.moderatorTab = tab;
+  },
+});
+
+const inviteInput = ref('');
+const inviteInputEl = ref<HTMLInputElement | null>(null);
+const inviteSubmitting = ref(false);
+const inviteError = ref('');
+const inviteSuccess = ref('');
+const shareLinkCopied = ref(false);
+
+const effectiveRoomName = computed(() => roomId.value || features.resolveRoomName());
+const shareMeetingUrl = computed(() => buildSessionShareUrl(effectiveRoomName.value));
+const inviteActionUrl = computed(
+  () => `/api/meetings/state/${encodeURIComponent(effectiveRoomName.value || 'room')}/invite`,
+);
+const canShareNative = computed(() => canNativeShareLink());
+
+function togglePeoplePane(pane: 'add' | 'share') {
+  features.peopleActionPane = features.peopleActionPane === pane ? '' : pane;
+  inviteError.value = '';
+  inviteSuccess.value = '';
+}
+
+function onInviteEmailInput(event: Event) {
+  const target = event.target as HTMLInputElement;
+  target.setCustomValidity('');
+  inviteError.value = '';
+  inviteSuccess.value = '';
+  syncEmailInputAriaInvalid(target);
+}
+
+function onInviteEmailBlur(event: Event) {
+  syncEmailInputAriaInvalid(event.target as HTMLInputElement);
+}
+
+async function onSubmitInvite() {
+  inviteError.value = '';
+  inviteSuccess.value = '';
+  inviteSubmitting.value = true;
+  const result = await inviteAttendeesToSession(effectiveRoomName.value, inviteInput.value, engine);
+  inviteSubmitting.value = false;
+  if (!result.ok) {
+    inviteError.value = result.message;
+    inviteInputEl.value?.setCustomValidity(result.message);
+    syncEmailInputAriaInvalid(inviteInputEl.value, true);
+    inviteInputEl.value?.focus();
+    return;
+  }
+  inviteInput.value = '';
+  inviteInputEl.value?.setCustomValidity('');
+  syncEmailInputAriaInvalid(inviteInputEl.value, false);
+  inviteSuccess.value = result.message;
+}
+
+function onShareInputFocus(event: FocusEvent) {
+  (event.target as HTMLInputElement).select();
+}
+
+async function onCopyShareLink() {
+  const ok = await copyMeetingShareLink(shareMeetingUrl.value);
+  if (ok) {
+    shareLinkCopied.value = true;
+    window.setTimeout(() => {
+      shareLinkCopied.value = false;
+    }, 2000);
+  }
+}
+
+async function onNativeShareLink() {
+  const outcome = await nativeShareMeetingLink(effectiveRoomName.value, shareMeetingUrl.value);
+  if (outcome === 'shared') {
+    features.setStageMessage('Meeting link shared.');
+  }
+}
+
+const grantKeys = computed(() => {
+  const keys = Object.keys(featureLabels) as FeatureKey[];
+  return keys.filter((key) => {
+    if (key === 'moderator') return features.isHost;
+    return features.enabledFeatures[key] !== false;
+  });
+});
 
 const activeNotesTab = ref<'shared' | 'private'>('shared');
 const notesDraft = ref(features.sharedNotes);
@@ -76,7 +164,7 @@ watch(
   (panel, prev) => {
     if (panel === 'notes' && prev !== 'notes') {
       notesDraft.value = features.sharedNotes;
-      
+
       const saved = localStorage.getItem(`loungemesh:private_notes:${roomId.value}`);
       local.privateNotes = saved || '';
     }
@@ -116,14 +204,14 @@ function onNotesBlur() {
 
 const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: disposeNotesPush } =
   createNotesPushScheduler(
-  () => features.canUseNotes,
-  () => notesDraft.value,
+    () => features.canUseNotes,
+    () => notesDraft.value,
     (text) => {
       if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
       features.updateSharedNotes(text, true);
       broadcastSharedNotes(engine, text);
     },
-);
+  );
 
 const pendingNotesChanges = computed(() =>
   features.pendingModerationChanges.filter((c) => c.type === 'notes'),
@@ -144,28 +232,38 @@ function resetNotesToTemplate() {
   const total = Math.ceil(base64.length / NOTES_CHUNK_SIZE);
   engine.sendCommand('notes', JSON.stringify({ action: 'yjs_begin', total }));
   for (let i = 0, offset = 0; offset < base64.length; i += 1, offset += NOTES_CHUNK_SIZE) {
-    engine.sendCommand('notes', JSON.stringify({
-      action: 'yjs_chunk',
-      index: i,
-      data: base64.slice(offset, offset + NOTES_CHUNK_SIZE),
-    }));
+    engine.sendCommand(
+      'notes',
+      JSON.stringify({
+        action: 'yjs_chunk',
+        index: i,
+        data: base64.slice(offset, offset + NOTES_CHUNK_SIZE),
+      }),
+    );
   }
-}
-
-function syncLobby() {
-  engine.sendCommand('lobby', JSON.stringify({ enabled: features.lobbyEnabled }));
-  void features.updateRoomConfig(roomId.value, { lobbyEnabled: features.lobbyEnabled }, engine);
 }
 
 function controlEmail(): string {
   return (auth.user?.email || features.hostEmail || '').trim();
 }
 
+function syncLobby() {
+  const email = controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ enabled: features.lobbyEnabled, ...(email ? { email } : {}) }),
+  );
+  void features.updateRoomConfig(roomId.value, { lobbyEnabled: features.lobbyEnabled }, engine);
+}
+
 function syncRoomDefaults() {
-  engine.sendCommand('access', JSON.stringify({
-    defaults: features.roomDefaults,
-    email: controlEmail(),
-  }));
+  engine.sendCommand(
+    'access',
+    JSON.stringify({
+      defaults: features.roomDefaults,
+      email: controlEmail(),
+    }),
+  );
 }
 
 function syncUserGrants(userId: string) {
@@ -183,7 +281,7 @@ function onRoomDefaultChange(key: FeatureKey, event: Event) {
   const checked = (event.target as HTMLInputElement).checked;
   features.setRoomDefault(key, checked);
   for (const uid of participantIds.value) {
-    if (uid === features.hostId) continue;
+    if (isHostUser(uid)) continue;
     features.setUserGrant(uid, key, checked);
     syncUserGrants(uid);
   }
@@ -197,12 +295,20 @@ function onUserGrantChange(userId: string, key: FeatureKey, event: Event) {
 }
 
 function approve(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId, email: features.controlEmail }));
+  const email = controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ action: 'approve', id: entryId, ...(email ? { email } : {}) }),
+  );
   features.approveLobby(entryId);
 }
 
 function reject(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId, email: features.controlEmail }));
+  const email = controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ action: 'reject', id: entryId, ...(email ? { email } : {}) }),
+  );
   features.rejectLobby(entryId);
 }
 
@@ -214,6 +320,26 @@ function muteUser(id: string) {
   muteParticipant(conference, engine, id);
 }
 
+function disableCameraUser(id: string) {
+  disableParticipantCamera(conference, engine, id);
+}
+
+function isMicLocked(id: string): boolean {
+  return !!features.mediaLocks[id]?.mic;
+}
+
+function isCameraLocked(id: string): boolean {
+  return !!features.mediaLocks[id]?.camera;
+}
+
+function toggleMicLock(id: string) {
+  setParticipantMediaLock(conference, engine, id, { mic: !isMicLocked(id) });
+}
+
+function toggleCameraLock(id: string) {
+  setParticipantMediaLock(conference, engine, id, { camera: !isCameraLocked(id) });
+}
+
 function onStagePromotionToggle(event: Event) {
   const enabled = (event.target as HTMLInputElement).checked;
   syncStagePromotionEnabled(engine, enabled);
@@ -221,7 +347,11 @@ function onStagePromotionToggle(event: Event) {
 }
 
 function onRecordingToggle() {
-  void features.updateRoomConfig(roomId.value, { allowParticipantRecording: features.allowParticipantRecording }, engine);
+  void features.updateRoomConfig(
+    roomId.value,
+    { allowParticipantRecording: features.allowParticipantRecording },
+    engine,
+  );
 }
 
 function promoteUser(id: string) {
@@ -248,6 +378,19 @@ function displayName(uid: string): string {
   );
 }
 
+function isHostUser(uid: string): boolean {
+  if (uid === local.id && features.isHost) return true;
+  conference.usersEpoch;
+  return features.isParticipantHost(uid);
+}
+
+function isModeratorUser(uid: string): boolean {
+  if (isHostUser(uid)) return false;
+  if (uid === local.id && features.isModerator) return true;
+  conference.usersEpoch;
+  return features.isParticipantModerator(uid);
+}
+
 const participantIds = computed(() => {
   conference.usersEpoch;
   const ids = new Set<string>(Object.keys(conference.users));
@@ -255,7 +398,7 @@ const participantIds = computed(() => {
 
   return Array.from(ids).sort((a, b) => {
     const roleWeight = (uid: string) => {
-      if (uid === features.hostId) return 0;
+      if (isHostUser(uid)) return 0;
       if (isModeratorUser(uid)) return 1;
       if (uid === features.stageOccupantId) return 2;
       return 3;
@@ -275,7 +418,7 @@ watch(
     if (panel === 'notes' && !canUseNotes && !isHost && !isModerator) {
       features.panel = '';
     }
-  }
+  },
 );
 
 watch(
@@ -284,7 +427,7 @@ watch(
     if (panel === 'whiteboard' && !canUseWhiteboard && !isHost && !isModerator) {
       features.panel = '';
     }
-  }
+  },
 );
 
 const panelOpen = computed(
@@ -310,15 +453,9 @@ const title = computed(() => {
 });
 
 function canModerateUser(uid: string): boolean {
-  if (uid === local.id || uid === features.hostId) return false;
+  if (uid === local.id || isHostUser(uid)) return false;
   if (features.isHost) return true;
   return features.isModerator && !isModeratorUser(uid);
-}
-
-function isModeratorUser(uid: string): boolean {
-  if (uid === features.hostId) return false;
-  if (uid === local.id && features.isModerator) return true;
-  return !!features.userGrants[uid]?.moderator || conference.users[uid]?.properties?.role === 'moderator';
 }
 
 const featureCardStyle = computed(() => {
@@ -332,7 +469,7 @@ const featureCardStyle = computed(() => {
     return {
       ...style,
       width: 'min(520px, calc(100vw - 32px))',
-      maxHeight: 'min(960px, calc(100vh - 120px))',
+      maxHeight: 'min(860px, calc(100vh - 110px))',
     };
   }
   return style;
@@ -343,7 +480,11 @@ const featureCardStyle = computed(() => {
   <MenuCard
     v-if="panelOpen"
     :title="title"
-    :class="['featureCard', features.panel === 'notes' ? 'notesCard' : '', features.panel === 'moderator' ? 'modCard' : '']"
+    :class="[
+      'featureCard',
+      features.panel === 'notes' ? 'notesCard' : '',
+      features.panel === 'moderator' ? 'modCard' : '',
+    ]"
     :style="featureCardStyle"
     :onClose="() => (features.panel = '')"
   >
@@ -352,119 +493,292 @@ const featureCardStyle = computed(() => {
         Reset to template
       </button>
     </template>
+
     <div v-if="features.panel === 'moderator'" class="body modBody">
       <div class="settingsTabs" role="tablist">
-        <button type="button" class="settingsTab" :class="{ active: settingsView === 'room' }" @click="settingsView = 'room'">Room</button>
-        <button type="button" class="settingsTab" :class="{ active: settingsView === 'people' }" @click="settingsView = 'people'">People</button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="settingsView === 'room'"
+          class="settingsTab"
+          :class="{ active: settingsView === 'room' }"
+          @click="settingsView = 'room'"
+        >
+          Room
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="settingsView === 'people'"
+          class="settingsTab"
+          :class="{ active: settingsView === 'people' }"
+          @click="settingsView = 'people'"
+        >
+          People
+          <span class="tabCount">{{ participantIds.length }}</span>
+        </button>
       </div>
-      <div v-show="settingsView === 'room'">
-      <HostRoomSettingsSection v-if="features.isHost" />
-      <HostRoomSettingsSection v-else-if="features.isModerator" appearance-only />
 
-      <p v-if="features.stageMessage" class="stageMessage" role="status">{{ features.stageMessage }}</p>
+      <div v-show="settingsView === 'room'" class="tabPane">
+        <p v-if="features.stageMessage" class="stageMessage" role="status">
+          {{ features.stageMessage }}
+        </p>
 
-      <section class="section">
-        <div v-if="features.isHost" class="roomControls">
-          <label class="roomToggle">
-            <input v-model="features.lobbyEnabled" type="checkbox" @change="syncLobby" />
-            <span>Lobby</span>
-          </label>
-          <label class="roomToggle">
-            <input
-              :checked="features.stagePromotionEnabled"
-              type="checkbox"
-              @change="onStagePromotionToggle"
-            />
-            <span>Allow presenter promotion</span>
-          </label>
-          <label class="roomToggle">
-            <input
-              v-model="features.allowParticipantRecording"
-              type="checkbox"
-              @change="onRecordingToggle"
-            />
-            <span>Allow participant recording</span>
-          </label>
-        </div>
-        <p class="stageStatus">Presenter: <strong>{{ stageStatusLabel }}</strong></p>
-        <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
-          <p class="sectionHint">Waiting to join ({{ features.lobbyWaiting.length }})</p>
-          <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
-            <span class="name" :title="w.email">{{ w.name }}</span>
-            <span v-if="w.reason" class="reason" :title="w.reason">"{{ w.reason }}"</span>
-            <button type="button" class="pill" @click="approve(w.id)">Admit</button>
-            <button type="button" class="pill warn" @click="reject(w.id)">Deny</button>
+        <section class="section">
+          <div v-if="features.isHost" class="roomControls">
+            <label class="roomToggle">
+              <span class="toggleText">Lobby</span>
+              <input
+                v-model="features.lobbyEnabled"
+                type="checkbox"
+                class="switchInput"
+                @change="syncLobby"
+              />
+            </label>
+            <label class="roomToggle">
+              <span class="toggleText">Allow presenter promotion</span>
+              <input
+                :checked="features.stagePromotionEnabled"
+                type="checkbox"
+                class="switchInput"
+                @change="onStagePromotionToggle"
+              />
+            </label>
+            <label class="roomToggle">
+              <span class="toggleText">Allow participant recording</span>
+              <input
+                v-model="features.allowParticipantRecording"
+                type="checkbox"
+                class="switchInput"
+                @change="onRecordingToggle"
+              />
+            </label>
           </div>
-        </div>
-      </section>
-
-      <section v-if="features.canModerate && features.pendingModerationChanges.length" class="section">
-        <h3 class="sectionTitle">Whiteboard & Notes Review</h3>
-        <div class="modQueueList" data-testid="mod-queue-list">
-          <div
-            v-for="item in features.pendingModerationChanges"
-            :key="item.id"
-            class="modQueueRow"
-          >
-            <div class="modQueueInfo">
-              <strong>{{ item.type === 'whiteboard' ? 'Whiteboard' : 'Notes' }}</strong>
-              <span class="modQueueAuthor">from {{ item.authorName }} (15s auto-approve)</span>
-            </div>
-            <div class="modQueueActions">
-              <button
-                type="button"
-                class="btnAccept"
-                @click="features.approveModerationChange(item.id, engine)"
-              >
-                Accept
-              </button>
-              <button
-                type="button"
-                class="btnReject"
-                @click="features.rejectModerationChange(item.id, engine)"
-              >
-                Reject
-              </button>
+          <div class="stageStatusRow" :class="{ withBorder: features.isHost }">
+            <span class="stageStatus">
+              Presenter: <strong>{{ stageStatusLabel }}</strong>
+            </span>
+          </div>
+          <div v-if="features.lobbyWaiting.length" class="lobbyBlock">
+            <p class="sectionHint">Waiting to join ({{ features.lobbyWaiting.length }})</p>
+            <div v-for="w in features.lobbyWaiting" :key="w.id" class="lobbyRow">
+              <span class="name" :title="w.email">{{ w.name }}</span>
+              <span v-if="w.reason" class="reason" :title="w.reason">"{{ w.reason }}"</span>
+              <div class="lobbyRowBtns">
+                <button type="button" class="pill" @click="approve(w.id)">Admit</button>
+                <button type="button" class="pill warn" @click="reject(w.id)">Deny</button>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section v-if="features.isHost" class="section">
-        <h3 class="sectionTitle">Feature access</h3>
-        <p class="sectionHint">Default permissions for new participants.</p>
-        <div class="grantTable" role="presentation">
-          <span class="grantCorner" aria-hidden="true" />
-          <span
-            v-for="key in grantKeys"
-            :key="`head-${key}`"
-            class="grantColHead"
-          >
-            {{ featureLabels[key] }}
-          </span>
-          <span class="grantRowLabel">Everyone</span>
-          <label
-            v-for="key in grantKeys"
-            :key="`room-${key}`"
-            class="grantCheck"
-          >
-            <input
-              type="checkbox"
-              :checked="features.roomDefaults[key]"
-              @change="onRoomDefaultChange(key, $event)"
-            />
-          </label>
-        </div>
-      </section>
+        <section v-if="features.isHost" class="section">
+          <div class="sectionHead">
+            <h3 class="sectionTitle">Feature access</h3>
+            <p class="sectionHint">Default permissions for new participants.</p>
+          </div>
+          <div class="grantTable" role="group" aria-label="Default permissions">
+            <label
+              v-for="key in grantKeys"
+              :key="`room-${key}`"
+              class="grantCheck"
+              :class="{ checked: features.roomDefaults[key] }"
+            >
+              <input
+                type="checkbox"
+                :checked="features.roomDefaults[key]"
+                @change="onRoomDefaultChange(key, $event)"
+              />
+              <span class="chipCheckIcon" aria-hidden="true">
+                {{ features.roomDefaults[key] ? '✓' : '' }}
+              </span>
+              <span class="chipLabel">{{ featureLabels[key] }}</span>
+            </label>
+          </div>
+        </section>
+
+        <section
+          v-if="features.canModerate && features.pendingModerationChanges.length"
+          class="section"
+        >
+          <h3 class="sectionTitle">Whiteboard &amp; Notes Review</h3>
+          <div class="modQueueList" data-testid="mod-queue-list">
+            <div
+              v-for="item in features.pendingModerationChanges"
+              :key="item.id"
+              class="modQueueRow"
+            >
+              <div class="modQueueInfo">
+                <strong>{{ item.type === 'whiteboard' ? 'Whiteboard' : 'Notes' }}</strong>
+                <span class="modQueueAuthor">from {{ item.authorName }} (15s auto-approve)</span>
+              </div>
+              <div class="modQueueActions">
+                <button
+                  type="button"
+                  class="btnAccept"
+                  @click="features.approveModerationChange(item.id, engine)"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  class="btnReject"
+                  @click="features.rejectModerationChange(item.id, engine)"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <HostRoomSettingsSection v-if="features.isHost" />
+        <HostRoomSettingsSection v-else-if="features.isModerator" appearance-only />
       </div>
 
       <section v-show="settingsView === 'people'" class="section">
-        <h3 class="sectionTitle">Participants</h3>
+        <div class="peopleHeader">
+          <div class="peopleHeaderTitleGroup">
+            <h3 class="sectionTitle">Participants</h3>
+            <span class="peopleCountBadge">{{ participantIds.length }}</span>
+          </div>
+          <div class="peopleHeaderActions">
+            <button
+              type="button"
+              class="peopleActionBtn"
+              :class="{ active: features.peopleActionPane === 'add' }"
+              :aria-expanded="features.peopleActionPane === 'add'"
+              aria-controls="people-invite-pane"
+              data-testid="people-add-btn"
+              @click="togglePeoplePane('add')"
+            >
+              <AppIcon name="user-plus" :size="14" />
+              <span>Add</span>
+            </button>
+            <button
+              type="button"
+              class="peopleActionBtn"
+              :class="{ active: features.peopleActionPane === 'share' }"
+              :aria-expanded="features.peopleActionPane === 'share'"
+              aria-controls="people-share-pane"
+              data-testid="people-share-btn"
+              @click="togglePeoplePane('share')"
+            >
+              <AppIcon name="share" :size="14" />
+              <span>Share</span>
+            </button>
+          </div>
+        </div>
+
+        <form
+          v-if="features.peopleActionPane === 'add'"
+          id="people-invite-pane"
+          method="post"
+          :action="inviteActionUrl"
+          class="peopleActionCard"
+          data-testid="people-invite-form"
+          @submit.prevent="onSubmitInvite"
+        >
+          <label for="session-invite-emails" class="inviteLabel">Invite attendee by email</label>
+          <span id="session-invite-hint" class="inviteFieldHint">
+            Format: name@example.com (separate multiple emails with commas)
+          </span>
+          <div class="inviteInputRow">
+            <input
+              id="session-invite-emails"
+              ref="inviteInputEl"
+              v-model="inviteInput"
+              type="email"
+              name="inviteEmails"
+              multiple
+              required
+              autocomplete="email"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              placeholder="attendee@example.com"
+              aria-describedby="session-invite-hint"
+              aria-errormessage="session-invite-error"
+              class="inviteEmailInput"
+              @input="onInviteEmailInput"
+              @blur="onInviteEmailBlur"
+            />
+            <button
+              type="submit"
+              class="pill inviteSubmitBtn"
+              :disabled="inviteSubmitting"
+            >
+              {{ inviteSubmitting ? 'Sending…' : 'Send invite' }}
+            </button>
+          </div>
+          <p
+            id="session-invite-error"
+            class="inviteErrorMsg"
+            :class="{ visible: !!inviteError }"
+            role="status"
+            aria-live="polite"
+          >
+            {{ inviteError || 'Please enter a valid email address.' }}
+          </p>
+          <p v-if="inviteSuccess" class="inviteSuccessMsg" role="status" aria-live="polite">
+            {{ inviteSuccess }}
+          </p>
+          <div v-if="features.guestEmails.length" class="invitedListBlock">
+            <span class="invitedListLabel">Invited ({{ features.guestEmails.length }})</span>
+            <div class="invitedChips">
+              <span v-for="guest in features.guestEmails" :key="guest" class="invitedChip">
+                {{ guest }}
+              </span>
+            </div>
+          </div>
+        </form>
+
+        <div
+          v-if="features.peopleActionPane === 'share'"
+          id="people-share-pane"
+          class="peopleActionCard"
+          data-testid="people-share-card"
+        >
+          <label for="session-share-link" class="inviteLabel">Meeting link</label>
+          <span class="inviteFieldHint">
+            Share this link with attendees so they can join the meeting.
+          </span>
+          <div class="shareLinkRow">
+            <input
+              id="session-share-link"
+              type="url"
+              name="shareUrl"
+              readonly
+              :value="shareMeetingUrl"
+              class="inviteEmailInput shareUrlInput"
+              @focus="onShareInputFocus"
+            />
+            <button
+              type="button"
+              class="pill shareCopyBtn"
+              data-testid="people-copy-link-btn"
+              @click="onCopyShareLink"
+            >
+              <AppIcon :name="shareLinkCopied ? 'check' : 'copy'" :size="14" />
+              <span>{{ shareLinkCopied ? 'Copied!' : 'Copy link' }}</span>
+            </button>
+            <button
+              v-if="canShareNative"
+              type="button"
+              class="pill subtle shareNativeBtn"
+              data-testid="people-native-share-btn"
+              @click="onNativeShareLink"
+            >
+              <AppIcon name="share" :size="14" />
+              <span>Share…</span>
+            </button>
+          </div>
+        </div>
         <div
           v-for="uid in participantIds"
           :key="uid"
           class="participantCard"
-          :class="{ isHost: uid === features.hostId, onStage: uid === features.stageOccupantId }"
+          :class="{ isHost: isHostUser(uid), onStage: uid === features.stageOccupantId }"
         >
           <div class="participantHead">
             <div class="participantMeta">
@@ -475,17 +789,29 @@ const featureCardStyle = computed(() => {
                   <span v-if="uid === local.id" class="youTag">(You)</span>
                 </div>
                 <div class="roleRow">
-                  <span v-if="uid === features.hostId" class="badge hostBadge">👑 Host</span>
+                  <span v-if="isHostUser(uid)" class="badge hostBadge">👑 Host</span>
                   <span v-else-if="isModeratorUser(uid)" class="badge modBadge">🛡️ Moderator</span>
-                  <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">🎤 Presenter</span>
-                  <span v-else-if="uid === features.invitedStageUserId" class="badge stageInvitedBadge">Invited</span>
                   <span v-else class="badge attendeeBadge">👤 Attendee</span>
+                  <span
+                    v-if="uid === features.stageOccupantId"
+                    class="badge stageBadge"
+                  >🎤 Presenter</span>
+                  <span
+                    v-else-if="uid === features.invitedStageUserId"
+                    class="badge stageInvitedBadge"
+                  >Invited</span>
+                  <span v-if="isMicLocked(uid)" class="badge lockBadge">🔒 Mic</span>
+                  <span v-if="isCameraLocked(uid)" class="badge lockBadge">🔒 Cam</span>
                 </div>
               </div>
             </div>
             <div class="modActions">
               <button
-                v-if="features.canPromoteToStage && uid !== features.stageOccupantId && uid !== features.invitedStageUserId"
+                v-if="
+                  features.canPromoteToStage &&
+                  uid !== features.stageOccupantId &&
+                  uid !== features.invitedStageUserId
+                "
                 type="button"
                 class="pill"
                 @click="promoteUser(uid)"
@@ -493,7 +819,10 @@ const featureCardStyle = computed(() => {
                 Make Presenter
               </button>
               <button
-                v-if="(features.isHost || features.isModerator) && (uid === features.stageOccupantId || uid === features.invitedStageUserId)"
+                v-if="
+                  (features.isHost || features.isModerator) &&
+                  (uid === features.stageOccupantId || uid === features.invitedStageUserId)
+                "
                 type="button"
                 class="pill subtle"
                 @click="demoteUser(uid)"
@@ -507,7 +836,16 @@ const featureCardStyle = computed(() => {
                 title="Mute"
                 @click="muteUser(uid)"
               >
-                <AppIcon name="mic-off" :size="16" />
+                <AppIcon name="mic-off" :size="15" />
+              </button>
+              <button
+                v-if="canModerateUser(uid)"
+                type="button"
+                class="pill subtle iconBtnOnly"
+                title="Disable camera"
+                @click="disableCameraUser(uid)"
+              >
+                <AppIcon name="video-off" :size="15" />
               </button>
               <button
                 v-if="canModerateUser(uid)"
@@ -516,31 +854,58 @@ const featureCardStyle = computed(() => {
                 title="Remove"
                 @click="kickUser(uid)"
               >
-                <AppIcon name="user-minus" :size="16" />
+                <AppIcon name="user-minus" :size="15" />
               </button>
             </div>
           </div>
-          <div v-if="(features.isHost || features.isModerator) && uid !== features.hostId" class="grantTable" role="presentation">
-            <span class="grantCorner" aria-hidden="true" />
-            <span
-              v-for="key in grantKeys"
-              :key="`head-${uid}-${key}`"
-              class="grantColHead"
-            >
-              {{ featureLabels[key] }}
-            </span>
-            <span class="grantRowLabel">Permissions</span>
-            <label
-              v-for="key in grantKeys"
-              :key="`${uid}-${key}`"
-              class="grantCheck"
-            >
-              <input
-                type="checkbox"
-                :checked="features.grantsForUser(uid)[key]"
-                @change="onUserGrantChange(uid, key, $event)"
-              />
-            </label>
+
+          <div
+            v-if="(features.isHost || features.isModerator) && !isHostUser(uid)"
+            class="participantControlsBar"
+          >
+            <div class="grantTable" role="group" :aria-label="`Permissions for ${displayName(uid)}`">
+              <label
+                v-for="key in grantKeys"
+                :key="`${uid}-${key}`"
+                class="grantCheck"
+                :class="{ checked: features.grantsForUser(uid)[key] }"
+              >
+                <input
+                  type="checkbox"
+                  :checked="features.grantsForUser(uid)[key]"
+                  @change="onUserGrantChange(uid, key, $event)"
+                />
+                <span class="chipCheckIcon" aria-hidden="true">
+                  {{ features.grantsForUser(uid)[key] ? '✓' : '' }}
+                </span>
+                <span class="chipLabel">{{ featureLabels[key] }}</span>
+              </label>
+            </div>
+
+            <div v-if="canModerateUser(uid)" class="lockChipsGroup">
+              <button
+                type="button"
+                class="lockChip"
+                :class="{ active: isMicLocked(uid) }"
+                :data-testid="`lock-mic-${uid}`"
+                :title="isMicLocked(uid) ? 'Unlock microphone' : 'Force-lock microphone off'"
+                @click="toggleMicLock(uid)"
+              >
+                <AppIcon :name="isMicLocked(uid) ? 'lock' : 'unlock'" :size="12" />
+                <span>{{ isMicLocked(uid) ? 'Mic locked' : 'Lock mic' }}</span>
+              </button>
+              <button
+                type="button"
+                class="lockChip"
+                :class="{ active: isCameraLocked(uid) }"
+                :data-testid="`lock-camera-${uid}`"
+                :title="isCameraLocked(uid) ? 'Unlock camera' : 'Force-lock camera off'"
+                @click="toggleCameraLock(uid)"
+              >
+                <AppIcon :name="isCameraLocked(uid) ? 'lock' : 'unlock'" :size="12" />
+                <span>{{ isCameraLocked(uid) ? 'Cam locked' : 'Lock cam' }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -548,13 +913,15 @@ const featureCardStyle = computed(() => {
 
     <div v-else-if="features.panel === 'participants'" class="body modBody">
       <section class="section">
-        <h3 class="sectionTitle">Participants ({{ participantIds.length }})</h3>
+        <div class="peopleHeader">
+          <h3 class="sectionTitle">Participants ({{ participantIds.length }})</h3>
+        </div>
         <p class="sectionHint">People currently in this meeting.</p>
         <div
           v-for="uid in participantIds"
           :key="uid"
           class="participantCard"
-          :class="{ isHost: uid === features.hostId, onStage: uid === features.stageOccupantId }"
+          :class="{ isHost: isHostUser(uid), onStage: uid === features.stageOccupantId }"
         >
           <div class="participantHead">
             <div class="participantMeta">
@@ -565,10 +932,17 @@ const featureCardStyle = computed(() => {
                   <span v-if="uid === local.id" class="youTag">(You)</span>
                 </div>
                 <div class="roleRow">
-                  <span v-if="uid === features.hostId" class="badge hostBadge">👑 Host</span>
+                  <span v-if="isHostUser(uid)" class="badge hostBadge">👑 Host</span>
                   <span v-else-if="isModeratorUser(uid)" class="badge modBadge">🛡️ Moderator</span>
-                  <span v-else-if="uid === features.stageOccupantId" class="badge stageBadge">🎤 Presenter</span>
                   <span v-else class="badge attendeeBadge">👤 Attendee</span>
+                  <span
+                    v-if="uid === features.stageOccupantId"
+                    class="badge stageBadge"
+                  >🎤 Presenter</span>
+                  <span
+                    v-else-if="uid === features.invitedStageUserId"
+                    class="badge stageInvitedBadge"
+                  >Invited</span>
                 </div>
               </div>
             </div>
@@ -603,12 +977,10 @@ const featureCardStyle = computed(() => {
           class="notesModQueue"
           data-testid="notes-mod-queue"
         >
-          <div
-            v-for="item in pendingNotesChanges"
-            :key="item.id"
-            class="notesModRow"
-          >
-            <span class="notesModText">Notes edit from {{ item.authorName }} (15s auto-approve)</span>
+          <div v-for="item in pendingNotesChanges" :key="item.id" class="notesModRow">
+            <span class="notesModText"
+              >Notes edit from {{ item.authorName }} (15s auto-approve)</span
+            >
             <div class="notesModActions">
               <button
                 type="button"
@@ -656,7 +1028,6 @@ const featureCardStyle = computed(() => {
         </div>
       </template>
     </div>
-
   </MenuCard>
 </template>
 
@@ -667,11 +1038,11 @@ const featureCardStyle = computed(() => {
   max-height: min(480px, 55vh);
   display: flex;
   flex-direction: column;
+  text-align: left;
 }
 .featureCard.modCard {
   height: auto;
-  min-height: min(768px, calc((100vh - 120px) * 0.8));
-  max-height: min(960px, calc(100vh - 120px));
+  max-height: min(860px, calc(100vh - 110px));
 }
 .featureCard.notesCard {
   max-height: min(720px, calc(100vh - 100px));
@@ -698,27 +1069,6 @@ const featureCardStyle = computed(() => {
   gap: 8px;
   min-width: 0;
 }
-.notesCard :deep(.close) {
-  transform: none;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--line-light);
-  border-radius: var(--radius-round);
-  background: var(--btn-default-bg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.notesCard :deep(.close:hover) {
-  background: var(--btn-default-bg-hover);
-  border-color: var(--line-default);
-}
-.notesCard :deep(.x) {
-  font-size: 18px;
-  line-height: 1;
-}
 .notesResetBtn {
   margin-left: auto;
   flex-shrink: 0;
@@ -741,111 +1091,385 @@ const featureCardStyle = computed(() => {
 .body {
   flex: 1;
   overflow: auto;
-  padding: 4px 0 8px;
+  padding: 2px 0 4px;
 }
 .modBody {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+}
+.tabPane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .settingsTabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
+  padding: 3px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
 }
 .settingsTab {
   flex: 1;
-  border: 1px solid var(--line-light);
-  background: #fff;
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
   font-family: var(--font-body);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .settingsTab.active {
-  background: var(--color-blue100);
-  color: #fff;
-  border-color: var(--color-blue100);
+  background: #fff;
+  color: var(--color-blue100, #2563eb);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.tabCount {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-blue100, #2563eb);
 }
 .section {
-  border: 1px solid var(--line-light);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  background: var(--color-bg-card);
+  border: 1px solid var(--line-light, #e2e8f0);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--color-bg-card, #fff);
+}
+.sectionHead {
+  margin-bottom: 8px;
 }
 .sectionTitle {
-  margin: 0 0 4px;
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  color: var(--color-text-default);
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text-default, #0f172a);
 }
 .sectionHint {
-  margin: 0 0 10px;
-  font-size: var(--fs-small);
-  color: var(--color-mono30);
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--color-mono40, #64748b);
+}
+.peopleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.peopleHeaderTitleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.peopleHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.peopleActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.peopleActionBtn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.peopleActionBtn.active {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #1d4ed8;
+}
+.peopleActionCard {
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inviteLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-default, #0f172a);
+}
+.inviteFieldHint {
+  display: block;
+  font-size: 11.5px;
+  color: var(--color-mono40, #64748b);
+  line-height: 1.35;
+}
+.inviteInputRow,
+.shareLinkRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.inviteEmailInput {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: var(--color-text-default, #0f172a);
+  font-size: 13px;
+  font-family: var(--font-body);
+  box-sizing: border-box;
+}
+.inviteEmailInput:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.45);
+  outline-offset: 1px;
+}
+.inviteEmailInput:user-invalid,
+.inviteEmailInput.user-invalid-fallback {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+.inviteEmailInput:user-valid {
+  border-color: #16a34a;
+}
+.shareUrlInput {
+  color: #334155;
+  background: #fff;
+}
+.inviteSubmitBtn,
+.shareCopyBtn,
+.shareNativeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+.inviteSubmitBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.inviteErrorMsg {
+  display: none;
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #dc2626;
+}
+.inviteErrorMsg.visible,
+.peopleActionCard:has(.inviteEmailInput:user-invalid) .inviteErrorMsg {
+  display: block;
+}
+.inviteSuccessMsg {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #15803d;
+}
+.invitedListBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+.invitedListLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+.invitedChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.invitedChip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+.peopleCountBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #475569;
 }
 .roomControls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 8px;
 }
 .roomToggle {
   display: flex;
-  gap: 8px;
+  justify-content: space-between;
   align-items: center;
-  font-size: var(--fs-body);
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-default, #0f172a);
   cursor: pointer;
+  padding: 2px 0;
+}
+.toggleText {
+  min-width: 0;
+}
+.switchInput {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 9999px;
+  background: #cbd5e1;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.18s ease;
+  margin: 0;
+}
+.switchInput::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s ease;
+}
+.switchInput:checked {
+  background: var(--color-blue100, #3b82f6);
+}
+.switchInput:checked::after {
+  transform: translateX(16px);
+}
+.switchInput:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.4);
+  outline-offset: 2px;
+}
+.stageStatusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.stageStatusRow.withBorder {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-light, #eef2f6);
 }
 .stageStatus {
   margin: 0;
-  font-size: var(--fs-small);
-  color: var(--color-mono30);
+  font-size: 12.5px;
+  color: var(--color-mono40, #64748b);
+}
+.stageStatus strong {
+  color: var(--color-text-default, #0f172a);
 }
 .stageMessage {
   margin: 0;
   padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--btn-warning-bg);
-  color: var(--btn-warning-fg);
-  font-size: var(--fs-small);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #b45309;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .grantTable {
-  display: grid;
-  grid-template-columns: minmax(72px, auto) repeat(4, minmax(52px, 1fr));
-  gap: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
-}
-.grantCorner {
-  justify-self: start;
-}
-.grantColHead {
-  font-size: var(--fs-small);
-  font-weight: var(--fw-medium);
-  color: var(--color-mono30);
-  text-align: center;
-}
-.grantRowLabel {
-  justify-self: start;
-  font-size: var(--fs-small);
-  font-weight: var(--fw-medium);
 }
 .grantCheck {
-  display: flex;
-  justify-content: center;
+  display: inline-flex;
   align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.grantTableHead {
-  margin-bottom: 8px;
+.grantCheck:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
 }
-.participantCard .grantTable {
+.grantCheck.checked {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #1d4ed8;
+}
+.grantCheck input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.chipCheckIcon {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.chipLabel {
+  line-height: 1.1;
+}
+.participantCard {
   margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-light, #e2e8f0);
+  background: #fff;
+}
+.participantCard.isHost {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: #f8fafc;
+}
+.participantCard.onStage {
+  border-color: rgba(16, 185, 129, 0.5);
 }
 .participantHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .participantMeta {
   display: flex;
@@ -870,7 +1494,7 @@ const featureCardStyle = computed(() => {
 .nameAndRole {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 .nameRow {
@@ -888,102 +1512,159 @@ const featureCardStyle = computed(() => {
 .roleRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
 }
-.participantCard.onStage {
-  border-color: var(--color-blue100);
+.participantControlsBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
 }
-.stageBadge {
-  background: var(--btn-highlight-bg);
-  color: var(--btn-highlight-fg);
+.lockChipsGroup {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.lockChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.lockChip:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+.lockChip.active {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #b91c1c;
 }
 .lobbyBlock {
   margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-light, #eef2f6);
 }
 .lobbyRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 6px;
 }
-.participantCard {
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line-light);
-  background: #fff;
+.lobbyRowBtns {
+  display: flex;
+  gap: 6px;
 }
-.participantCard.isHost {
-  border-color: var(--color-blue100);
-  background: var(--color-mono95);
+.reason {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
 }
 .name {
-  font-weight: var(--fw-medium);
-  font-size: var(--fs-small);
-  color: var(--color-text-default);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-text-default, #0f172a);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .badge {
-  font-size: var(--fs-small);
-  padding: 2px 8px;
-  border-radius: var(--radius-round);
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
-  font-weight: 500;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 .badge.hostBadge {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #fff;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.35);
 }
 .badge.modBadge {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  color: #fff;
+  background: rgba(59, 130, 246, 0.14);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.35);
 }
 .badge.stageBadge {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #fff;
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.35);
 }
 .badge.attendeeBadge {
-  background: rgba(148, 163, 184, 0.2);
-  color: var(--color-mono30);
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+.badge.lockBadge {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 .modActions {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
 }
 .pill {
-  border: none;
-  border-radius: var(--radius-round);
-  padding: 4px 10px;
-  font-size: var(--fs-small);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
   font-family: var(--font-body);
   cursor: pointer;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
+  background: var(--btn-primary-bg, #3b82f6);
+  color: var(--btn-primary-fg, #fff);
+  transition: filter 0.15s ease, background-color 0.15s ease;
+}
+.pill:hover {
+  filter: brightness(0.96);
 }
 .pill.subtle {
-  background: var(--btn-default-bg);
-  color: var(--color-text-default);
-  border: 1px solid var(--line-light);
+  background: #f8fafc;
+  color: var(--color-text-default, #334155);
+  border-color: var(--line-light, #cbd5e1);
+}
+.pill.subtle:hover {
+  background: #f1f5f9;
 }
 .pill.warn {
-  background: var(--btn-warning-bg);
-  color: var(--btn-warning-fg);
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.pill.warn:hover {
+  background: #ef4444;
+  color: #fff;
 }
 .iconBtnOnly {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   padding: 0;
+  border-radius: 8px;
 }
 .stageInvitedBadge {
   background: var(--color-blue95);
@@ -992,9 +1673,15 @@ const featureCardStyle = computed(() => {
   animation: pulseInvited 2s infinite;
 }
 @keyframes pulseInvited {
-  0% { opacity: 0.8; }
-  50% { opacity: 1; }
-  100% { opacity: 0.8; }
+  0% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.8;
+  }
 }
 .notesBody {
   display: flex;
@@ -1097,7 +1784,8 @@ const featureCardStyle = computed(() => {
   font-size: var(--fs-small, 12px);
   font-weight: 500;
 }
-.notesModActions, .modQueueActions {
+.notesModActions,
+.modQueueActions {
   display: flex;
   gap: 6px;
 }

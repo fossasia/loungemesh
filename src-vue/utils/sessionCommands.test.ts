@@ -129,6 +129,34 @@ describe('handleSessionCommand', () => {
     expect(features.lobbyApproved.me).toBe(true);
     expect(features.localLobbyPending).toBe(false);
 
+    // Approve by userKey and all
+    features.localLobbyPending = true;
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'approve', userKey: local.userKey }) });
+    expect(features.localLobbyPending).toBe(false);
+
+    local.setMyID('');
+    features.localLobbyPending = true;
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'approve', userKey: local.userKey }) });
+    expect(features.localLobbyPending).toBe(false);
+    local.setMyID('me');
+
+    features.localLobbyPending = true;
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'approve', id: 'all' }) });
+    expect(features.localLobbyPending).toBe(false);
+
+    // Reject by userKey and id
+    features.localLobbyPending = true;
+    features.lobbyRejected = false;
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', userKey: local.userKey }) });
+    expect(features.lobbyRejected).toBe(true);
+    expect(features.localLobbyPending).toBe(false);
+
+    features.localLobbyPending = true;
+    features.lobbyRejected = false;
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'me' }) });
+    expect(features.lobbyRejected).toBe(true);
+    expect(features.localLobbyPending).toBe(false);
+
     const poll = {
       id: 'p1',
       question: 'Q?',
@@ -855,6 +883,15 @@ describe('handleSessionCommand', () => {
     );
     expect(features.roomDefaults.notes).toBe(false);
     expect(features.userGrants.att?.poll).toBe(false);
+
+    conference.addUser('jitsi-mod');
+    (conference.users['jitsi-mod'] as any).role = 'moderator';
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ userId: 'att', grants: { chat: false } }) },
+      'jitsi-mod',
+    );
+    expect(features.userGrants.att?.chat).toBe(false);
   });
 
   it('keeps meeting-wide controls with the host and moderation with host or moderator', () => {
@@ -1269,5 +1306,230 @@ describe('handleSessionCommand', () => {
       value: JSON.stringify({ action: 'propose', id: 'mc1', type: 'notes', payload: 'text' }),
     });
     expect(features.pendingModerationChanges).toHaveLength(0);
+  });
+
+  it('handles kick of remote user, camera_off, lock_media, hello host email claim, and invited presenter stage promote', () => {
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    const volSpy = vi.spyOn(engine, 'setParticipantVolume');
+
+    local.setMyID('me');
+    features.setHost('host');
+    features.pendingHostClaim = false;
+    features.isVerifiedHost = false;
+    features.hostEmail = 'owner@example.com';
+
+    // 1. hello claims hostId when email matches hostEmail
+    handleSessionCommand(
+      'hello',
+      { value: JSON.stringify({ id: 'real-host', email: 'Owner@Example.com', name: 'Owner' }) },
+      'real-host',
+    );
+    expect(features.hostId).toBe('real-host');
+    expect(conference.users['real-host'].email).toBe('owner@example.com');
+
+    // 2. kick remote participant (present & missing)
+    conference.addUser('kick-me');
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'kick', id: 'kick-me' }) },
+      'real-host',
+    );
+    expect(conference.users['kick-me']).toBeUndefined();
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'kick', id: 'already-gone' }) },
+      'real-host',
+    );
+
+    // 3. mute when local is already muted + mute remote participant (present & missing)
+    local.mute = true;
+    const toggleMuteSpy = vi.spyOn(local, 'toggleMute').mockResolvedValue(undefined);
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'mute', id: 'me' }) },
+      'real-host',
+    );
+    expect(toggleMuteSpy).not.toHaveBeenCalled();
+    expect(features.stageMessage).toBe('A moderator muted your microphone.');
+
+    conference.addUser('peer-audio');
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'mute', id: 'peer-audio' }) },
+      'real-host',
+    );
+    expect(conference.users['peer-audio'].mute).toBe(true);
+    expect(volSpy).toHaveBeenCalledWith('peer-audio', 0);
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'mute', id: 'missing-peer' }) },
+      'real-host',
+    );
+
+    // 4. camera_off local (active & already off) and remote (present & missing)
+    const toggleCamSpy = vi.spyOn(local, 'toggleCamera').mockResolvedValue(undefined);
+    local.cameraOff = false;
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'camera_off', id: 'me' }) },
+      'real-host',
+    );
+    expect(toggleCamSpy).toHaveBeenCalledTimes(1);
+    expect(features.stageMessage).toBe('A moderator turned off your camera.');
+
+    local.cameraOff = true;
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'camera_off', id: 'me' }) },
+      'real-host',
+    );
+    expect(toggleCamSpy).toHaveBeenCalledTimes(1);
+
+    conference.addUser('peer-cam');
+    conference.users['peer-cam'].video = { getType: () => 'video' } as never;
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'camera_off', id: 'peer-cam' }) },
+      'real-host',
+    );
+    expect(conference.users['peer-cam'].video).toBeUndefined();
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'camera_off', id: 'missing-cam' }) },
+      'real-host',
+    );
+
+    // 5. lock_media local (both, unlock, mic-only, camera-only, repeated no-op)
+    local.mute = false;
+    local.cameraOff = false;
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', mic: true, camera: true }) },
+      'real-host',
+    );
+    expect(toggleMuteSpy).toHaveBeenCalledTimes(1);
+    expect(toggleCamSpy).toHaveBeenCalledTimes(2);
+    expect(features.stageMessage).toBe('Your microphone and camera were locked by a moderator.');
+
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', mic: false, camera: false }) },
+      'real-host',
+    );
+    expect(features.stageMessage).toBe('A moderator unlocked your media controls.');
+
+    local.mute = true;
+    local.cameraOff = true;
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', mic: true }) },
+      'real-host',
+    );
+    expect(features.stageMessage).toBe('Your microphone was locked by a moderator.');
+
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', mic: false }) },
+      'real-host',
+    );
+    expect(features.stageMessage).toBe('A moderator unlocked your media controls.');
+
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', camera: true }) },
+      'real-host',
+    );
+    expect(features.stageMessage).toBe('Your camera was locked by a moderator.');
+
+    // Repeated camera: true does not overwrite message; unlocking camera-only hits (!nextCam && prev.camera)
+    features.stageMessage = 'keep';
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', camera: true }) },
+      'real-host',
+    );
+    expect(features.stageMessage).toBe('keep');
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'me', camera: false }) },
+      'real-host',
+    );
+    expect(features.stageMessage).toBe('A moderator unlocked your media controls.');
+
+    // Invalid/incomplete mod payloads hit line 470 branches
+    handleSessionCommand('mod', { value: JSON.stringify({}) }, 'real-host');
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'kick' }) }, 'real-host');
+
+    // 6. lock_media remote (locked, unlocked, missing) + unknown mod action
+    conference.addUser('peer-lock');
+    conference.users['peer-lock'].video = { getType: () => 'video' } as never;
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'peer-lock', mic: true, camera: true }) },
+      'real-host',
+    );
+    expect(conference.users['peer-lock'].mute).toBe(true);
+    expect(conference.users['peer-lock'].video).toBeUndefined();
+
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'peer-lock', mic: false, camera: false }) },
+      'real-host',
+    );
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'lock_media', id: 'missing-lock', mic: true }) },
+      'real-host',
+    );
+    handleSessionCommand(
+      'mod',
+      { value: JSON.stringify({ action: 'unknown_mod', id: 'me' }) },
+      'real-host',
+    );
+
+    // 7. stage promote by invited presenter (remote & local pending invite)
+    features.enabledFeatures.stage = true;
+    features.invitedStageUserId = 'invited-peer';
+    handleSessionCommand(
+      'stage',
+      { value: JSON.stringify({ action: 'promote', id: 'invited-peer' }) },
+      'invited-peer',
+    );
+    expect(features.stageOccupantId).toBe('invited-peer');
+
+    features.stageOccupantId = '';
+    features.invitedStageUserId = '';
+    features.stageInvitationPending = true;
+    handleSessionCommand(
+      'stage',
+      { value: JSON.stringify({ action: 'promote', id: 'me' }) },
+      'me',
+    );
+    expect(features.stageOccupantId).toBe('me');
+
+    // 8. lobby action: 'invite' enforces sender role and adds valid string emails
+    handleSessionCommand(
+      'lobby',
+      { value: JSON.stringify({ action: 'invite', emails: ['spoof@example.com'] }) },
+      'untrusted-peer',
+    );
+    expect(features.guestEmails).not.toContain('spoof@example.com');
+
+    handleSessionCommand(
+      'lobby',
+      { value: JSON.stringify({ action: 'invite', emails: [123, null] }) },
+      'real-host',
+    );
+    expect(features.guestEmails).toEqual([]);
+
+    handleSessionCommand(
+      'lobby',
+      { value: JSON.stringify({ action: 'invite', emails: ['invited@example.com', 42] }) },
+      'real-host',
+    );
+    expect(features.guestEmails).toEqual(['invited@example.com']);
   });
 });

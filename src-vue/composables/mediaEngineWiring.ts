@@ -1,4 +1,4 @@
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
 import type { MediaService } from '@/services/MediaService';
 import type { JitsiTrack } from '@/types/jitsi';
 import { useConferenceStore } from '@/stores/conferenceStore';
@@ -40,14 +40,13 @@ export function wireStoreSync(engine: MediaService): void {
   const heldRemoteTracks = new Map<string, JitsiTrack[]>();
 
   function applyRemoteTrackToStore(id: string, track: JitsiTrack) {
+    const isDesktop = isDesktopShareTrack(track);
     const features = useSessionFeaturesStore();
-    if (!isAdmittedParticipant(features, id)) {
+    if (!isDesktop && !isAdmittedParticipant(features, id)) {
       const held = heldRemoteTracks.get(id) ?? [];
       held.push(track);
       heldRemoteTracks.set(id, held);
       conferenceStore.clearUserTrack(id, 'video');
-      conferenceStore.clearUserTrack(id, 'screenshare');
-      conferenceStore.clearUserTrack(id, 'screenshareAudio');
       engine.setParticipantPlaybackSuppressed?.(id, true);
       return;
     }
@@ -137,6 +136,11 @@ export function wireStoreSync(engine: MediaService): void {
       if (auth.isAuthenticated && auth.user?.avatarUrl) {
         engine.setLocalParticipantProperty('avatarUrl', auth.user.avatarUrl);
       }
+      if (features.isVerifiedHost) {
+        engine.setLocalParticipantProperty('role', 'host');
+      } else if (features.isVerifiedModerator) {
+        engine.setLocalParticipantProperty('role', 'moderator');
+      }
       /* v8 ignore stop */
       if (!features.isFetchingConfig) {
         features.syncOrClaimHostOnLoaded(engine);
@@ -187,17 +191,30 @@ export function wireStoreSync(engine: MediaService): void {
     );
     if ('handRaised' in props) {
       applyParticipantHandRaised(id, parseHandRaised(props.handRaised));
+      delete props.handRaised;
+    }
+    if (Object.keys(props).length > 0 && conferenceStore.users[id]) {
+      conferenceStore.patchUser(
+        id,
+        { properties: { ...conferenceStore.users[id].properties, ...props } },
+        false,
+      );
     }
     const local = useLocalStore();
     if (local.id && local.id !== id) {
       engine.sendCommand('hello', buildHelloCommand(local.id));
     }
     const features = useSessionFeaturesStore();
+    const email = features.controlEmail();
     if (features.isHost) {
-      engine.sendCommand('host', JSON.stringify({ hostId: local.id }));
+      engine.sendCommand(
+        'host',
+        JSON.stringify({ hostId: local.id, ...(email ? { email } : {}) }),
+      );
+      const syncGrants = grantsPayloadForSync(features.roomDefaults, id, features.userGrants);
       engine.sendCommand(
         'access',
-        JSON.stringify(grantsPayloadForSync(features.roomDefaults, id, features.userGrants)),
+        JSON.stringify(email ? { ...syncGrants, email } : syncGrants),
       );
       if (features.sharedNotes) {
         broadcastSharedNotes(engine, features.sharedNotes);
@@ -208,6 +225,19 @@ export function wireStoreSync(engine: MediaService): void {
     }
     if (features.isHost || features.isModerator) {
       broadcastHostRoomSettings(engine, features);
+      const lock = features.mediaLocks[id];
+      if (lock && (lock.mic || lock.camera)) {
+        engine.sendCommand(
+          'mod',
+          JSON.stringify({
+            action: 'lock_media',
+            id,
+            mic: !!lock.mic,
+            camera: !!lock.camera,
+            ...(email ? { email } : {}),
+          }),
+        );
+      }
     }
     scheduleReceiverRefresh();
   });
@@ -237,7 +267,8 @@ export function wireStoreSync(engine: MediaService): void {
     const isAudio = track.getType() === 'audio';
     if (!isAudio) {
       if (track.isMuted()) {
-        if (isDesktopShareTrack(track)) {
+        const currentScreen = conferenceStore.users[id]?.screenshare;
+        if (isDesktopShareTrack(track) || Boolean(currentScreen && toRaw(currentScreen) === toRaw(track))) {
           conferenceStore.clearUserTrack(id, 'screenshare');
         } else {
           conferenceStore.clearUserTrack(id, 'video');
@@ -294,7 +325,8 @@ export function wireStoreSync(engine: MediaService): void {
         conferenceStore.clearUserTrack(id, 'audio');
       }
     } else {
-      if (isDesktopShareTrack(track)) {
+      const currentScreen = conferenceStore.users[id]?.screenshare;
+      if (isDesktopShareTrack(track) || Boolean(currentScreen && toRaw(currentScreen) === toRaw(track))) {
         conferenceStore.clearUserTrack(id, 'screenshare');
       } else {
         conferenceStore.clearUserTrack(id, 'video');

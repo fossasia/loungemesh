@@ -139,6 +139,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     roomDefaults: defaultUserGrants(),
     userGrants: {} as Record<string, Partial<UserGrants>>,
     panel: '' as '' | 'reactions' | 'poll' | 'moderator' | 'participants' | 'notes' | 'whiteboard' | 'chat',
+    moderatorTab: 'room' as 'room' | 'people',
+    peopleActionPane: '' as '' | 'add' | 'share',
     pendingHostClaim: false,
     hostEmail: '',
     notesActivitySeq: 0,
@@ -162,6 +164,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     pendingModerationChanges: [] as ModerationChange[],
     enabledFeatures: { ...DEFAULT_ENABLED_FEATURES } as Record<GatedFeatureKey, boolean>,
     roleSnapshotToken: '' as string,
+    currentRoomName: '' as string,
+    roomBgPersisted: true,
+    mediaLocks: {} as Record<string, { mic?: boolean; camera?: boolean }>,
   }),
   getters: {
     canModerate(): boolean {
@@ -248,8 +253,44 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (this.eventyayMeet && this.capabilities.length > 0) {
         return this.capabilities.includes('moderate');
       }
-      return this.isHost;
+      return this.isHost || this.isModerator;
     },
+    isLocalMicLocked(): boolean {
+      if (this.isHost || this.isModerator) return false;
+      const local = useLocalStore();
+      return Boolean(local.id && this.mediaLocks[local.id]?.mic);
+    },
+    isLocalCameraLocked(): boolean {
+      if (this.isHost || this.isModerator) return false;
+      const local = useLocalStore();
+      return Boolean(local.id && this.mediaLocks[local.id]?.camera);
+    },
+    isParticipantHost:
+      (state) =>
+      (userId: string): boolean => {
+        if (!userId) return false;
+        if (state.hostId && userId === state.hostId) return true;
+        const conference = useConferenceStore();
+        const remote = conference.users[userId];
+        if (remote?.properties?.role === 'host') return true;
+        const email = (remote?.email || '').trim().toLowerCase();
+        const expected = state.hostEmail.trim().toLowerCase();
+        return Boolean(email && expected && email === expected);
+      },
+    isParticipantModerator:
+      (state) =>
+      (userId: string): boolean => {
+        if (!userId) return false;
+        if (state.userGrants[userId]?.moderator) return true;
+        const conference = useConferenceStore();
+        const remote = conference.users[userId] as (import('@/stores/conferenceStore').RemoteUser & { role?: string }) | undefined;
+        if (remote?.role === 'moderator' || remote?.properties?.role === 'moderator') return true;
+        const email = (remote?.email || '').trim().toLowerCase();
+        if (!email) return false;
+        return state.moderatorEmails.some(
+          (item) => (item || '').trim().toLowerCase() === email,
+        );
+      },
     isStageModeActive(): boolean {
       const conference = useConferenceStore();
       const local = useLocalStore();
@@ -305,6 +346,44 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (allowed.some((item) => (item || '').trim().toLowerCase() === known)) {
         this.approveLobby(id);
       }
+    },
+    openModeratorPeoplePane(pane: 'add' | 'share') {
+      if (!this.isHost && !this.isModerator) return;
+      this.panel = 'moderator';
+      this.moderatorTab = 'people';
+      this.peopleActionPane = pane;
+    },
+    addInvitedEmails(emails: string[]): string[] {
+      const existing = new Set<string>(
+        [this.hostEmail, ...this.moderatorEmails, ...this.guestEmails]
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const added: string[] = [];
+      for (const raw of emails) {
+        const normalized = raw.trim().toLowerCase();
+        if (!normalized || existing.has(normalized)) continue;
+        existing.add(normalized);
+        this.guestEmails.push(normalized);
+        added.push(normalized);
+      }
+      const conference = useConferenceStore();
+      for (const [uid, remote] of Object.entries(conference.users)) {
+        if (remote.email && existing.has(remote.email.trim().toLowerCase())) {
+          this.approveLobby(uid);
+        }
+      }
+      const auth = useAuthStore();
+      const localEmail = (auth.user?.email || '').trim().toLowerCase();
+      if (localEmail && existing.has(localEmail)) {
+        this.isInvited = true;
+        this.localLobbyPending = false;
+        const local = useLocalStore();
+        if (local.id) {
+          this.approveLobby(local.id);
+        }
+      }
+      return added;
     },
     approveLobby(id: string) {
       this.lobbyApproved[id] = true;
@@ -420,30 +499,58 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     loadPersistedHostSettings(sessionId: string) {
       if (!sessionId) return;
       this.hostSettingsSessionId = sessionId;
+      this.currentRoomName = sessionId;
+    },
+    resolveRoomName(): string {
+      if (this.currentRoomName) return this.currentRoomName;
+      if (this.hostSettingsSessionId) return this.hostSettingsSessionId;
+      /* v8 ignore next */
+      return typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '').split('/').pop() || '' : '';
+    },
+    setMediaLock(userId: string, locks: { mic?: boolean; camera?: boolean }) {
+      if (!userId) return;
+      const prev = this.mediaLocks[userId] ?? {};
+      const next = {
+        mic: locks.mic !== undefined ? locks.mic : prev.mic,
+        camera: locks.camera !== undefined ? locks.camera : prev.camera,
+      };
+      if (!next.mic && !next.camera) {
+        const copy = { ...this.mediaLocks };
+        delete copy[userId];
+        this.mediaLocks = copy;
+      } else {
+        this.mediaLocks = { ...this.mediaLocks, [userId]: next };
+      }
     },
     async setGridBackgroundUrl(url: string) {
       this.gridBackgroundUrl = url;
+      this.roomBgAssembly = null;
       /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
+      const roomName = this.resolveRoomName();
+      if (roomName && typeof fetch === 'function') {
         try {
-          await fetch(`/api/meetings/state/${roomName}/background`, {
+          const res = await fetch(`/api/meetings/state/${roomName}/background`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gridBackgroundUrl: url }),
           });
+          this.roomBgPersisted = !!res?.ok;
         } catch (err) {
+          this.roomBgPersisted = false;
           console.error('Failed to save background:', err);
         }
+      } else {
+        this.roomBgPersisted = false;
       }
       /* v8 ignore stop */
     },
     clearGridBackground() {
       this.gridBackgroundUrl = '';
+      this.roomBgPersisted = true;
       this.roomBgAssembly = null;
       /* v8 ignore start */
-      const roomName = window.location.pathname.split('/').pop();
-      if (roomName) {
+      const roomName = this.resolveRoomName();
+      if (roomName && typeof fetch === 'function') {
         fetch(`/api/meetings/state/${roomName}/background`, {
           method: 'DELETE',
         }).catch((err) => console.error('Failed to clear background:', err));
@@ -477,11 +584,26 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         this.roomBgAssembly = null;
         return;
       }
+      if (command.action === 'begin') {
+        this.roomBgAssembly = { total: command.total, parts: {} };
+        return;
+      }
+      if (command.action === 'chunk') {
+        if (!this.roomBgAssembly) return;
+        this.roomBgAssembly.parts[command.index] = command.data;
+        if (Object.keys(this.roomBgAssembly.parts).length !== this.roomBgAssembly.total) return;
+        const assembled = Array.from({ length: this.roomBgAssembly.total }, (_, index) => {
+          return this.roomBgAssembly?.parts[index] ?? '';
+        }).join('');
+        this.gridBackgroundUrl = assembled;
+        this.roomBgAssembly = null;
+        return;
+      }
       /* v8 ignore start */
       if (command.action === 'reload') {
-        const roomName = window.location.pathname.split('/').pop();
+        const roomName = this.resolveRoomName();
         if (roomName) {
-          fetch(`/api/meetings/state/${roomName}/background`)
+          fetch(`/api/meetings/state/${roomName}/background`, { cache: 'no-store' })
             .then((res) => res.json())
             .then((data) => {
               if (data && data.gridBackgroundUrl !== undefined) {
@@ -726,6 +848,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.hostEmail = '';
       this.lobbyEnabled = true;
       this.panel = '';
+      this.moderatorTab = 'room';
+      this.peopleActionPane = '';
+      this.moderatorEmails = [];
+      this.guestEmails = [];
       this.localLobbyPending = false;
       this.lobbyWaiting = [];
       this.pendingHostClaim = false;
@@ -736,6 +862,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.gridBackgroundUrl = '';
       this.notesTemplate = '';
       this.hostSettingsSessionId = '';
+      this.currentRoomName = '';
+      this.roomBgPersisted = true;
+      this.mediaLocks = {};
       this.roomBgAssembly = null;
       this.notesAssembly = null;
       this.ydoc.destroy();
@@ -852,6 +981,18 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       for (const [userId, grants] of Object.entries(this.userGrants)) {
         engine.sendCommand('access', JSON.stringify({ userId, grants, email }));
       }
+      for (const [userId, locks] of Object.entries(this.mediaLocks)) {
+        engine.sendCommand(
+          'mod',
+          JSON.stringify({
+            action: 'lock_media',
+            id: userId,
+            mic: !!locks.mic,
+            camera: !!locks.camera,
+            ...(email ? { email } : {}),
+          }),
+        );
+      }
     },
     syncConfig(engine: any) {
       engine.sendCommand('config', JSON.stringify({
@@ -898,10 +1039,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         const auth = useAuthStore();
         const email = auth.user?.email || this.hostEmail;
         engine.sendCommand('host', JSON.stringify({ hostId: id, email }));
-        engine.sendCommand('access', JSON.stringify({ defaults: this.roomDefaults }));
-        engine.sendCommand('lobby', JSON.stringify({ enabled: this.lobbyEnabled }));
-        engine.sendCommand('stage', JSON.stringify({ action: 'settings', stagePromotionEnabled: this.stagePromotionEnabled }));
-        engine.sendCommand('config', JSON.stringify({ allowParticipantRecording: this.allowParticipantRecording }));
+        engine.sendCommand('access', JSON.stringify({ defaults: this.roomDefaults, ...(email ? { email } : {}) }));
+        engine.sendCommand('lobby', JSON.stringify({ enabled: this.lobbyEnabled, ...(email ? { email } : {}) }));
+        engine.sendCommand('stage', JSON.stringify({ action: 'settings', stagePromotionEnabled: this.stagePromotionEnabled, ...(email ? { email } : {}) }));
+        engine.sendCommand('config', JSON.stringify({ allowParticipantRecording: this.allowParticipantRecording, ...(email ? { email } : {}) }));
 
         if (this.applyNotesTemplateIfNeeded()) {
           broadcastYjsState(engine, this.ydoc);
@@ -916,6 +1057,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       }
     },
     async fetchRoomConfigAndRole(roomName: string, engine?: any) {
+      this.currentRoomName = roomName;
       this.isFetchingConfig = true;
       try {
         let initialized = false;

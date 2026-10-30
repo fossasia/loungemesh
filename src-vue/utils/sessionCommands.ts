@@ -57,9 +57,11 @@ export function canApplyRoomControl(
   email?: string,
 ): boolean {
   if (!senderId) return true;
-  if (features.hostId && senderId === features.hostId) return true;
-  if (features.userGrants[senderId]?.moderator) return true;
-  if (conference.users[senderId]?.properties?.role === 'moderator') return true;
+  if (features.isParticipantHost(senderId)) return true;
+  if (features.isParticipantModerator(senderId)) return true;
+  const remoteUser = (conference.users as Record<string, any>)[senderId];
+  const senderRole = remoteUser?.properties?.role || remoteUser?.role;
+  if (senderRole === 'host' || senderRole === 'moderator') return true;
   if (sameEmail(email, features.hostEmail)) return true;
   return features.moderatorEmails.some((item) => sameEmail(email, item));
 }
@@ -71,7 +73,7 @@ export function canApplyHostSettings(
   email?: string,
 ): boolean {
   if (!senderId) return true;
-  if (features.hostId && senderId === features.hostId) return true;
+  if (features.isParticipantHost(senderId)) return true;
   return sameEmail(email, features.hostEmail);
 }
 
@@ -81,20 +83,30 @@ function canModerateParticipant(
   targetId: string,
   features: ReturnType<typeof useSessionFeaturesStore>,
   conference: ReturnType<typeof useConferenceStore>,
+  email?: string,
 ): boolean {
   if (!senderId) return true;
-  if (!canApplyRoomControl(senderId, features, conference)) return false;
-  if (canApplyHostSettings(senderId, features)) return true;
-  if (targetId && targetId === features.hostId) return false;
-  if (targetId && features.userGrants[targetId]?.moderator) return false;
-  if (targetId && conference.users[targetId]?.properties?.role === 'moderator') return false;
+  if (!canApplyRoomControl(senderId, features, conference, email)) return false;
+  if (canApplyHostSettings(senderId, features, email)) return true;
+  if (targetId && features.isParticipantHost(targetId)) return false;
+  const targetEmail = conference.users[targetId]?.email;
+  if (targetEmail && sameEmail(targetEmail, features.hostEmail)) return false;
+  if (targetId && features.isParticipantModerator(targetId)) return false;
+  const local = useLocalStore();
+  if (targetId && targetId === local.id && (features.isHost || features.isModerator)) return false;
   return true;
 }
 
-function isSenderModeratorOrHost(senderId: string | undefined, features: ReturnType<typeof useSessionFeaturesStore>): boolean {
+function isSenderModeratorOrHost(
+  senderId: string | undefined,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  conference?: ReturnType<typeof useConferenceStore>,
+  email?: string,
+): boolean {
   if (!senderId) return false;
-  if (features.hostId === senderId) return true;
-  if (features.userGrants[senderId]?.moderator) return true;
+  if (features.isParticipantHost(senderId)) return true;
+  if (features.isParticipantModerator(senderId)) return true;
+  if (conference && canApplyRoomControl(senderId, features, conference, email)) return true;
   return false;
 }
 /* v8 ignore stop */
@@ -122,6 +134,12 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       }
       if (data.name) {
         conference.updateUserDisplayName(data.id, data.name);
+      }
+      if (data.email?.trim()) {
+        conference.patchUser(data.id, { email: data.email.trim().toLowerCase() }, false);
+        if (!features.isVerifiedHost && !features.pendingHostClaim && sameEmail(data.email, features.hostEmail)) {
+          features.setHost(data.id);
+        }
       }
       features.admitParticipantEmail(data.id, data.email);
       conference.recordUserHeartbeat(data.id);
@@ -167,10 +185,18 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         enabled?: boolean;
         email?: string;
         reason?: string;
+        emails?: unknown[];
       }>(payload);
       if (!data) break;
       if (data.enabled != null && canApplyHostSettings(senderId, features, data.email)) {
         features.lobbyEnabled = data.enabled;
+      }
+      if (data.action === 'invite' && Array.isArray(data.emails)) {
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
+        const stringEmails = data.emails.filter((item): item is string => typeof item === 'string');
+        if (stringEmails.length > 0) {
+          features.addInvitedEmails(stringEmails);
+        }
       }
       if (data.action === 'wait' && data.id && data.name) {
         features.addLobbyWaiter({
@@ -187,15 +213,26 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         if (senderId && senderId !== data.id) break;
         features.rejectLobby(data.id);
       }
-      if (data.action === 'approve' && data.id) {
+      if (data.action === 'approve' && (data.id || (data as any).userKey)) {
         if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
-        features.approveLobby(data.id);
-        if (data.id === local.id) features.localLobbyPending = false;
+        const targetId = data.id || '';
+        if (targetId) features.approveLobby(targetId);
+        const matchesLocal =
+          (targetId && (targetId === local.id || targetId === local.userKey || targetId === 'all')) ||
+          Boolean((data as any).userKey && (data as any).userKey === local.userKey);
+        if (matchesLocal) {
+          if (local.id) features.approveLobby(local.id);
+          features.localLobbyPending = false;
+        }
       }
-      if (data.action === 'reject' && data.id) {
+      if (data.action === 'reject' && (data.id || (data as any).userKey)) {
         if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
-        features.rejectLobby(data.id);
-        if (data.id === local.id) {
+        const targetId = data.id || '';
+        if (targetId) features.rejectLobby(targetId);
+        const matchesLocal =
+          (targetId && (targetId === local.id || targetId === local.userKey)) ||
+          Boolean((data as any).userKey && (data as any).userKey === local.userKey);
+        if (matchesLocal) {
           features.localLobbyPending = false;
           features.lobbyRejected = true;
         }
@@ -444,21 +481,71 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       break;
     }
     case 'mod': {
-      const data = parse<{ action?: string; id?: string }>(payload);
-      if (data?.action === 'kick' && data.id === local.id) {
-        if (!canModerateParticipant(senderId, data.id, features, conference)) break;
-        conference.leaveConference();
-        window.location.href = '/kicked';
-      }
-      if (data?.action === 'mute' && data.id) {
-        if (!canModerateParticipant(senderId, data.id, features, conference)) break;
-        if (data.id === local.id && !local.mute) {
-          void local.toggleMute();
+      const data = parse<{
+        action?: string;
+        id?: string;
+        mic?: boolean;
+        camera?: boolean;
+        email?: string;
+      }>(payload);
+      if (!data?.action || !data.id) break;
+      if (!canModerateParticipant(senderId, data.id, features, conference, data.email)) break;
+      if (data.action === 'kick') {
+        if (data.id === local.id) {
+          conference.leaveConference();
+          window.location.href = '/kicked';
+        } else if (conference.users[data.id]) {
+          conference.removeUser(data.id);
+        }
+      } else if (data.action === 'mute') {
+        if (data.id === local.id) {
+          if (!local.mute) {
+            void local.toggleMute();
+          }
+          features.setStageMessage('A moderator muted your microphone.');
         } else if (conference.users[data.id]) {
           conference.patchUser(data.id, { mute: true });
           const engine = getMediaEngineInstance();
           engine.setParticipantVolume(data.id, 0);
-          engine.disconnectParticipantAudio?.(data.id);
+        }
+      } else if (data.action === 'camera_off') {
+        if (data.id === local.id) {
+          if (!local.cameraOff) {
+            void local.toggleCamera();
+          }
+          features.setStageMessage('A moderator turned off your camera.');
+        } else if (conference.users[data.id]) {
+          conference.clearUserTrack(data.id, 'video');
+        }
+      } else if (data.action === 'lock_media') {
+        const prev = features.mediaLocks[data.id] ?? {};
+        const nextMic = data.mic !== undefined ? data.mic : prev.mic;
+        const nextCam = data.camera !== undefined ? data.camera : prev.camera;
+        features.setMediaLock(data.id, { mic: nextMic, camera: nextCam });
+        if (data.id === local.id) {
+          if (nextMic && !local.mute) {
+            void local.toggleMute();
+          }
+          if (nextCam && !local.cameraOff) {
+            void local.toggleCamera();
+          }
+          if (nextMic && !prev.mic && nextCam && !prev.camera) {
+            features.setStageMessage('Your microphone and camera were locked by a moderator.');
+          } else if (nextMic && !prev.mic) {
+            features.setStageMessage('Your microphone was locked by a moderator.');
+          } else if (nextCam && !prev.camera) {
+            features.setStageMessage('Your camera was locked by a moderator.');
+          } else if ((!nextMic && prev.mic) || (!nextCam && prev.camera)) {
+            features.setStageMessage('A moderator unlocked your media controls.');
+          }
+        } else if (conference.users[data.id]) {
+          if (nextMic) {
+            conference.patchUser(data.id, { mute: true });
+            getMediaEngineInstance().setParticipantVolume(data.id, 0);
+          }
+          if (nextCam) {
+            conference.clearUserTrack(data.id, 'video');
+          }
         }
       }
       break;
@@ -484,7 +571,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
     }
     case 'stage': {
       if (features.enabledFeatures.stage === false) break;
-      const data = parse<StageCommand & { _cmdId?: string }>(payload);
+      const data = parse<StageCommand & { _cmdId?: string; email?: string }>(payload);
       if (!data?.action) break;
       if (data._cmdId) {
         if (processedStageCommandIds.has(data._cmdId)) {
@@ -499,17 +586,28 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       }
       if (data.action === 'invite' && data.id) {
-        if (senderId && !canApplyHostSettings(senderId, features)) break;
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
         const engine = getMediaEngineInstance();
         applyStageInvite(engine, data.id);
       }
       if (data.action === 'promote' && data.id) {
-        if (senderId && !canApplyHostSettings(senderId, features)) break;
+        const invitedSelf =
+          !!senderId &&
+          senderId === data.id &&
+          (features.invitedStageUserId === data.id ||
+            (local.id === data.id && features.stageInvitationPending));
+        if (
+          senderId &&
+          !invitedSelf &&
+          !canApplyRoomControl(senderId, features, conference, data.email)
+        ) {
+          break;
+        }
         applyStagePromote(data.id);
       }
       if (data.action === 'demote' && data.id) {
         const self = !!senderId && senderId === data.id;
-        if (senderId && !self && !canApplyRoomControl(senderId, features, conference)) break;
+        if (senderId && !self && !canApplyRoomControl(senderId, features, conference, data.email)) break;
         applyStageDemote(data.id);
       }
       if (data.action === 'layout' && data.layout) {
@@ -518,7 +616,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       }
       if (data.action === 'settings' && data.stagePromotionEnabled != null) {
-        if (senderId && !canApplyHostSettings(senderId, features)) break;
+        if (senderId && !canApplyHostSettings(senderId, features, data.email)) break;
         features.stagePromotionEnabled = data.stagePromotionEnabled;
       }
       break;

@@ -42,6 +42,7 @@ describe('HostRoomSettingsSection', () => {
   });
 
   it('uploads and syncs a grid background', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
     vi.mocked(processGridBackgroundFile).mockResolvedValue('data:image/jpeg;base64,wall');
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountWithApp(HostRoomSettingsSection);
@@ -53,6 +54,7 @@ describe('HostRoomSettingsSection', () => {
     expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,wall');
     expect(cmdSpy).toHaveBeenCalledWith('room', expect.stringContaining('reload'));
     expect(wrapper.find('.preview').exists()).toBe(true);
+    vi.unstubAllGlobals();
     wrapper.unmount();
   });
 

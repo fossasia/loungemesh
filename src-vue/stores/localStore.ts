@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
-import { markRaw, nextTick } from 'vue';
+import { markRaw, nextTick, toRaw } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
 import { isDesktopShareTrack } from '@/utils/screenshareCapture';
+import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   clampPan,
@@ -51,11 +52,19 @@ function getConferenceLocalTracksOfKind(
 }
 
 function getConferenceLocalVideoTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
-  return getConferenceLocalTracksOfKind(conference, 'video');
+  return getConferenceLocalTracksOfKind(conference, 'video').filter(
+    (track) => !isDesktopShareTrack(track),
+  );
 }
 
-function getConferenceLocalAudioTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
-  return getConferenceLocalTracksOfKind(conference, 'audio');
+function getConferenceLocalAudioTracks(
+  conference: { getLocalTracks?: () => JitsiTrack[] } | undefined,
+  screenshareAudio?: JitsiTrack,
+) {
+  const screenRaw = screenshareAudio ? toRaw(screenshareAudio) : undefined;
+  return getConferenceLocalTracksOfKind(conference, 'audio').filter(
+    (track) => !screenRaw || toRaw(track) !== screenRaw,
+  );
 }
 
 export type Vector2 = { x: number; y: number };
@@ -224,8 +233,13 @@ export const useLocalStore = defineStore('local', {
         }
       });
 
+      const activeSharers = Object.entries(users)
+        .filter(([uid, u]) => Boolean(u.screenshare) && isAdmittedParticipant(features, uid))
+        .map(([uid]) => uid);
       this.visibleUsers = [...new Set(visibleUserIds)];
-      this.usersOnStage = stageOccupantId ? [stageOccupantId] : [];
+      this.usersOnStage = [
+        ...new Set([...(stageOccupantId ? [stageOccupantId] : []), ...activeSharers]),
+      ];
 
       mediaDebug('localStore', 'calculateUsersOnScreen', {
         visibleUserIds: this.visibleUsers,
@@ -260,6 +274,11 @@ export const useLocalStore = defineStore('local', {
       await this.disableMic();
     },
     async enableMic() {
+      const features = useSessionFeaturesStore();
+      if (features.isLocalMicLocked) {
+        features.setStageMessage('Your microphone is locked by a moderator.');
+        return;
+      }
       const engine = getMediaEngineInstance();
       // A live track already exists (e.g. created at join) — just unmute it.
       if (this.audio) {
@@ -277,7 +296,10 @@ export const useLocalStore = defineStore('local', {
         if (engine.isJoined()) {
           try {
             // Drop any stale local audio senders before publishing the fresh one.
-            await releaseLocalMediaTracks(getConferenceLocalAudioTracks(conf), conf);
+            await releaseLocalMediaTracks(
+              getConferenceLocalAudioTracks(conf, this.screenshareAudio),
+              conf,
+            );
             await engine.addLocalTrack(created);
           } catch {
             disposeJitsiTrack(created);
@@ -312,7 +334,7 @@ export const useLocalStore = defineStore('local', {
       this.audio = undefined;
       await nextTick();
       await releaseLocalMediaTracks(
-        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]),
+        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf, this.screenshareAudio)]),
         conf,
       );
       unlockMediaPlaybackNow(engine);
@@ -326,6 +348,11 @@ export const useLocalStore = defineStore('local', {
       await this.disableCamera();
     },
     async enableCamera() {
+      const features = useSessionFeaturesStore();
+      if (features.isLocalCameraLocked) {
+        features.setStageMessage('Your camera is locked by a moderator.');
+        return;
+      }
       const engine = getMediaEngineInstance();
       if (this.video && this.videoType === 'camera') {
         if (this.video.isMuted()) await this.video.unmute();

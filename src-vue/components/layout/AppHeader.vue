@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import logo from '@/assets/logo.svg';
 import { useAuthStore } from '@/stores/authStore';
+import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import AuthPrompt from '@/components/auth/AuthPrompt.vue';
@@ -15,8 +16,18 @@ withDefaults(
 );
 
 const auth = useAuthStore();
+const conference = useConferenceStore();
 const features = useSessionFeaturesStore();
 const showProfile = ref(false);
+
+const sessionBadgeKind = computed<'connecting' | 'lobby' | 'host' | 'moderator' | ''>(() => {
+  if (!features.configLoaded) return 'connecting';
+  if (features.isLobbyBlocked) return 'lobby';
+  if (!conference.isJoined && conference.isJoining) return 'connecting';
+  if (features.isHost) return 'host';
+  if (features.isModerator) return 'moderator';
+  return '';
+});
 
 function handleProfileClick() {
   if (auth.isAuthenticated) {
@@ -50,18 +61,27 @@ function handleProfileClick() {
       <img :src="logo" alt="" class="logoMark" width="22" height="22" />
       <span class="brandWord">LoungeMesh</span>
     </div>
-    <span class="brandDivider" aria-hidden="true" />
-    <div class="headerRoleBadge" :class="`role-${features.userRole}`" data-testid="header-role-badge">
-      <span v-if="features.isHost" class="badgeInner host">
-        <AppIcon name="award" :size="12" /> Host
-      </span>
-      <span v-else-if="features.isModerator" class="badgeInner mod">
-        <AppIcon name="shield" :size="12" /> Moderator
-      </span>
-      <span v-else class="badgeInner attendee">
-        <AppIcon name="user" :size="12" /> Attendee
-      </span>
-    </div>
+    <template v-if="sessionBadgeKind">
+      <span class="brandDivider" aria-hidden="true" />
+      <div
+        class="headerRoleBadge"
+        :class="`status-${sessionBadgeKind}`"
+        data-testid="header-role-badge"
+      >
+        <span v-if="sessionBadgeKind === 'connecting'" class="badgeInner connecting">
+          <span class="statusDot" aria-hidden="true" /> Connecting…
+        </span>
+        <span v-else-if="sessionBadgeKind === 'lobby'" class="badgeInner lobby">
+          <AppIcon name="clock" :size="12" /> In lobby
+        </span>
+        <span v-else-if="sessionBadgeKind === 'host'" class="badgeInner host">
+          <AppIcon name="award" :size="12" /> Host
+        </span>
+        <span v-else-if="sessionBadgeKind === 'moderator'" class="badgeInner mod">
+          <AppIcon name="shield" :size="12" /> Moderator
+        </span>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -237,9 +257,40 @@ function handleProfileClick() {
   box-shadow: 0 1px 3px rgba(99, 102, 241, 0.12);
 }
 
-.badgeInner.attendee {
-  background: rgba(148, 163, 184, 0.12);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  color: #64748b;
+.badgeInner.connecting {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #2563eb;
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.badgeInner.lobby {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #b45309;
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  animation: headerPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes headerPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
 }
 </style>

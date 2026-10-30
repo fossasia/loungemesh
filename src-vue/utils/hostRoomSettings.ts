@@ -11,7 +11,14 @@ export function broadcastHostRoomSettings(
 ): void {
   if (!features.isHost && !features.isModerator) return;
   if (!features.gridBackgroundUrl && !announceClear) return;
-  for (const command of buildRoomBackgroundCommands(features.gridBackgroundUrl)) {
-    engine.sendCommand('room', JSON.stringify(command));
+  const email = features.controlEmail();
+  const commands = buildRoomBackgroundCommands(features.gridBackgroundUrl, {
+    chunkDirect: features.roomBgPersisted === false,
+  });
+  for (const command of commands) {
+    engine.sendCommand(
+      'room',
+      JSON.stringify(email ? { ...command, email } : command),
+    );
   }
 }

@@ -79,16 +79,16 @@ flowchart TD
 ## Architectural Principles
 
 ### 1. Headless WebRTC (No Iframe API)
-LoungeMesh does not embed the standard Jitsi Meet iframe. Instead, it interacts directly with `lib-jitsi-meet` via pure JavaScript. This grants complete programmatic control over individual remote audio/video tracks, WebRTC receiver constraints, and spatial rendering.
+LoungeMesh does not embed the standard Jitsi Meet iframe. Instead, it interacts directly with `lib-jitsi-meet` via pure JavaScript with multi-stream signaling (`sourceNameSignaling`, `sendMultipleVideoStreams`, `receiveMultipleVideoStreams`) and `testing.allowMultipleTracks` enabled. `JitsiAdapter` also subscribes to remote `track.videoTypeChanged` events so delayed XMPP `<SourceInfo>` updates cleanly promote camera-off `-v0` desktop tracks into `screenshare` without clobbering camera video, and mic toggles exclude active tab-share `screenshareAudio`.
 
 ### 2. Strict Adapter Boundary
 Vue components and Pinia stores never interact directly with `lib-jitsi-meet`. All WebRTC interactions flow through the `MediaService` interface implemented by `JitsiAdapter.ts`. This decouples the UI from WebRTC implementation details and enables mock testing with 100% test coverage.
 
 ### 3. Spatial Viewport Culling & Video Budgeting
-To maintain low CPU and network utilization on low-spec hardware (2 vCPU / 2 GB RAM), LoungeMesh dynamically computes which avatars are within the visible screen area or currently speaking on stage:
-- Off-screen participants have their video subscriptions culled (`selectedSources = []`, `lastN = 0`), consuming zero incoming video bandwidth.
+To maintain low CPU and network utilization on low-spec hardware (2 vCPU / 2 GB RAM), LoungeMesh dynamically computes which avatars are within the visible screen area, speaking on stage, or actively sharing their screen:
+- Off-screen participants without stage or active screenshare streams have their video subscriptions culled (`selectedSources = []`, `lastN = 0`), consuming zero incoming video bandwidth.
 - Avatar cameras are capped at 360p (ideal) / 480p (max) at 24 fps.
-- Desktop screensharing is constrained to 720p at 15–30 fps.
+- Desktop screensharing is constrained to 720p at 15–30 fps, and admitted active sharers remain subscribed in `usersOnStage` so `SharedScreens.vue` receives frames even when the sharer's avatar is panned off-screen.
 
 ### 4. Single-Roundtrip State Bundling
 When a participant enters a room, the frontend queries `/api/meetings/state/:roomName/init` in a single HTTP request. This endpoint aggregates:

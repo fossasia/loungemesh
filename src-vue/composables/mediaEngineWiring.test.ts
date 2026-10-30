@@ -620,7 +620,10 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Agenda');
     expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'reload', email: 'host@example.com' }),
+    );
   });
 
   it('applies the notes template when the verified host joins', async () => {
@@ -641,7 +644,10 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Kickoff');
     expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'reload', email: 'solo@example.com' }),
+    );
   });
 
   it('rebroadcasts room background when host sees a new participant', async () => {
@@ -811,6 +817,37 @@ describe('wireStoreSync', () => {
 
     jitsi.conference._fire(ev.conference.TRACK_REMOVED, track);
     expect(conference.users['u-muted-screen'].screenshare).toBeUndefined();
+
+    // Normal camera video track removed
+    const camTrack = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'video',
+      isMuted: () => false,
+      isLocal: () => false,
+      videoType: 'camera',
+    } as JitsiTrack;
+    conference.setUserTrack('u-muted-screen', 'video', camTrack);
+    jitsi.conference._fire(ev.conference.TRACK_REMOVED, camTrack);
+    expect(conference.users['u-muted-screen'].video).toBeUndefined();
+
+    // Remote audio track mute change
+    const audioTrack = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'audio',
+      isMuted: () => true,
+      isLocal: () => false,
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, audioTrack);
+    expect(conference.users['u-muted-screen'].mute).toBe(true);
+
+    const unmutedAudioTrack = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'audio',
+      isMuted: () => false,
+      isLocal: () => false,
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, unmutedAudioTrack);
+    expect(conference.users['u-muted-screen'].audio).toBeDefined();
   });
 
   it('patches onStage and syncs the stage occupant id', async () => {
@@ -1013,6 +1050,111 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.TRACK_ADDED, muted);
     jitsi.conference._fire(ev.conference.USER_JOINED, 'late', {});
     expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
+  });
+
+  it('preserves initial participant properties and syncs mediaLocks on userJoined', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+
+    local.setMyID('host');
+    features.setHost('host');
+    features.isVerifiedHost = true;
+    features.hostEmail = 'host@example.com';
+    features.setMediaLock('locked-guest', { mic: true, camera: false });
+
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'locked-guest', {
+      _properties: { role: 'moderator', handRaised: 'true' },
+    });
+    expect(conference.users['locked-guest'].properties.role).toBe('moderator');
+    expect(conference.users['locked-guest'].properties.handRaised).toBe(true);
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'mod',
+      JSON.stringify({
+        action: 'lock_media',
+        id: 'locked-guest',
+        mic: true,
+        camera: false,
+        email: 'host@example.com',
+      }),
+    );
+
+    // Also test camera-only lock with no controlEmail
+    features.hostEmail = '';
+    features.setMediaLock('cam-locked-guest', { mic: false, camera: true });
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'cam-locked-guest', {});
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'mod',
+      JSON.stringify({
+        action: 'lock_media',
+        id: 'cam-locked-guest',
+        mic: false,
+        camera: true,
+      }),
+    );
+  });
+
+  it('clears screenshare on trackMuteChanged and trackRemoved even if videoType reverted, without clearing separate camera', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    wireStoreSync(engine);
+    conference.addUser('u-screen-revert');
+    const emit = (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit.bind(engine);
+
+    const screenTrack = {
+      getParticipantId: () => 'u-screen-revert',
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop',
+      getSourceName: () => 'u-screen-revert-v0',
+    };
+    const camTrack = {
+      getParticipantId: () => 'u-screen-revert',
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera',
+      getSourceName: () => 'u-screen-revert-v0',
+    };
+
+    emit('trackAdded', screenTrack);
+    emit('trackAdded', camTrack);
+    expect(conference.users['u-screen-revert'].screenshare).toBe(screenTrack);
+    expect(conference.users['u-screen-revert'].video).toBe(camTrack);
+
+    // Muting camera while a different screenshare is active clears video only
+    camTrack.isMuted = () => true;
+    emit('trackMuteChanged', camTrack);
+    expect(conference.users['u-screen-revert'].video).toBeUndefined();
+    expect(conference.users['u-screen-revert'].screenshare).toBe(screenTrack);
+
+    // Muting screenshare whose videoType reverted to camera still clears screenshare via identity match
+    screenTrack.videoType = 'camera';
+    screenTrack.isMuted = () => true;
+    emit('trackMuteChanged', screenTrack);
+    expect(conference.users['u-screen-revert'].screenshare).toBeUndefined();
+
+    // Re-add both and test trackRemoved with both non-matching camera and identity-matched screenshare
+    screenTrack.videoType = 'desktop';
+    screenTrack.isMuted = () => false;
+    camTrack.isMuted = () => false;
+    emit('trackAdded', screenTrack);
+    emit('trackAdded', camTrack);
+    emit('trackRemoved', camTrack);
+    expect(conference.users['u-screen-revert'].video).toBeUndefined();
+    expect(conference.users['u-screen-revert'].screenshare).toBe(screenTrack);
+
+    screenTrack.videoType = 'camera';
+    emit('trackRemoved', screenTrack);
+    expect(conference.users['u-screen-revert'].screenshare).toBeUndefined();
   });
 });
 

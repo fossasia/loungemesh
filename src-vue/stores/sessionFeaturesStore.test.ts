@@ -606,7 +606,9 @@ describe('sessionFeaturesStore', () => {
     
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/meetings/state/room-name/background');
+    expect(fetchSpy).toHaveBeenCalledWith('/api/meetings/state/room-name/background', {
+      cache: 'no-store',
+    });
     expect(features.gridBackgroundUrl).toBe('data:image/jpeg;base64,abc');
 
     features.applyRoomBackgroundCommand({ action: 'clear' });
@@ -1095,5 +1097,154 @@ describe('sessionFeaturesStore', () => {
     expect(features.canUseNotes).toBe(false);
     expect(features.canPromoteToStage).toBe(false);
     expect(features.canUseChat).toBe(false);
+  });
+
+  it('evaluates moderator resolution, media locks, room name resolution, and chunked background assembly', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const conference = useConferenceStore();
+
+    // resolveRoomName priority
+    expect(features.resolveRoomName()).toBe('');
+    features.hostSettingsSessionId = 'settings-room';
+    expect(features.resolveRoomName()).toBe('settings-room');
+    features.currentRoomName = 'active-room';
+    expect(features.resolveRoomName()).toBe('active-room');
+
+    // isParticipantModerator checks grants, participant properties, and moderatorEmails
+    expect(features.isParticipantModerator('')).toBe(false);
+    features.userGrants.u1 = { moderator: true };
+    expect(features.isParticipantModerator('u1')).toBe(true);
+
+    conference.addUser('u2');
+    conference.users.u2.properties = { role: 'moderator' };
+    expect(features.isParticipantModerator('u2')).toBe(true);
+
+    conference.addUser('u3');
+    expect(features.isParticipantModerator('u3')).toBe(false);
+    conference.users.u3.email = 'Mod@Example.com';
+    features.moderatorEmails = ['', 'mod@example.com'];
+    expect(features.isParticipantModerator('u3')).toBe(true);
+    conference.users.u3.email = 'guest@example.com';
+    expect(features.isParticipantModerator('u3')).toBe(false);
+
+    // setMediaLock and local lock getters
+    features.setMediaLock('', { mic: true });
+    expect(features.mediaLocks).toEqual({});
+
+    local.setMyID('guest-1');
+    features.setHost('host-1');
+    expect(features.isLocalMicLocked).toBe(false);
+    expect(features.isLocalCameraLocked).toBe(false);
+
+    features.setMediaLock('guest-1', { mic: true });
+    expect(features.isLocalMicLocked).toBe(true);
+    expect(features.isLocalCameraLocked).toBe(false);
+
+    features.setMediaLock('guest-1', { camera: true });
+    expect(features.isLocalMicLocked).toBe(true);
+    expect(features.isLocalCameraLocked).toBe(true);
+
+    // Hosts and moderators are never locally locked
+    features.isVerifiedModerator = true;
+    expect(features.isLocalMicLocked).toBe(false);
+    expect(features.isLocalCameraLocked).toBe(false);
+    features.isVerifiedModerator = false;
+
+    features.setMediaLock('guest-1', { mic: false });
+    expect(features.mediaLocks['guest-1']).toEqual({ mic: false, camera: true });
+    features.setMediaLock('guest-1', { camera: false });
+    expect(features.mediaLocks['guest-1']).toBeUndefined();
+
+    // Chunked room background assembly
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'ignored' });
+    expect(features.gridBackgroundUrl).toBe('');
+
+    features.applyRoomBackgroundCommand({ action: 'begin', total: 2 });
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'data:image/' });
+    expect(features.gridBackgroundUrl).toBe('');
+    // Out-of-range index hits missing-part fallback when length reaches total
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 5, data: 'extra' });
+    expect(features.gridBackgroundUrl).toBe('data:image/');
+
+    features.applyRoomBackgroundCommand({ action: 'begin', total: 2 });
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 0, data: 'data:image/png;' });
+    features.applyRoomBackgroundCommand({ action: 'chunk', index: 1, data: 'base64,abc' });
+    expect(features.gridBackgroundUrl).toBe('data:image/png;base64,abc');
+
+    // isParticipantHost checks hostId, properties.role === 'host', and hostEmail
+    expect(features.isParticipantHost('')).toBe(false);
+    features.setHost('host-jid');
+    expect(features.isParticipantHost('host-jid')).toBe(true);
+
+    conference.addUser('eventyay-host');
+    conference.users['eventyay-host'].properties = { role: 'host' };
+    expect(features.isParticipantHost('eventyay-host')).toBe(true);
+
+    conference.addUser('email-host');
+    expect(features.isParticipantHost('email-host')).toBe(false);
+    conference.users['email-host'].email = 'Owner@Example.com';
+    features.hostEmail = 'owner@example.com';
+    expect(features.isParticipantHost('email-host')).toBe(true);
+    conference.users['email-host'].email = 'other@example.com';
+    expect(features.isParticipantHost('email-host')).toBe(false);
+    expect(features.isParticipantHost('missing-user')).toBe(false);
+  });
+
+  it('opens moderator people panes and admits invited attendee emails locally and remotely', async () => {
+    const { useAuthStore } = await import('@/stores/authStore');
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const auth = useAuthStore();
+
+    // Non-host / non-moderator cannot open moderator people pane
+    local.setMyID('guest-1');
+    features.setHost('host-1');
+    features.openModeratorPeoplePane('add');
+    expect(features.panel).toBe('');
+
+    // Moderator opens Add and Share panes
+    features.isVerifiedModerator = true;
+    features.openModeratorPeoplePane('add');
+    expect(features.panel).toBe('moderator');
+    expect(features.moderatorTab).toBe('people');
+    expect(features.peopleActionPane).toBe('add');
+
+    features.openModeratorPeoplePane('share');
+    expect(features.peopleActionPane).toBe('share');
+
+    // addInvitedEmails deduplicates against hostEmail/moderatorEmails/guestEmails and approves matching users
+    features.hostEmail = 'host@example.com';
+    features.moderatorEmails = ['mod@example.com'];
+    conference.addUser('remote-invited');
+    conference.users['remote-invited'].email = 'guest@example.com';
+    conference.addUser('remote-no-email');
+
+    auth.user = { id: 'u1', email: 'guest@example.com', name: 'Guest' } as never;
+    features.localLobbyPending = true;
+
+    const added = features.addInvitedEmails([
+      '  ',
+      'HOST@example.com',
+      'Guest@Example.com',
+      'guest@example.com',
+    ]);
+    expect(added).toEqual(['guest@example.com']);
+    expect(features.guestEmails).toEqual(['guest@example.com']);
+    expect(features.lobbyApproved['remote-invited']).toBe(true);
+    expect(features.isInvited).toBe(true);
+    expect(features.localLobbyPending).toBe(false);
+    expect(features.lobbyApproved['guest-1']).toBe(true);
+
+    // Local authenticated user without local.id still marks isInvited without throwing
+    local.setMyID('');
+    auth.user = { id: 'u2', email: 'second@example.com', name: 'Second' } as never;
+    expect(features.addInvitedEmails(['second@example.com'])).toEqual(['second@example.com']);
+
+    features.resetForLeave();
+    expect(features.moderatorTab).toBe('room');
+    expect(features.peopleActionPane).toBe('');
+    expect(features.guestEmails).toEqual([]);
   });
 });

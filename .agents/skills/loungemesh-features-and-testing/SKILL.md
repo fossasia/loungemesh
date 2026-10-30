@@ -31,18 +31,20 @@ When developing or modifying features, verify that the following user flows func
    - Off-thread distance calculation (`proximityAudio.worker.ts`).
    - Exponential volume attenuation via Web Audio `GainNode`s.
 4. **Stage Presentation & Screensharing**:
-   - Stage promotion & demotion by host.
+   - Stage promotion, invitation, & demotion by host or moderator (`canPromoteToStage`). Invited presenters can also publish `promote` when going live from preview.
    - Stage occupants spotlighted with 720p receiver video constraint (`STAGE_MAX_HEIGHT = 720`).
-   - Screensharing with system audio captured at 720p @ 15–30 fps.
+   - Screensharing with system audio captured at 720p @ 15–30 fps via headless multi-stream flags (`sourceNameSignaling`, `sendMultipleVideoStreams`, `receiveMultipleVideoStreams`) so toggling camera never tears down an active screenshare.
 5. **In-Room Collaborative Tools**:
    - Collaborative Whiteboard: Freehand pen, lines, rectangles, circles, eraser, palette, stroke sync, clear/reset.
    - Shared Notes: Real-time debounced markdown editing. A host template is written into the Y.Doc and broadcast immediately. Attendees publish notes without a moderation queue. Markdown export.
    - Live Polling: Create poll, anonymous voting, real-time vote tally, reveal/close.
 6. **Moderation & Room Administration**:
-   - Host room settings modal: Feature toggles (chat, notes, whiteboard, poll, stage).
-   - Moderator assistance: Poll management, stage promotion.
-   - Mute attendee & kick attendee (redirected to `/kicked`).
-   - Custom floorplan wallpaper update via URL or upload.
+   - Top-left header pill (`AppHeader.vue`): Shows `Connecting…` / `In lobby` while joining, and badges only `Host` / `Moderator` once in the room (never `Attendee`).
+   - Host room settings modal: Left-aligned grouped cards with accessible switches for feature toggles (chat, notes, whiteboard, poll, stage), lobby policy, and default feature chips.
+   - Moderator resolution & assistance: Email-invited (`moderatorEmails`), bridge-property (`role: 'moderator'`), and runtime-granted (`userGrants[id].moderator`) moderators are consistently badged as `Moderator` and can manage polls, promote presenters to stage, and moderate attendees.
+   - Live attendee invitation (`Add`) & meeting link sharing (`Share`): Hosts and moderators (never regular attendees) can invite attendee emails in-call (`POST /api/meetings/state/:roomName/invite` + XMPP `lobby` `action: 'invite'` + automatic lobby admission for matching emails) and copy/share `/session/:roomName` from the top-right quick bar or the `People` tab.
+   - Soft mute (`mute`), soft disable camera (`camera_off`), per-attendee force-lock mic & camera (`lock_media` / `mediaLocks`), & kick attendee (`kick`, redirected to `/kicked`).
+   - Custom floorplan wallpaper update via upload (persisted via 2 MB Express JSON limit + `cache: 'no-store'` reload, with automatic chunked XMPP fallback when unpersisted).
 7. **Scheduling & Calendar Sync**:
    - Meeting schedule modal with recurrence rules and email invites.
    - Google Calendar two-way synchronization via AES-256 encrypted OAuth.
