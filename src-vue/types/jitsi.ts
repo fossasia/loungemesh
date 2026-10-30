@@ -10,6 +10,9 @@ export interface JitsiTrack {
   mute(): Promise<void>;
   unmute(): Promise<void>;
   videoType?: 'camera' | 'desktop';
+  getVideoType?(): string;
+  getSourceName?(): string;
+  dispose?(): void;
   attach(element: HTMLElement): void;
   detach(element: HTMLElement): void;
   id: string;

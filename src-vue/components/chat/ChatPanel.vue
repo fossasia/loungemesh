@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -33,6 +33,7 @@ import {
   setChatNotificationSoundEnabled,
 } from '@/utils/chatNotificationSound';
 import { playUiSound } from '@/utils/uiSounds';
+import { bindKeyboardInset } from '@/utils/chatKeyboardInset';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
@@ -53,6 +54,7 @@ const editDraft = ref('');
 const historyOpen = ref<Record<string, boolean>>({});
 const chatSoundOn = ref(isChatNotificationSoundEnabled());
 const emojiPickerOpen = ref(false);
+onUnmounted(bindKeyboardInset(document.documentElement));
 
 const localUserId = computed(() => local.id || engine.getLocalUserId() || '');
 
@@ -426,8 +428,20 @@ defineExpose({ open, deleteMessage });
     left: 8px !important;
     right: 8px !important;
     width: auto !important;
-    bottom: 112px !important;
-    height: min(70dvh, calc(100dvh - 140px)) !important;
+    top: auto !important;
+    bottom: calc(112px + var(--lm-keyboard-inset, 0px) + env(safe-area-inset-bottom, 0px)) !important;
+    height: min(62dvh, calc(100dvh - 180px)) !important;
+    max-height: calc(100dvh - 180px) !important;
+    display: flex !important;
+    flex-direction: column;
+  }
+  .messages {
+    flex: 1 1 auto;
+  }
+  .input {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-bg-card);
   }
 }
 .messages {

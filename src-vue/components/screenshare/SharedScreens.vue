@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import ScreenshareVideo from './ScreenshareVideo.vue';
 import ExpandedScreenshare from './ExpandedScreenshare.vue';
 import AppIcon from '../ui/AppIcon.vue';
 
-import { getVectorDistance } from '@/utils/vector';
 import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
-import { shouldShowRemoteShare } from '@/utils/screenshareCapture';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 const conference = useConferenceStore();
@@ -16,16 +14,7 @@ const local = useLocalStore();
 const features = useSessionFeaturesStore();
 
 const isCollapsed = ref(false);
-const viewportWidth = ref(window.innerWidth);
-
-function syncViewport() {
-  viewportWidth.value = window.innerWidth;
-}
-
-onMounted(() => window.addEventListener('resize', syncViewport));
-onUnmounted(() => window.removeEventListener('resize', syncViewport));
 const poppedOutIds = ref<string[]>([]);
-const showLocalPreview = ref(false);
 
 const screenshares = computed(() => {
   // Access usersEpoch to reactivity trigger on remote user updates
@@ -45,11 +34,6 @@ const screenshares = computed(() => {
 
   for (const [id, user] of Object.entries(conference.users)) {
     if (user.screenshare && isAdmittedParticipant(features, id)) {
-      const dist = getVectorDistance(local.pos, user.pos);
-      const isPresenter = features.stageOccupantId === id;
-      if (!shouldShowRemoteShare(dist, isPresenter, viewportWidth.value)) {
-        continue;
-      }
       list.push({
         id,
         name: user.user?._displayName || 'Friendly Sphere',
@@ -166,17 +150,7 @@ function toggleScreenshareAudio(item: any) {
                 >
                   <AppIcon :name="item.isAudioMuted ? 'volume-x' : 'volume-2'" :size="14" />
                 </button>
-                <template v-if="item.id === 'local' || item.id === local.id || item.name === 'You'">
-                  <button
-                    class="previewToggleButton"
-                    type="button"
-                    @click.stop="showLocalPreview = !showLocalPreview"
-                    :title="showLocalPreview ? 'Hide preview' : 'Show preview'"
-                  >
-                    <AppIcon :name="showLocalPreview ? 'eye-off' : 'eye'" :size="14" />
-                  </button>
-                </template>
-                <template v-else>
+                <template v-if="item.id !== 'local' && item.id !== local.id && item.name !== 'You'">
                   <button
                     class="expandButton"
                     type="button"
@@ -187,7 +161,7 @@ function toggleScreenshareAudio(item: any) {
                   </button>
                 </template>
               </div>
-              <div class="videoContainer" v-if="item.id !== 'local' && item.id !== local.id && item.name !== 'You' || showLocalPreview">
+              <div class="videoContainer">
                 <ScreenshareVideo :track="item.track" />
               </div>
             </div>
@@ -281,7 +255,7 @@ function toggleScreenshareAudio(item: any) {
   top: 104px;
   width: 300px;
   max-height: calc(100vh - 200px);
-  z-index: 4000; /* below footer, above room items */
+  z-index: 5600;
   background: rgba(245, 247, 255, 0.85);
   backdrop-filter: blur(12px);
   border: 1px solid var(--line-light);

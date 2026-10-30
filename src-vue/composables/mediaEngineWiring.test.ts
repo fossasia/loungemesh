@@ -705,6 +705,7 @@ describe('wireStoreSync', () => {
     const features = useSessionFeaturesStore();
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     features.isInvited = true;
     features.setHost('room-host');

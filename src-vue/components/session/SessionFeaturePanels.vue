@@ -31,10 +31,14 @@ const panelBottom = sessionPanelLayout.bottom;
 const panelRight = sessionPanelLayout.right;
 const notesWidth = notesPanelWidth;
 
+const settingsView = ref<'room' | 'people'>('room');
+
 const grantKeys = computed(() => {
   const keys = Object.keys(featureLabels) as FeatureKey[];
-  if (features.isHost) return keys;
-  return keys.filter((key) => key !== 'moderator');
+  return keys.filter((key) => {
+    if (key === 'moderator') return features.isHost;
+    return features.enabledFeatures[key] !== false;
+  });
 });
 
 const featureLabels: Record<FeatureKey, string> = {
@@ -349,6 +353,11 @@ const featureCardStyle = computed(() => {
       </button>
     </template>
     <div v-if="features.panel === 'moderator'" class="body modBody">
+      <div class="settingsTabs" role="tablist">
+        <button type="button" class="settingsTab" :class="{ active: settingsView === 'room' }" @click="settingsView = 'room'">Room</button>
+        <button type="button" class="settingsTab" :class="{ active: settingsView === 'people' }" @click="settingsView = 'people'">People</button>
+      </div>
+      <div v-show="settingsView === 'room'">
       <HostRoomSettingsSection v-if="features.isHost" />
       <HostRoomSettingsSection v-else-if="features.isModerator" appearance-only />
 
@@ -447,8 +456,9 @@ const featureCardStyle = computed(() => {
           </label>
         </div>
       </section>
+      </div>
 
-      <section class="section">
+      <section v-show="settingsView === 'people'" class="section">
         <h3 class="sectionTitle">Participants</h3>
         <div
           v-for="uid in participantIds"
@@ -737,6 +747,24 @@ const featureCardStyle = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.settingsTabs {
+  display: flex;
+  gap: 8px;
+}
+.settingsTab {
+  flex: 1;
+  border: 1px solid var(--line-light);
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.settingsTab.active {
+  background: var(--color-blue100);
+  color: #fff;
+  border-color: var(--color-blue100);
 }
 .section {
   border: 1px solid var(--line-light);

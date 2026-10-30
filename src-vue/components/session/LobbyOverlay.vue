@@ -93,7 +93,7 @@ async function exitLobby() {
 </script>
 
 <template>
-  <div v-if="features.isLobbyBlocked" class="lobby">
+  <div v-if="features.configLoaded && features.isLobbyBlocked" class="lobby">
     <div class="card">
       <!-- Rejection View -->
       <template v-if="features.lobbyRejected">
@@ -160,30 +160,17 @@ async function exitLobby() {
       <!-- Form View -->
       <template v-else>
         <!-- Card Tabs -->
-        <div class="tabs">
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: activeTab === 'guest' }"
-            @click="activeTab = 'guest'"
-          >
-            Guest Join
+        <div class="authLinks">
+          <button type="button" class="authSwitch" @click="activeTab = activeTab === 'guest' ? 'login' : 'guest'">
+            {{ activeTab === 'guest' ? 'Have an invited email? Sign in' : 'Ask to join instead' }}
           </button>
           <button
+            v-if="activeTab !== 'guest'"
             type="button"
-            class="tab"
-            :class="{ active: activeTab === 'login' }"
-            @click="activeTab = 'login'"
+            class="authSwitch"
+            @click="activeTab = activeTab === 'login' ? 'signup' : 'login'"
           >
-            Sign In
-          </button>
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: activeTab === 'signup' }"
-            @click="activeTab = 'signup'"
-          >
-            Register
+            {{ activeTab === 'login' ? 'Create an account' : 'Sign in instead' }}
           </button>
         </div>
 
@@ -296,11 +283,11 @@ async function exitLobby() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 50%, rgba(240, 244, 255, 0.95) 0%, rgba(228, 234, 255, 0.98) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--color-bg-page);
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
   pointer-events: auto;
-  animation: overlayFadeIn 0.3s ease-out;
 }
 
 @keyframes overlayFadeIn {
@@ -311,16 +298,52 @@ async function exitLobby() {
 .card {
   width: 100%;
   max-width: 440px;
-  padding: 32px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(79, 110, 247, 0.15);
-  border-radius: 24px;
-  box-shadow: 0 30px 60px -15px rgba(30, 34, 64, 0.15), 0 10px 20px -5px rgba(30, 34, 64, 0.05);
+  padding: 40px 32px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
+  color: var(--color-mono10);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  text-align: center;
   box-sizing: border-box;
-  animation: cardEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.authLinks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.authSwitch {
+  border: none;
+  background: transparent;
+  color: var(--color-blue100);
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  cursor: pointer;
+  padding: 4px;
+}
+
+@media (max-width: 640px) {
+  .lobby {
+    padding: 16px;
+    align-items: flex-start;
+  }
+  .card {
+    padding: 28px 18px;
+  }
+  .buttonRow {
+    flex-direction: column;
+  }
+  .buttonRow button {
+    width: 100%;
+  }
+  .inputGroup input {
+    font-size: 16px;
+  }
 }
 
 @keyframes cardEnter {

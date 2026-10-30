@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -163,13 +164,13 @@ export const useConferenceStore = defineStore('conference', {
       } else if (kind === 'screenshareAudio') {
         this.patchUser(id, { screenshareAudio: markRaw(track) });
       } else if (track.isMuted?.()) {
-        if (track.videoType === 'desktop') {
+        if (isDesktopShareTrack(track)) {
           this.clearUserTrack(id, 'screenshare');
         } else {
           this.clearUserTrack(id, 'video');
         }
       } else {
-        if (track.videoType === 'desktop') {
+        if (isDesktopShareTrack(track)) {
           this.patchUser(id, {
             screenshare: markRaw(track),
           });
@@ -182,7 +183,7 @@ export const useConferenceStore = defineStore('conference', {
         mediaDebug('conferenceStore', 'setUserTrack:video', {
           id,
           muted: track.isMuted?.(),
-          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
+          videoType: isDesktopShareTrack(track) ? 'desktop' : 'camera',
           usersEpoch: this.usersEpoch,
         });
       }

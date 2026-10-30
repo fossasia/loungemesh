@@ -196,69 +196,35 @@ describe('SharedScreens', () => {
     wrapper.unmount();
   });
 
-  it('toggles local preview visibility and collapses card', async () => {
+  it('shows the local screenshare video immediately', async () => {
     const local = useLocalStore();
     local.id = 'me';
     local.screenshare = makeTrack('desktop');
 
     const { wrapper } = await mountWithApp(SharedScreens);
 
-    // Initially preview is collapsed (.videoContainer does not exist, eye icon in button)
-    expect(wrapper.find('.videoContainer').exists()).toBe(false);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
+    expect(wrapper.find('.videoContainer').exists()).toBe(true);
+    expect(wrapper.find('.previewToggleButton').exists()).toBe(false);
     expect(wrapper.find('.sharingBadge').exists()).toBe(true);
     expect(wrapper.find('.sharingBadge').text()).toBe('Sharing');
 
-    // Click toggle to show preview
-    await wrapper.find('.previewToggleButton').trigger('click');
+    wrapper.unmount();
+  });
+
+  it('shows a distant screenshare', async () => {
+    const local = useLocalStore();
+    local.pos = { x: 0, y: 0 };
+
+    const conference = useConferenceStore();
+    conference.addUser('far-user', { _displayName: 'Far User' });
+    const user = conference.users['far-user'];
+    user.screenshare = makeTrack('desktop');
+    user.pos = { x: 1000, y: 1000 };
+
+    const { wrapper } = await mountWithApp(SharedScreens);
+    expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
     expect(wrapper.find('.videoContainer').exists()).toBe(true);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Hide preview');
 
-    // Click toggle to hide preview again
-    await wrapper.find('.previewToggleButton').trigger('click');
-    expect(wrapper.find('.videoContainer').exists()).toBe(false);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
-
-    wrapper.unmount();
-  });
-
-  it('filters remote screenshares based on distance unless they are presenting', async () => {
-    const features = useSessionFeaturesStore();
-    const local = useLocalStore();
-    local.pos = { x: 0, y: 0 };
-
-    const conference = useConferenceStore();
-    conference.addUser('far-user', { _displayName: 'Far User' });
-    const user = conference.users['far-user'];
-    user.screenshare = makeTrack('desktop');
-    user.pos = { x: 1000, y: 1000 };
-
-    const { wrapper } = await mountWithApp(SharedScreens);
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
-
-    // Make presenter
-    features.stageOccupantId = 'far-user';
-    await nextTick();
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
-
-    wrapper.unmount();
-  });
-
-  it('shows a distant screenshare on a phone', async () => {
-    const local = useLocalStore();
-    local.pos = { x: 0, y: 0 };
-    const conference = useConferenceStore();
-    conference.addUser('far-user', { _displayName: 'Far User' });
-    const user = conference.users['far-user'];
-    user.screenshare = makeTrack('desktop');
-    user.pos = { x: 1000, y: 1000 };
-    const { wrapper } = await mountWithApp(SharedScreens);
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
-    window.innerWidth = 390;
-    window.dispatchEvent(new Event('resize'));
-    await nextTick();
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
-    window.innerWidth = 1024;
     wrapper.unmount();
   });
 

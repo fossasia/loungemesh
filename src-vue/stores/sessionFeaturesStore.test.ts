@@ -15,6 +15,7 @@ describe('sessionFeaturesStore', () => {
   it('tracks host and lobby state', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
+    features.configLoaded = true;
     local.setMyID('host');
     features.setHost('host');
     features.approveLobby('host');
@@ -34,6 +35,7 @@ describe('sessionFeaturesStore', () => {
   it('checks isLobbyBlocked when local.id is empty', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     features.setHost('some-host');
     local.setMyID('');
@@ -42,12 +44,16 @@ describe('sessionFeaturesStore', () => {
     expect(features.isLobbyBlocked).toBe(true);
 
     features.localLobbyPending = false;
-    expect(features.isLobbyBlocked).toBe(false);
+    expect(features.isLobbyBlocked).toBe(true);
+
+    features.configLoaded = false;
+    expect(features.isLobbyBlocked).toBe(true);
   });
 
   it('allows invited or host/moderator users to bypass the lobby, but blocks uninvited users', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     features.setHost('real-host');
     local.setMyID('guest');
@@ -124,6 +130,7 @@ describe('sessionFeaturesStore', () => {
     const local = useLocalStore();
     local.setMyID('host');
     features.setHost('host');
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     expect(features.isLobbyBlocked).toBe(false);
   });
@@ -168,6 +175,7 @@ describe('sessionFeaturesStore', () => {
     const local = useLocalStore();
     const engine = { sendCommand: vi.fn() };
     local.setMyID('guest');
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     features.isInvited = true;
     features.resendSessionIdentity(engine);

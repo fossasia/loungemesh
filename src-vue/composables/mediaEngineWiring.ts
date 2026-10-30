@@ -21,6 +21,7 @@ import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHand
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
 import { broadcastYjsState, notesDocumentHasContent } from '@/utils/notesYjsSync';
 import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import { isOnStage } from '@/components/stage/isOnStage';
 import { defaultStageLayout } from '@/stores/sessionFeaturesStore';
@@ -55,7 +56,7 @@ export function wireStoreSync(engine: MediaService): void {
       track.getType() === 'audio' ? remoteAudioSlot(track) : 'video';
 
     if (kind === 'video' && track.isMuted()) {
-      if (track.videoType === 'desktop') {
+      if (isDesktopShareTrack(track)) {
         conferenceStore.clearUserTrack(id, 'screenshare');
       } else {
         conferenceStore.clearUserTrack(id, 'video');
@@ -236,7 +237,7 @@ export function wireStoreSync(engine: MediaService): void {
     const isAudio = track.getType() === 'audio';
     if (!isAudio) {
       if (track.isMuted()) {
-        if (track.videoType === 'desktop') {
+        if (isDesktopShareTrack(track)) {
           conferenceStore.clearUserTrack(id, 'screenshare');
         } else {
           conferenceStore.clearUserTrack(id, 'video');
@@ -293,7 +294,7 @@ export function wireStoreSync(engine: MediaService): void {
         conferenceStore.clearUserTrack(id, 'audio');
       }
     } else {
-      if (track.videoType === 'desktop') {
+      if (isDesktopShareTrack(track)) {
         conferenceStore.clearUserTrack(id, 'screenshare');
       } else {
         conferenceStore.clearUserTrack(id, 'video');

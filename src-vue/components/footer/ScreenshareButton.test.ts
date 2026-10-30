@@ -48,7 +48,7 @@ describe('ScreenshareButton', () => {
     wrapper.unmount();
   });
 
-  it('no-ops when desktop track creation returns a non-desktop video', async () => {
+  it('publishes a captured video even when it arrives unmarked as desktop', async () => {
     await connectAndJoinTestConference();
     const camera = makeTrack('video');
     vi.spyOn(getMediaEngineInstance(), 'createLocalTracks').mockResolvedValueOnce([camera]);
@@ -56,7 +56,8 @@ describe('ScreenshareButton', () => {
     const { wrapper } = await mountWithApp(ScreenshareButton);
     await wrapper.find('button.ibtn').trigger('click');
     await flushPromises();
-    expect(addSpy).not.toHaveBeenCalled();
+    expect(addSpy).toHaveBeenCalled();
+    expect(camera.videoType).toBe('desktop');
     wrapper.unmount();
   });
 

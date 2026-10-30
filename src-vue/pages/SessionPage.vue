@@ -38,6 +38,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import AppIcon from '@/components/ui/AppIcon.vue';
+import StatusScreen from '@/components/common/StatusScreen.vue';
 import { sessionIdentifier } from '@/utils/sessionIdentifier';
 import LeaveDialog from '@/components/session/LeaveDialog.vue';
 import SessionRecordButton from '@/components/session/SessionRecordButton.vue';
@@ -87,6 +88,7 @@ watch(
 );
 
 const sessionId = computed(() => String(route.params.id ?? props.id ?? ''));
+const roomOpen = computed(() => features.configLoaded && !features.isLobbyBlocked);
 const { exportNotes, exportNotesRtf, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
 
 const recorder = useSessionRecorder(makeRecorderSources(local, conf));
@@ -206,17 +208,23 @@ onBeforeUnmount(() => {
   <AppHeader />
   <JitsiConnection />
   <LocalStoreLogic />
+  <StatusScreen
+    v-if="!features.configLoaded"
+    title="Joining…"
+    message="Checking who can enter this meeting."
+    icon="user"
+  />
   <LobbyOverlay />
-  <PanWrapper :event-identifier="identifier">
+  <PanWrapper v-if="roomOpen" :event-identifier="identifier">
     <Room :identifier="identifier">
       <RemoteUsers />
       <LocalUser />
     </Room>
   </PanWrapper>
-  <SharedScreens v-if="!features.isStageModeActive" />
-  <SessionFeaturePanels />
+  <SharedScreens v-if="roomOpen && !features.isStageModeActive" />
+  <SessionFeaturePanels v-if="roomOpen" />
   <WhiteboardOverlay
-    v-if="features.panel === 'whiteboard'"
+    v-if="roomOpen && features.panel === 'whiteboard'"
     :on-close="() => (features.panel = '')"
   />
   <StagePreviewDialog
@@ -232,7 +240,7 @@ onBeforeUnmount(() => {
   <!-- Google Meet-Style Floating Admission Banner for Host & Moderator -->
   <Transition name="slide-down">
     <div
-      v-if="(features.isHost || features.isModerator) && latestLobbyWaiter"
+      v-if="roomOpen && (features.isHost || features.isModerator) && latestLobbyWaiter"
       class="gmeetLobbyBanner"
       role="alert"
     >
@@ -392,7 +400,7 @@ onBeforeUnmount(() => {
       @click="features.panel = ''"
     />
   </Transition>
-  <FooterBar>
+  <FooterBar v-if="roomOpen">
     <SessionTools />
     <IconButton
       :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"

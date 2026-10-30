@@ -68,9 +68,20 @@ describe('localScreenshare', () => {
     await startLocalScreenshare(engine);
     expect(local.screenshare).toBeUndefined();
 
-    // Non-desktop track
-    const cameraTrack = { getType: () => 'video', videoType: 'camera' } as any;
-    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([cameraTrack]);
+    const stop = vi.fn();
+    const audioOnly = { getType: () => 'audio', getTrack: () => ({ stop }), dispose: vi.fn() } as any;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([audioOnly]);
+    await startLocalScreenshare(engine);
+    expect(local.screenshare).toBeUndefined();
+    expect(stop).toHaveBeenCalled();
+
+    const broken = {
+      getType: () => 'audio',
+      dispose: () => {
+        throw new Error('dispose failed');
+      },
+    } as any;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([broken]);
     await startLocalScreenshare(engine);
     expect(local.screenshare).toBeUndefined();
   });

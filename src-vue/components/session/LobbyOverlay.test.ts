@@ -34,6 +34,7 @@ describe('LobbyOverlay', () => {
     local.setMyID('local-id');
     const features = useSessionFeaturesStore();
     features.setHost('some-other-host-id');
+    features.configLoaded = true;
   });
 
   it('hides when not blocked', async () => {
@@ -84,22 +85,19 @@ describe('LobbyOverlay', () => {
     const { wrapper } = await mountWithApp(LobbyOverlay);
 
     // Tab buttons
-    const tabs = wrapper.findAll('.tab');
-    expect(tabs.length).toBe(3);
-
-    // Default guest join active
+    expect(wrapper.findAll('.authSwitch')).toHaveLength(1);
     expect(wrapper.find('form').text()).toContain('Request Entry');
 
-    // Click Sign In
-    await tabs[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
     expect(wrapper.find('form').text()).toContain('Sign In to Account');
 
-    // Click Register
-    await tabs[2].trigger('click');
+    await wrapper.findAll('.authSwitch')[1].trigger('click');
     expect(wrapper.find('form').text()).toContain('Create an Account');
 
-    // Click Guest Join
-    await tabs[0].trigger('click');
+    await wrapper.findAll('.authSwitch')[1].trigger('click');
+    expect(wrapper.find('form').text()).toContain('Sign In to Account');
+
+    await wrapper.findAll('.authSwitch')[0].trigger('click');
     expect(wrapper.find('form').text()).toContain('Request Entry');
 
     wrapper.unmount();
@@ -198,7 +196,7 @@ describe('LobbyOverlay', () => {
     const { wrapper } = await mountWithApp(LobbyOverlay);
 
     // Switch to Sign In tab
-    await wrapper.findAll('.tab')[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
 
     // Submit empty fields
     await wrapper.find('form').trigger('submit');
@@ -219,7 +217,7 @@ describe('LobbyOverlay', () => {
     loginMock.mockRejectedValueOnce(new Error('Invalid credentials'));
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
-    await wrapper.findAll('.tab')[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
 
     await wrapper.find('#lobbyAuthEmail').setValue('user@example.com');
     await wrapper.find('#lobbyAuthPassword').setValue('password123');
@@ -249,7 +247,7 @@ describe('LobbyOverlay', () => {
     loginMock.mockRejectedValueOnce({});
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
-    await wrapper.findAll('.tab')[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
 
     await wrapper.find('#lobbyAuthEmail').setValue('user@example.com');
     await wrapper.find('#lobbyAuthPassword').setValue('password123');
@@ -272,7 +270,8 @@ describe('LobbyOverlay', () => {
     signupMock.mockRejectedValueOnce(new Error('Email already in use'));
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
-    await wrapper.findAll('.tab')[2].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
+    await wrapper.findAll('.authSwitch')[1].trigger('click');
 
     await wrapper.find('#lobbyAuthName').setValue('New User');
     await wrapper.find('#lobbyAuthEmail').setValue('new@example.com');
