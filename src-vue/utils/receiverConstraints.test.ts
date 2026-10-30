@@ -32,8 +32,9 @@ describe('buildReceiverConstraints', () => {
       visibleUserIds: ['a'],
       stageIds: ['b'],
     });
-    expect(constraints?.selectedSources).toEqual(['a-v0', 'b-v0']);
+    expect(constraints?.selectedSources).toEqual(['a-v0', 'a-v1', 'b-v0', 'b-v1']);
     expect(constraints?.constraints['c-v0']).toBeUndefined();
+    expect(constraints?.constraints['c-v1']).toBeUndefined();
     expect(constraints?.constraints['d-v0']).toBeUndefined();
   });
 
@@ -44,8 +45,8 @@ describe('buildReceiverConstraints', () => {
       visibleUserIds: ['a'],
       stageIds: ['b'],
     });
-    expect(constraints?.selectedSources).toEqual(expect.arrayContaining(['a-v0', 'b-v0']));
-    expect(constraints?.onStageSources).toEqual(['b-v0']);
+    expect(constraints?.selectedSources).toEqual(expect.arrayContaining(['a-v0', 'a-v1', 'b-v0', 'b-v1']));
+    expect(constraints?.onStageSources).toEqual(['b-v0', 'b-v1']);
   });
 
   it('requests every selected source in the per-source constraints map', () => {
@@ -58,7 +59,9 @@ describe('buildReceiverConstraints', () => {
     // Empty per-source constraints leave modern JVB forwarding nothing, so every
     // selected source must appear, with on-stage requested at a higher resolution.
     expect(constraints?.constraints['a-v0']).toEqual({ maxHeight: 360 });
+    expect(constraints?.constraints['a-v1']).toEqual({ maxHeight: 720 });
     expect(constraints?.constraints['b-v0']).toEqual({ maxHeight: 720 });
+    expect(constraints?.constraints['b-v1']).toEqual({ maxHeight: 720 });
   });
 
   it('sets lastN to zero when no remotes are on screen or stage', () => {
@@ -86,7 +89,7 @@ describe('buildReceiverConstraints', () => {
         visibleUserIds: ids,
         stageIds: [],
       });
-      expect(constraints?.lastN).toBe(20);
+      expect(constraints?.lastN).toBe(40);
     });
   });
 });

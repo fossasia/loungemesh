@@ -10,6 +10,7 @@ const features = useSessionFeaturesStore();
 
 const users = computed(() => {
   conference.usersEpoch;
+  if (features.isLobbyBlocked) return [];
   const list = buildRemoteUserList(conference.users);
   if (!features.lobbyEnabled) return list;
   return list.filter((u) => features.lobbyApproved[u.id] || u.id === features.hostId);

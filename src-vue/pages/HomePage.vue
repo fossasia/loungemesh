@@ -30,7 +30,7 @@ const instantGuestEmails = ref('');
 const instantModEmails = ref('');
 
 const meetingDefaults = ref({
-  lobbyEnabled: false,
+  lobbyEnabled: true,
   stagePromotionEnabled: true,
   allowParticipantRecording: false,
   roomDefaults: {
@@ -77,7 +77,7 @@ onMounted(() => {
     try {
       const parsed = JSON.parse(saved);
       meetingDefaults.value = {
-        lobbyEnabled: parsed.lobbyEnabled ?? false,
+        lobbyEnabled: parsed.lobbyEnabled ?? true,
         stagePromotionEnabled: parsed.stagePromotionEnabled ?? true,
         allowParticipantRecording: parsed.allowParticipantRecording ?? false,
         roomDefaults: {

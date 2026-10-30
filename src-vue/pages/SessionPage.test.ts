@@ -256,11 +256,13 @@ describe('SessionPage', () => {
   });
 
   it('shows mic state and leaves session', async () => {
-    await connectAndJoinTestConference();
     const local = useLocalStore();
+    const features = useSessionFeaturesStore();
     local.setMyID('host');
     local.mute = false;
     local.onStage = true;
+    features.isVerifiedHost = true;
+    features.setHost('host');
 
     const { wrapper, router } = await mountWithApp(SessionPage, {
       route: '/session/loungemesh',
@@ -277,12 +279,12 @@ describe('SessionPage', () => {
       },
     });
     await flushPromises();
+    expect(features.isHost).toBe(true);
     expect(wrapper.findAllComponents(AppIcon).length).toBeGreaterThan(0);
 
     const push = vi.spyOn(router, 'push');
     const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
     await wrapper.find('[aria-label="Mute"]').trigger('click');
-    // Host leave opens the export dialog; confirm via its Leave button.
     await wrapper.find('.btn-leave-call').trigger('click');
     await flushPromises();
     await wrapper.find('.leaveCard .btn.leave').trigger('click');

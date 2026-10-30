@@ -236,7 +236,7 @@ export async function createMeeting(req: Request, res: Response) {
         hostId,
         configs: {
           create: {
-            lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : false,
+            lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : true,
             stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : true,
             allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : false,
             roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : undefined,
@@ -408,7 +408,7 @@ export async function updateMeeting(req: Request, res: Response) {
               roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : undefined,
             },
             create: {
-              lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : false,
+              lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : true,
               stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : true,
               allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : false,
               roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : JSON.stringify({ notes: false, whiteboard: false, poll: false, moderator: false }),
@@ -540,27 +540,39 @@ export async function cancelMeeting(req: Request, res: Response) {
 
 // ── Meeting Configurations & Roles (Cashed via Redis) ───────────────────────
 
-// Helper to determine role of a user in a meeting
+function sameEmail(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function emailInList(list: string[] | null | undefined, email?: string | null): boolean {
+  if (!email || !list?.length) return false;
+  const needle = email.trim().toLowerCase();
+  return list.some((item) => item.trim().toLowerCase() === needle);
+}
+
+// Helper to determine role of a user in a meeting from the host account and email lists.
 async function getMeetingRoleForUser(roomName: string, userId?: string): Promise<LoungeMeshRole> {
   if (!userId) return 'attendee';
   try {
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
-      include: { configs: true },
+      include: { configs: true, host: { select: { email: true } } },
     });
     if (!meeting) return 'attendee';
-    if (meeting.hostId === userId) return 'host';
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user?.email) return 'attendee';
+    if (sameEmail(user.email, meeting.host?.email) || meeting.hostId === userId) return 'host';
     if (meeting.configs?.userGrants) {
       const grants = JSON.parse(meeting.configs.userGrants);
       if (grants[userId]?.moderator) {
         return 'moderator';
       }
     }
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    if (user && meeting.moderatorEmails.includes(user.email)) {
+    if (emailInList(meeting.moderatorEmails, user.email)) {
       return 'moderator';
     }
     return 'attendee';
@@ -570,15 +582,33 @@ async function getMeetingRoleForUser(roomName: string, userId?: string): Promise
   }
 }
 
+function invitationForEmail(
+  email: string | null | undefined,
+  meeting: { host?: { email: string } | null; guestEmails: string[]; moderatorEmails: string[] },
+): boolean {
+  if (!email) return false;
+  return (
+    sameEmail(email, meeting.host?.email) ||
+    emailInList(meeting.guestEmails, email) ||
+    emailInList(meeting.moderatorEmails, email)
+  );
+}
+
 export async function getMeetingRole(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   try {
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
-      select: { hostId: true, guestEmails: true, moderatorEmails: true, eventyayEventSlug: true }
+      select: {
+        hostId: true,
+        guestEmails: true,
+        moderatorEmails: true,
+        eventyayEventSlug: true,
+        host: { select: { email: true } },
+      },
     });
     if (!meeting) {
-      return res.json({ role: 'attendee', hostId: null, isInvited: false });
+      return res.json({ role: 'attendee', hostId: null, hostEmail: null, isInvited: false });
     }
 
     // For Eventyay-linked meets, role is determined solely by the validated grant session
@@ -587,18 +617,26 @@ export async function getMeetingRole(req: Request, res: Response) {
         return res.json({
           role: normalizeRole(req.access.role),
           hostId: meeting.hostId,
+          hostEmail: meeting.host?.email || null,
           isInvited: !req.access.sub?.startsWith('guest:'),
         });
       }
-      return res.json({ role: 'attendee', hostId: meeting.hostId, isInvited: false });
+      return res.json({
+        role: 'attendee',
+        hostId: meeting.hostId,
+        hostEmail: meeting.host?.email || null,
+        isInvited: false,
+      });
     }
 
     const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    let isInvited = false;
-    if (req.user?.email) {
-      isInvited = meeting.guestEmails.includes(req.user.email) || meeting.moderatorEmails.includes(req.user.email);
-    }
-    return res.json({ role, hostId: meeting.hostId, isInvited });
+    const isInvited = invitationForEmail(req.user?.email, meeting);
+    return res.json({
+      role,
+      hostId: meeting.hostId,
+      hostEmail: meeting.host?.email || null,
+      isInvited,
+    });
   } catch (err) {
     console.error('Get meeting role error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -1178,7 +1216,7 @@ export async function getRoomInitialState(req: Request, res: Response) {
   try {
     const meetingPromise = prisma.meeting.findUnique({
       where: { roomName },
-      include: { configs: true },
+      include: { configs: true, host: { select: { email: true } } },
     });
 
     const wbPromise = redisClient.get(`meeting:state:${roomName}:whiteboard`);
@@ -1198,6 +1236,7 @@ export async function getRoomInitialState(req: Request, res: Response) {
 
     let role: 'host' | 'moderator' | 'attendee' = 'attendee';
     const hostId: string | null = meeting ? meeting.hostId : null;
+    const hostEmail: string | null = meeting?.host?.email || null;
     let isInvited = false;
 
     if (meeting) {
@@ -1208,11 +1247,7 @@ export async function getRoomInitialState(req: Request, res: Response) {
         }
       } else {
         role = (await getMeetingRoleForUser(roomName, req.user?.id)) as any;
-        if (req.user?.email) {
-          isInvited =
-            meeting.guestEmails.includes(req.user.email) ||
-            meeting.moderatorEmails.includes(req.user.email);
-        }
+        isInvited = invitationForEmail(req.user?.email, meeting);
       }
     }
 
@@ -1259,7 +1294,7 @@ export async function getRoomInitialState(req: Request, res: Response) {
       rawBg !== null ? rawBg : meeting?.configs?.gridBackgroundUrl || '';
 
     return res.json({
-      role: { role, hostId, isInvited },
+      role: { role, hostId, hostEmail, isInvited },
       config,
       whiteboard: { strokes },
       notes: { notes },

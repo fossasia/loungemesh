@@ -40,6 +40,8 @@ function sanitizeMeetingConfig(configs: any) {
   In `src-vue/stores/sessionFeaturesStore.ts`, derive `meetingExists` directly from `data.role.hostId` (`this.meetingExists = !!data.role.hostId`). Do not derive it from `data.config`, as a meeting may exist before its `MeetingConfig` record is created.
 - **Action Guarding**:
   Protected actions (updating room settings, changing lobby admission, kicking attendees) must verify that `role === 'host'` or `role === 'moderator'`.
+- **Email-mapped host**:
+  The host is the meeting owner's email. Do not grant host because someone joined a link first. Moderator and guest emails are the invite lists. Missing or unlisted emails are attendees and stay in the lobby, which is on by default.
 
 ---
 

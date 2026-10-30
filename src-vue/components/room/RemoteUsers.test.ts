@@ -45,6 +45,21 @@ describe('RemoteUsers', () => {
     wrapper.unmount();
   });
 
+  it('renders nothing while the local person is still in the lobby', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const { useLocalStore } = await import('@/stores/localStore');
+    useLocalStore().setMyID('waiting');
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    conference.addUser('host');
+    conference.updateUserPosition('host', { x: 0, y: 0 });
+
+    const { wrapper } = await mountWithApp(RemoteUsers);
+    expect(wrapper.findAll('.userContainer').length).toBe(0);
+    wrapper.unmount();
+  });
+
   it('renders nothing when there are no users', async () => {
     const { wrapper } = await mountWithApp(RemoteUsers);
     expect(wrapper.findAll('.userContainer').length).toBe(0);

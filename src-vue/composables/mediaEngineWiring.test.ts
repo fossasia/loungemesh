@@ -50,6 +50,22 @@ describe('wireStoreSync', () => {
 
     expect(conference.users.existing.pos).toEqual({ x: 3, y: 4 });
 
+    const refreshSpy = vi.spyOn(engine, 'refreshRemoteAudio');
+    jitsi.conference._fire('conference.dataChannelOpened');
+    expect(refreshSpy).toHaveBeenCalled();
+
+    conference.addUser('sharer');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, {
+      getParticipantId: () => 'sharer',
+      getType: () => 'audio',
+      videoType: 'desktop',
+      isMuted: () => false,
+      isLocal: () => false,
+      getId: () => 'share-audio',
+    } as JitsiTrack);
+    expect(conference.users.sharer.screenshareAudio).toBeDefined();
+    expect(conference.users.sharer.audio).toBeUndefined();
+
     const before = local.id;
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue(undefined);
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
@@ -91,6 +107,15 @@ describe('wireStoreSync', () => {
       false,
     );
     expect(conference.users.u1.speaking).toBe(false);
+  });
+
+  it('drops a lobby knock when that person leaves', () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    wireStoreSync(engine);
+    features.addLobbyWaiter({ id: 'gone', name: 'Gone' });
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit('userLeft', 'gone');
+    expect(features.lobbyWaiting).toHaveLength(0);
   });
 
   it('ignores speaking changes for unknown users', () => {
@@ -445,7 +470,7 @@ describe('wireStoreSync', () => {
     expect(conference.error).toBeUndefined();
   });
 
-  it('claims host on join when host id is still empty', async () => {
+  it('does not claim host on join when the account is not the mapped host', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
@@ -460,11 +485,34 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.pendingHostClaim).toBe(false);
     expect(local.id).toBe('solo');
-    expect(features.hostId).toBe('solo');
-    expect(cmdSpy).toHaveBeenCalledWith('host', JSON.stringify({ hostId: 'solo' }));
+    expect(features.hostId).toBe('');
+    expect(features.isHost).toBe(false);
+    expect(cmdSpy).not.toHaveBeenCalledWith('host', expect.any(String));
   });
 
-  it('claims host on join when pendingHostClaim is set', async () => {
+  it('announces the verified host email on join', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.isVerifiedHost = true;
+    features.hostEmail = 'ada@example.com';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Ada', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('ada-jitsi');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(features.hostId).toBe('ada-jitsi');
+    expect(features.isHost).toBe(true);
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'host',
+      JSON.stringify({ hostId: 'ada-jitsi', email: 'ada@example.com' }),
+    );
+  });
+
+  it('does not claim host on join when pendingHostClaim is set for an attendee', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
@@ -479,9 +527,10 @@ describe('wireStoreSync', () => {
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue('solo');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(local.id).toBe('solo');
-    expect(features.hostId).toBe('solo');
+    expect(features.hostId).toBe('');
+    expect(features.isHost).toBe(false);
     expect(features.pendingHostClaim).toBe(false);
-    expect(cmdSpy).toHaveBeenCalledWith('host', JSON.stringify({ hostId: 'solo' }));
+    expect(cmdSpy).not.toHaveBeenCalledWith('host', expect.any(String));
   });
 
   it('ignores stale host commands while pendingHostClaim is set', () => {
@@ -554,6 +603,8 @@ describe('wireStoreSync', () => {
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
     features.resetHostForJoin();
+    features.isVerifiedHost = true;
+    features.hostEmail = 'host@example.com';
     features.hostSettingsSessionId = 'room';
     features.notesTemplate = '# Agenda';
     features.gridBackgroundUrl = 'data:image/jpeg;base64,wall';
@@ -569,11 +620,13 @@ describe('wireStoreSync', () => {
     expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
-  it('applies host template when the first participant becomes host', async () => {
+  it('applies the notes template when the verified host joins', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
+    features.isVerifiedHost = true;
+    features.hostEmail = 'solo@example.com';
     features.notesTemplate = '# Kickoff';
     features.gridBackgroundUrl = 'data:image/jpeg;base64,grid';
     wireStoreSync(engine);
@@ -622,6 +675,28 @@ describe('wireStoreSync', () => {
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
     expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+  });
+
+  it('announces lobby approval when an invited person joins', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.lobbyEnabled = true;
+    features.isInvited = true;
+    features.setHost('room-host');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Guest', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('guest-jitsi');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(features.isLobbyBlocked).toBe(false);
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'lobby',
+      JSON.stringify({ action: 'approve', id: 'guest-jitsi' }),
+    );
   });
 
   it('sends lobby wait when joining with lobby enabled', async () => {

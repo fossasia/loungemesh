@@ -157,6 +157,9 @@ export function useNotesEditor({ model, readonly, placeholder, onBlur, ydoc }: N
       heading: { levels: [2, 3] },
       codeBlock: false,
       horizontalRule: false,
+      // Collaboration ships its own history. Leaving StarterKit undo/redo on
+      // crashes the editor on mount ("Unexpected case") so shared notes never open.
+      ...(ydoc ? { undoRedo: false } : {}),
     }),
     Placeholder.configure({ placeholder }),
     Markdown.configure({
@@ -167,6 +170,10 @@ export function useNotesEditor({ model, readonly, placeholder, onBlur, ydoc }: N
   ];
 
   if (ydoc) {
+    const fragment = ydoc.getXmlFragment('default');
+    if (fragment.length === 0) {
+      fragment.insert(0, [new Y.XmlElement('paragraph')]);
+    }
     extensions.push(
       Collaboration.configure({
         document: ydoc,
@@ -175,7 +182,9 @@ export function useNotesEditor({ model, readonly, placeholder, onBlur, ydoc }: N
   }
 
   const editor = useEditor({
-    content: model.value,
+    // Collaboration owns the document. Seeding `content` as well makes the first
+    // transaction map a selection onto a Yjs type that is not a root yet.
+    content: ydoc ? undefined : model.value,
     extensions,
     editable: !readonly.value,
     editorProps: {

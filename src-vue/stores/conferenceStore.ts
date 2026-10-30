@@ -229,6 +229,17 @@ export const useConferenceStore = defineStore('conference', {
     },
     ingestChatMessage(id: string, text: string, nr: number) {
       const { messageId: wireId, text: displayText } = decodeChatWireText(text);
+      if (wireId) {
+        const existing = this.messages.findIndex((m) => m.messageId === wireId);
+        if (existing >= 0) {
+          if (this.messages[existing].nr < 0 && nr >= 0) {
+            const next = [...this.messages];
+            next[existing] = { ...next[existing], id, nr };
+            this.messages = next;
+          }
+          return;
+        }
+      }
       if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === displayText)) {
         return;
       }

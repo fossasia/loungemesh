@@ -72,6 +72,9 @@ async function handleAuthSubmit() {
 }
 
 async function exitLobby() {
+  if (local.id) {
+    engine.sendCommand('lobby', JSON.stringify({ action: 'cancel', id: local.id }));
+  }
   features.resetForLeave();
   await local.stopAllLocalMedia();
   leaveRoom();
@@ -112,7 +115,6 @@ async function exitLobby() {
             <AppIcon name="user" :size="28" />
           </div>
         </div>
-        <div class="spinner"></div>
         <h2 class="title">Asking to join...</h2>
         <p class="sub">
           Lobby mode is on. Please wait. The host will admit you shortly.
@@ -199,13 +201,12 @@ async function exitLobby() {
           </div>
 
           <div class="inputGroup">
-            <label for="lobbyGuestEmail">Email Address *</label>
+            <label for="lobbyGuestEmail">Email Address (optional)</label>
             <input
               id="lobbyGuestEmail"
               v-model="guestEmail"
               type="email"
               placeholder="e.g. john@example.com"
-              required
             />
           </div>
 
@@ -231,7 +232,7 @@ async function exitLobby() {
           <h2 class="title">
             {{ activeTab === 'login' ? 'Sign In to Account' : 'Create an Account' }}
           </h2>
-          <p class="sub">Registered accounts bypass the waiting lobby automatically.</p>
+          <p class="sub">Sign in with the email that was invited. Any other account still waits for the host.</p>
 
           <div v-if="activeTab === 'signup'" class="inputGroup">
             <label for="lobbyAuthName">Display Name</label>

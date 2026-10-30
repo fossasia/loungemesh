@@ -307,6 +307,10 @@ describe('LobbyOverlay', () => {
     expect(mockLeaveRoom).toHaveBeenCalled();
     expect(leaveConfSpy).toHaveBeenCalled();
     expect(mockDisconnect).toHaveBeenCalled();
+    expect(mockSendCommand).toHaveBeenCalledWith(
+      'lobby',
+      JSON.stringify({ action: 'cancel', id: 'local-id' }),
+    );
     expect(routerSpy).toHaveBeenCalledWith('/');
 
     wrapper.unmount();
@@ -334,5 +338,19 @@ describe('LobbyOverlay', () => {
     } finally {
       Object.defineProperty(window, 'parent', { value: originalParent, writable: true, configurable: true });
     }
+  });
+
+  it('leaves the lobby without a cancel command before a conference id exists', async () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.localLobbyPending = true;
+    useLocalStore().setMyID('');
+
+    const { wrapper } = await mountWithApp(LobbyOverlay);
+    await wrapper.find('.btnCancel').trigger('click');
+    await flushPromises();
+    expect(mockSendCommand).not.toHaveBeenCalled();
+    expect(mockLeaveRoom).toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

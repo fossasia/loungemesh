@@ -80,7 +80,7 @@ GET /api/meetings/state/:roomName/init
 
 ## 4. XMPP & Prosody Signaling Optimization
 
-During high participant counts, WebRTC signaling and stanza exchange can exceed default Prosody limits, leading to connection drops.
+During high participant counts, WebRTC signaling and stanza exchange can exceed default Prosody limits, leading to connection drops. Collaborative events (notes, whiteboard, chat, reactions, polls) are sent as JSON MUC messages instead of presence, so avatar movement does not retransmit those payloads.
 
 LoungeMesh tunes Prosody parameters in `scripts/loungemesh.sh`:
 - **C2S Rate Limiting**: Increased from `10kb/s` to `128kb/s` in `prosody.cfg.lua`. This prevents client disconnects during bursts of avatar presence updates.

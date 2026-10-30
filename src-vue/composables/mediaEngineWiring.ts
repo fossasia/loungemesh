@@ -26,6 +26,7 @@ import {
   clearStageIfParticipantLeft,
   stopLocalScreenshareIfNeeded,
 } from '@/utils/sessionStage';
+import { remoteAudioSlot } from '@/utils/remoteAudioSlot';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
@@ -34,18 +35,8 @@ export function wireStoreSync(engine: MediaService): void {
   let heartbeatTimer: number | undefined;
 
   function applyRemoteTrackToStore(id: string, track: JitsiTrack) {
-    let kind: 'audio' | 'video' | 'screenshareAudio' = 'video';
-    if (track.getType() === 'audio') {
-      const user = conferenceStore.users[id];
-      const hasAudio = !!user?.audio;
-      /* v8 ignore start */
-      const label = (typeof track.getTrack === 'function') ? (track.getTrack()?.label?.toLowerCase() || '') : '';
-      const isScreenAudio = hasAudio || label.includes('screen') || label.includes('desktop');
-      kind = isScreenAudio ? 'screenshareAudio' : 'audio';
-      /* v8 ignore stop */
-    } else {
-      kind = 'video';
-    }
+    const kind: 'audio' | 'video' | 'screenshareAudio' =
+      track.getType() === 'audio' ? remoteAudioSlot(track) : 'video';
 
     if (kind === 'video' && track.isMuted()) {
       if (track.videoType === 'desktop') {
@@ -94,6 +85,10 @@ export function wireStoreSync(engine: MediaService): void {
     });
     useReconnectStore().onConnectionLost('connection_failed');
   });
+  engine.on('bridgeChannelOpen', () => {
+    scheduleReceiverRefresh();
+    engine.refreshRemoteAudio?.();
+  });
   engine.on('conferenceJoined', () => {
     unlockMediaPlaybackNow(engine);
     mediaDebug('wiring', 'conferenceJoined', { localUserId: engine.getLocalUserId() });
@@ -118,6 +113,9 @@ export function wireStoreSync(engine: MediaService): void {
       if (!features.isFetchingConfig) {
         features.syncOrClaimHostOnLoaded(engine);
       }
+      // Room config often returns before the conference join finishes, so the
+      // fetch callback skips Yjs. Bind it once we are actually in the room.
+      features.setupYjsSync(engine);
       const others = Object.values(conferenceStore.users).map((u) => u.pos);
       local.setLocalPosition(spreadInitialUserPosition(others));
       local.publishLocalPosition();
@@ -133,6 +131,7 @@ export function wireStoreSync(engine: MediaService): void {
           name: conferenceStore.displayName,
         }),
       );
+      features.resendSessionIdentity(engine);
       engine.sendCommand('hello_req', JSON.stringify({ from: id }));
 
       if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -153,6 +152,9 @@ export function wireStoreSync(engine: MediaService): void {
         const conf = engine.getConference();
         const liveIds = conf ? conf.getParticipants().map((p) => p.getId()) : [];
         conferenceStore.pruneStaleUsers(45000, liveIds);
+        scheduleReceiverRefresh();
+        engine.refreshRemoteAudio?.();
+        features.resendSessionIdentity(engine);
       }, 5000);
     }
   });
@@ -203,6 +205,7 @@ export function wireStoreSync(engine: MediaService): void {
   engine.on('userLeft', (id) => {
     clearStageIfParticipantLeft(id);
     conferenceStore.removeUser(id);
+    useSessionFeaturesStore().rejectLobby(id);
   });
   engine.on('displayNameChanged', (id, displayName) => {
     conferenceStore.updateUserDisplayName(id, displayName);

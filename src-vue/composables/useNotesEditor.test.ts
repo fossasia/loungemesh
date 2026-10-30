@@ -223,6 +223,7 @@ describe('useNotesEditor', () => {
 
     expect(useEditorMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        content: undefined,
         extensions: expect.arrayContaining([
           expect.objectContaining({
             name: 'collaboration',
@@ -230,5 +231,15 @@ describe('useNotesEditor', () => {
         ]),
       }),
     );
+    expect(ydoc.getXmlFragment('default').length).toBe(1);
+
+    useNotesEditor({
+      model,
+      readonly,
+      placeholder: 'Placeholder',
+      onBlur,
+      ydoc,
+    });
+    expect(ydoc.getXmlFragment('default').length).toBe(1);
   });
 });

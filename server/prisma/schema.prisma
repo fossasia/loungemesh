@@ -49,7 +49,7 @@ model MeetingConfig {
   meetingId                 String  @id
   meeting                   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   joinPin                   String?
-  lobbyEnabled              Boolean @default(false)
+  lobbyEnabled              Boolean @default(true)
   stagePromotionEnabled     Boolean @default(true)
   allowParticipantRecording Boolean @default(false)
   notesTemplate             String?

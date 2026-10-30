@@ -78,3 +78,6 @@ Handled by `getRoomInitialState` in `server/src/controllers/meetingController.ts
 - Sanitizes room configuration using `sanitizeMeetingConfig` (omits `joinPin` and internal tables).
 - Resolves caller role (`host`, `moderator`, `attendee`).
 - Returns a single unified response payload.
+
+### Real-time session commands
+Sticky state (`pos`, `name`, `host`, `access`, `config`, `hand`) is carried in XMPP presence. Collaborative and ephemeral events (notes, whiteboard, chat, reactions, polls, stage, lobby, room background) are `lm-cmd` JSON messages so a burst cannot bloat presence or disconnect the participant. `JitsiAdapter` spaces those messages by 25ms. Once a host id is known, access updates apply only from that host. Empty per-user grant payloads do not copy inherited defaults into an explicit override. The host role comes from the meeting owner's email, not from who joined first. A `host` presence command is applied only when its email matches that owner. Lobby is on until the meeting config says otherwise, and anyone who is not the host, a moderator, or an invited email waits there.

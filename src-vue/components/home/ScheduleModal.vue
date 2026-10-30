@@ -210,7 +210,7 @@ async function handleSubmit() {
     const roomName = props.meeting?.roomName || `meet-${Math.random().toString(36).substring(2, 9)}`;
 
     // Load meeting defaults from localStorage
-    let lobbyEnabled = false;
+    let lobbyEnabled = true;
     let stagePromotionEnabled = true;
     let allowParticipantRecording = false;
     let roomDefaults = {
@@ -224,7 +224,7 @@ async function handleSubmit() {
     if (savedDefaults) {
       try {
         const parsed = JSON.parse(savedDefaults);
-        lobbyEnabled = parsed.lobbyEnabled ?? false;
+        lobbyEnabled = parsed.lobbyEnabled ?? true;
         stagePromotionEnabled = parsed.stagePromotionEnabled ?? true;
         allowParticipantRecording = parsed.allowParticipantRecording ?? false;
         if (parsed.roomDefaults) {

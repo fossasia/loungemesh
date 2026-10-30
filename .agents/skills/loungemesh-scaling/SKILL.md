@@ -36,23 +36,23 @@ export function buildReceiverConstraints(opts: {
   const visible = [...new Set(opts.visibleUserIds)].filter((id) => id && id !== opts.localId);
   const stage = [...new Set(opts.stageIds)].filter((id) => id && id !== opts.localId);
   const selectedEndpoints = [...new Set([...visible, ...stage])];
-  const selectedSources = selectedEndpoints.map((id) => `${id}-v0`);
+  // Camera is endpointId-v0. Screenshare is endpointId-v1 (or v0 if the camera is off).
+  const selectedSources = selectedEndpoints.flatMap((id) => [`${id}-v0`, `${id}-v1`]);
 
   const channelLastN =
     typeof conferenceOptions.channelLastN === 'number' && conferenceOptions.channelLastN > 0
       ? conferenceOptions.channelLastN
       : 20;
-  const lastN = Math.min(selectedEndpoints.length, channelLastN);
+  const lastN = Math.min(selectedSources.length, channelLastN * 2);
 
-  const onStageSources = stage.map((id) => `${id}-v0`);
+  const onStageSources = stage.flatMap((id) => [`${id}-v0`, `${id}-v1`]);
   const TILE_MAX_HEIGHT = 360;
   const STAGE_MAX_HEIGHT = 720;
   const constraints: Record<string, { maxHeight: number }> = {};
-  for (const source of selectedSources) {
-    constraints[source] = { maxHeight: TILE_MAX_HEIGHT };
-  }
-  for (const source of onStageSources) {
-    constraints[source] = { maxHeight: STAGE_MAX_HEIGHT };
+  for (const id of selectedEndpoints) {
+    const onStage = stage.includes(id);
+    constraints[`${id}-v0`] = { maxHeight: onStage ? STAGE_MAX_HEIGHT : TILE_MAX_HEIGHT };
+    constraints[`${id}-v1`] = { maxHeight: STAGE_MAX_HEIGHT };
   }
 
   return {
@@ -88,6 +88,7 @@ Configured in `src-vue/services/JitsiAdapter.ts`:
 - **Prosody (`scripts/loungemesh.sh`)**:
   - C2S rate: `128kb/s`
   - Stream buffer: `smacks_max_unacked_stanzas = 25`
+- **Presence vs live messages**: Avatar position, name, host, access, config, and hand state stay in presence. Notes, whiteboard, chat, reactions, polls, and other bursts go out as `lm-cmd` JSON MUC messages (`JitsiAdapter.sendCommand`). Do not put those payloads back into presence — every later position update would resend them and Prosody will drop the XMPP connection.
   - Always verify configuration generation via `wait_for_prosody_config` before patching.
 - **Nginx (`nginx/default.conf.template`)**:
   - `set_real_ip_from <trusted_proxy_cidr>; real_ip_header X-Forwarded-For;` (deployments must configure their actual trusted proxy CIDRs; never use `0.0.0.0/0` in production).
