@@ -350,4 +350,86 @@ describe('conferenceStore', () => {
     store.pruneStaleUsers(30000, ['u_stale_preserved']);
     expect(store.users['u_stale_preserved']).toBeDefined();
   });
+
+  it('moves a track cleanly when videoType transitions between camera and desktop without clobbering separate tracks', () => {
+    const store = useConferenceStore();
+    store.addUser('u-transition');
+
+    const morphTrack = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera' as 'camera' | 'desktop',
+      getSourceName: () => 'u-transition-v0',
+    };
+    store.setUserTrack('u-transition', 'video', morphTrack as never);
+    expect(store.users['u-transition'].video).toBe(morphTrack);
+    expect(store.users['u-transition'].screenshare).toBeUndefined();
+
+    // Same track updates from camera -> desktop (e.g. XMPP SourceInfo arrived)
+    morphTrack.videoType = 'desktop';
+    store.setUserTrack('u-transition', 'video', morphTrack as never);
+    expect(store.users['u-transition'].screenshare).toBe(morphTrack);
+    expect(store.users['u-transition'].video).toBeUndefined();
+
+    // Separate camera track added alongside active screenshare keeps both
+    const separateCam = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera' as const,
+      getSourceName: () => 'u-transition-v0',
+    };
+    store.setUserTrack('u-transition', 'video', separateCam as never);
+    expect(store.users['u-transition'].video).toBe(separateCam);
+    expect(store.users['u-transition'].screenshare).toBe(morphTrack);
+
+    // Muting separateCam while screenshare is active clears video, not screenshare
+    store.setUserTrack(
+      'u-transition',
+      'video',
+      Object.assign(separateCam, { isMuted: () => true }) as never,
+    );
+    expect(store.users['u-transition'].video).toBeUndefined();
+    expect(store.users['u-transition'].screenshare).toBe(morphTrack);
+
+    // Separate desktop track added while separateCam is active keeps separateCam
+    const freshCam = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera' as const,
+      getSourceName: () => 'u-transition-v0',
+    };
+    const separateDesktop = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop' as const,
+      getSourceName: () => 'u-transition-v1',
+    };
+    store.clearUserTrack('u-transition', 'screenshare');
+    store.setUserTrack('u-transition', 'video', freshCam as never);
+    store.setUserTrack('u-transition', 'video', separateDesktop as never);
+    expect(store.users['u-transition'].video).toBe(freshCam);
+    expect(store.users['u-transition'].screenshare).toBe(separateDesktop);
+
+    // Same track morphing from desktop -> camera clears screenshare
+    store.clearUserTrack('u-transition', 'video');
+    const revertTrack = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop' as 'camera' | 'desktop',
+      getSourceName: () => 'u-transition-v0',
+    };
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    revertTrack.videoType = 'camera';
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    expect(store.users['u-transition'].video).toBe(revertTrack);
+    expect(store.users['u-transition'].screenshare).toBeUndefined();
+
+    // Muting screenshare whose videoType reverted still clears screenshare via identity check
+    revertTrack.videoType = 'desktop';
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    revertTrack.videoType = 'camera';
+    revertTrack.isMuted = () => true;
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    expect(store.users['u-transition'].screenshare).toBeUndefined();
+  });
 });

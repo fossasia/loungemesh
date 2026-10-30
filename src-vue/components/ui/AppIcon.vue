@@ -41,6 +41,11 @@ import {
   Award,
   Shield,
   SendHorizontal,
+  Lock,
+  LockOpen,
+  UserPlus,
+  Share2,
+  Copy,
 } from '@lucide/vue';
 
 const props = withDefaults(
@@ -92,7 +97,12 @@ export type IconName =
   | 'clock'
   | 'award'
   | 'shield'
-  | 'send';
+  | 'send'
+  | 'lock'
+  | 'unlock'
+  | 'user-plus'
+  | 'share'
+  | 'copy';
 
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
@@ -135,6 +145,11 @@ const registry: Record<IconName, Component> = {
   award: Award,
   shield: Shield,
   send: SendHorizontal,
+  lock: Lock,
+  unlock: LockOpen,
+  'user-plus': UserPlus,
+  share: Share2,
+  copy: Copy,
 };
 
 const icon = computed(() => registry[props.name]);

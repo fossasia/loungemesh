@@ -694,4 +694,103 @@ describe('localStore', () => {
     store.calculateUsersOnScreen();
     el.remove();
   });
+
+  it('blocks enableMic and enableCamera when locked by a moderator and preserves active screenshare on camera enable', async () => {
+    const store = useLocalStore();
+    const features = useSessionFeaturesStore();
+    const engine = getMediaEngineInstance();
+
+    store.setMyID('guest-locked');
+    features.setHost('host');
+    features.setMediaLock('guest-locked', { mic: true, camera: true });
+
+    const createSpy = vi.spyOn(engine, 'createLocalTracks');
+
+    await store.enableMic();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(features.stageMessage).toBe('Your microphone is locked by a moderator.');
+
+    await store.enableCamera();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(features.stageMessage).toBe('Your camera is locked by a moderator.');
+
+    // Unlock and ensure enableCamera does not remove an active desktop screenshare track
+    features.setMediaLock('guest-locked', { mic: false, camera: false });
+    const desktopTrack = {
+      getType: () => 'video',
+      videoType: 'desktop',
+      dispose: vi.fn(),
+    };
+    const staleCamera = {
+      getType: () => 'video',
+      videoType: 'camera',
+      dispose: vi.fn(),
+    };
+    const freshCamera = {
+      getType: () => 'video',
+      videoType: 'camera',
+      isMuted: vi.fn().mockReturnValue(false),
+    };
+    createSpy.mockResolvedValueOnce([freshCamera as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [desktopTrack, staleCamera],
+      removeTrack,
+    } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    await store.enableCamera();
+    expect(removeTrack).toHaveBeenCalledWith(staleCamera);
+    expect(removeTrack).not.toHaveBeenCalledWith(desktopTrack);
+    expect(desktopTrack.dispose).not.toHaveBeenCalled();
+  });
+
+  it('preserves active screenshareAudio on mic toggle and subscribes to admitted remote active sharers', async () => {
+    const store = useLocalStore();
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const engine = getMediaEngineInstance();
+
+    const screenAudio = {
+      getType: () => 'audio',
+      dispose: vi.fn(),
+    } as never;
+    const staleMic = {
+      getType: () => 'audio',
+      dispose: vi.fn(),
+    };
+    const freshMic = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(false),
+    };
+    store.screenshareAudio = screenAudio;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([freshMic as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [screenAudio, staleMic],
+      removeTrack,
+    } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    await store.enableMic();
+    expect(removeTrack).toHaveBeenCalledWith(staleMic);
+    expect(removeTrack).not.toHaveBeenCalledWith(screenAudio);
+
+    // calculateUsersOnScreen includes admitted active sharers in usersOnStage and excludes lobby-waiting sharers
+    store.setMyID('me');
+    features.setHost('host');
+    features.configLoaded = true;
+    features.lobbyEnabled = true;
+    features.lobbyApproved = { me: true, 'admitted-sharer': true };
+    conference.addUser('admitted-sharer');
+    conference.users['admitted-sharer'].screenshare = { getType: () => 'video', videoType: 'desktop' } as never;
+    conference.addUser('lobby-sharer');
+    conference.users['lobby-sharer'].screenshare = { getType: () => 'video', videoType: 'desktop' } as never;
+
+    store.calculateUsersOnScreen();
+    expect(store.usersOnStage).toContain('admitted-sharer');
+    expect(store.usersOnStage).not.toContain('lobby-sharer');
+  });
 });

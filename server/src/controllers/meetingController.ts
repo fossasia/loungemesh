@@ -4,7 +4,7 @@ import { prisma } from '../config/db.js';
 import { redisClient } from '../config/redis.js';
 import { decryptToken, encryptToken } from '../utils/crypto.js';
 import { OAuth2Client } from 'google-auth-library';
-import { sendMeetingInvitation } from '../utils/mailer.js';
+import { sendLiveMeetingInvitation, sendMeetingInvitation } from '../utils/mailer.js';
 import { LoungeMeshRole, normalizeRole } from '../integration/roles.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -604,22 +604,51 @@ function invitationForEmail(
   );
 }
 
+function mergeEmailLists(...lists: Array<string[] | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      const normalized = (item || '').trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      out.push(normalized);
+    }
+  }
+  return out;
+}
+
 export async function getMeetingRole(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   try {
-    const meeting = await prisma.meeting.findUnique({
-      where: { roomName },
-      select: {
-        hostId: true,
-        guestEmails: true,
-        moderatorEmails: true,
-        eventyayEventSlug: true,
-        host: { select: { email: true } },
-      },
-    });
+    const [meeting, rawRuntimeInvites] = await Promise.all([
+      prisma.meeting.findUnique({
+        where: { roomName },
+        select: {
+          hostId: true,
+          guestEmails: true,
+          moderatorEmails: true,
+          eventyayEventSlug: true,
+          host: { select: { email: true } },
+        },
+      }),
+      redisClient.get(`meeting:state:${roomName}:invites`),
+    ]);
+    const runtimeInvites: string[] = rawRuntimeInvites ? JSON.parse(rawRuntimeInvites) : [];
     if (!meeting) {
-      return res.json({ role: 'attendee', hostId: null, hostEmail: null, isInvited: false, moderatorEmails: [], guestEmails: [] });
+      const isAdHocInvited = emailInList(runtimeInvites, req.user?.email);
+      return res.json({
+        role: 'attendee',
+        hostId: null,
+        hostEmail: null,
+        isInvited: isAdHocInvited,
+        moderatorEmails: [],
+        guestEmails: mergeEmailLists(runtimeInvites),
+      });
     }
+
+    const mergedGuestEmails = mergeEmailLists(meeting.guestEmails, runtimeInvites);
 
     // For Eventyay-linked meets, role is determined solely by the validated grant session
     if (meeting.eventyayEventSlug) {
@@ -630,7 +659,7 @@ export async function getMeetingRole(req: Request, res: Response) {
           hostEmail: meeting.host?.email || null,
           isInvited: !req.access.sub?.startsWith('guest:'),
           moderatorEmails: meeting.moderatorEmails,
-          guestEmails: meeting.guestEmails,
+          guestEmails: mergedGuestEmails,
         });
       }
       return res.json({
@@ -639,19 +668,22 @@ export async function getMeetingRole(req: Request, res: Response) {
         hostEmail: meeting.host?.email || null,
         isInvited: false,
         moderatorEmails: meeting.moderatorEmails,
-        guestEmails: meeting.guestEmails,
+        guestEmails: mergedGuestEmails,
       });
     }
 
     const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    const isInvited = invitationForEmail(req.user?.email, meeting);
+    const isInvited = invitationForEmail(req.user?.email, {
+      ...meeting,
+      guestEmails: mergedGuestEmails,
+    });
     return res.json({
       role,
       hostId: meeting.hostId,
       hostEmail: meeting.host?.email || null,
       isInvited,
       moderatorEmails: meeting.moderatorEmails,
-      guestEmails: meeting.guestEmails,
+      guestEmails: mergedGuestEmails,
     });
   } catch (err) {
     console.error('Get meeting role error:', err);
@@ -1229,6 +1261,163 @@ export async function clearBackgroundState(req: Request, res: Response) {
   }
 }
 
+const INVITE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function inviteMeetingAttendees(req: Request, res: Response) {
+  const roomName = req.params.roomName as string;
+  const rawInput = req.body?.emails ?? req.body?.email;
+  const rawList: string[] = Array.isArray(rawInput)
+    ? rawInput.map((item) => String(item || ''))
+    : typeof rawInput === 'string'
+      ? rawInput.split(/[,\s;]+/)
+      : [];
+
+  const validEmails = mergeEmailLists(rawList).filter((email) => INVITE_EMAIL_REGEX.test(email));
+  if (validEmails.length === 0) {
+    return res.status(400).json({ error: 'At least one valid email address is required' });
+  }
+
+  try {
+    const meeting = await prisma.meeting.findUnique({
+      where: { roomName },
+      include: {
+        configs: true,
+        host: { select: { email: true, displayName: true } },
+      },
+    });
+
+    const invitesKey = `meeting:state:${roomName}:invites`;
+    const rawRuntimeInvites = await redisClient.get(invitesKey);
+    const runtimeInvites: string[] = rawRuntimeInvites ? JSON.parse(rawRuntimeInvites) : [];
+
+    const protoHeader = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+    const hostHeader = req.headers.host || 'localhost:8780';
+
+    if (meeting) {
+      if (!meeting.eventyayEventSlug) {
+        const anonUser = await prisma.user.findFirst({
+          where: { email: 'anonymous@loungemesh.local' },
+        });
+        const isAnonymousMeeting = Boolean(anonUser && meeting.hostId === anonUser.id);
+        if (!isAnonymousMeeting) {
+          const callerRole = await getMeetingRoleForUser(roomName, req.user?.id);
+          if (callerRole !== 'host' && callerRole !== 'moderator') {
+            return res
+              .status(403)
+              .json({ error: 'Forbidden: Only the host or a moderator can invite attendees' });
+          }
+        }
+      }
+
+      const newlyAdded = validEmails.filter(
+        (email) =>
+          !sameEmail(email, meeting.host?.email) &&
+          !emailInList(meeting.moderatorEmails, email) &&
+          !emailInList(meeting.guestEmails, email) &&
+          !emailInList(runtimeInvites, email),
+      );
+
+      const mergedGuests = mergeEmailLists(meeting.guestEmails, runtimeInvites, validEmails).filter(
+        (email) => !sameEmail(email, meeting.host?.email) && !emailInList(meeting.moderatorEmails, email),
+      );
+
+      if (newlyAdded.length > 0) {
+        await prisma.meeting.update({
+          where: { id: meeting.id },
+          data: { guestEmails: mergedGuests },
+        });
+      }
+      await redisClient.setEx(invitesKey, 86400, JSON.stringify(mergedGuests));
+
+      const recipientsToNotify = newlyAdded.length > 0 ? newlyAdded : validEmails;
+      const inviterName =
+        req.user?.displayName || req.access?.name || meeting.host?.displayName || 'Host';
+      const inviterEmail =
+        req.user?.email || meeting.host?.email || 'noreply@loungemesh.com';
+
+      let emailSent = false;
+      if (meeting.isScheduled && meeting.startTime && meeting.endTime) {
+        if (meeting.googleEventId) {
+          await syncGoogleCalendarEvent(
+            meeting.hostId,
+            {
+              title: meeting.title,
+              description: meeting.description,
+              roomName: meeting.roomName,
+              startTime: meeting.startTime,
+              endTime: meeting.endTime,
+              recurrence: meeting.recurrence,
+              guestEmails: mergedGuests,
+              moderatorEmails: meeting.moderatorEmails,
+            },
+            meeting.googleEventId,
+            req,
+          );
+          emailSent = true;
+        } else {
+          await sendMeetingInvitation({
+            title: meeting.title,
+            roomName: meeting.roomName,
+            startTime: meeting.startTime,
+            endTime: meeting.endTime,
+            recurrence: meeting.recurrence || 'NONE',
+            guestEmails: recipientsToNotify,
+            hostName: inviterName,
+            hostEmail: inviterEmail,
+            hostHeader,
+            protocol: protoHeader,
+          });
+          emailSent = true;
+        }
+      } else {
+        emailSent = await sendLiveMeetingInvitation({
+          title: meeting.title || roomName,
+          roomName: meeting.roomName,
+          guestEmails: recipientsToNotify,
+          inviterName,
+          inviterEmail,
+          hostHeader,
+          protocol: protoHeader,
+        });
+      }
+
+      return res.json({
+        success: true,
+        addedEmails: newlyAdded,
+        guestEmails: mergedGuests,
+        emailSent,
+      });
+    }
+
+    // Ad-hoc room without a persisted Meeting record
+    const mergedAdHoc = mergeEmailLists(runtimeInvites, validEmails);
+    await redisClient.setEx(invitesKey, 86400, JSON.stringify(mergedAdHoc));
+
+    let emailSent = false;
+    if (req.user || req.access) {
+      emailSent = await sendLiveMeetingInvitation({
+        title: roomName,
+        roomName,
+        guestEmails: validEmails,
+        inviterName: req.user?.displayName || req.access?.name || 'Host',
+        inviterEmail: req.user?.email || 'noreply@loungemesh.com',
+        hostHeader,
+        protocol: protoHeader,
+      });
+    }
+
+    return res.json({
+      success: true,
+      addedEmails: validEmails.filter((email) => !emailInList(runtimeInvites, email)),
+      guestEmails: mergedAdHoc,
+      emailSent,
+    });
+  } catch (err) {
+    console.error('Invite meeting attendees error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 export async function getRoomInitialState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   try {
@@ -1242,15 +1431,20 @@ export async function getRoomInitialState(req: Request, res: Response) {
     const accessPromise = redisClient.get(`meeting:state:${roomName}:access`);
     const pollPromise = redisClient.get(`meeting:state:${roomName}:poll`);
     const bgPromise = redisClient.get(`meeting:state:${roomName}:background`);
+    const invitesPromise = redisClient.get(`meeting:state:${roomName}:invites`);
 
-    const [meeting, rawWb, rawNotes, rawAccess, rawPoll, rawBg] = await Promise.all([
+    const [meeting, rawWb, rawNotes, rawAccess, rawPoll, rawBg, rawInvites] = await Promise.all([
       meetingPromise,
       wbPromise,
       notesPromise,
       accessPromise,
       pollPromise,
       bgPromise,
+      invitesPromise,
     ]);
+
+    const runtimeInvites: string[] = rawInvites ? JSON.parse(rawInvites) : [];
+    const mergedGuestEmails = mergeEmailLists(meeting?.guestEmails, runtimeInvites);
 
     let role: 'host' | 'moderator' | 'attendee' = 'attendee';
     const hostId: string | null = meeting ? meeting.hostId : null;
@@ -1265,8 +1459,13 @@ export async function getRoomInitialState(req: Request, res: Response) {
         }
       } else {
         role = (await getMeetingRoleForUser(roomName, req.user?.id)) as any;
-        isInvited = invitationForEmail(req.user?.email, meeting);
+        isInvited = invitationForEmail(req.user?.email, {
+          ...meeting,
+          guestEmails: mergedGuestEmails,
+        });
       }
+    } else {
+      isInvited = emailInList(mergedGuestEmails, req.user?.email);
     }
 
     const config = sanitizeMeetingConfig(meeting?.configs);
@@ -1312,7 +1511,7 @@ export async function getRoomInitialState(req: Request, res: Response) {
       rawBg !== null ? rawBg : meeting?.configs?.gridBackgroundUrl || '';
 
     return res.json({
-      role: { role, hostId, hostEmail, isInvited, moderatorEmails: meeting?.moderatorEmails ?? [], guestEmails: meeting?.guestEmails ?? [] },
+      role: { role, hostId, hostEmail, isInvited, moderatorEmails: meeting?.moderatorEmails ?? [], guestEmails: mergedGuestEmails },
       config,
       whiteboard: { strokes },
       notes: { notes },

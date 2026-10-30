@@ -43,8 +43,10 @@ export function isDesktopShareTrack(track: {
   videoType?: string;
   getVideoType?: () => string;
   getSourceName?: () => string;
+  isLocal?: () => boolean;
 }): boolean {
   const typed = track.getVideoType?.() || track.videoType;
+  if (track.isLocal?.()) return typed === 'desktop';
   if (typed === 'desktop') return true;
   const source = track.getSourceName?.() ?? '';
   return source.endsWith('-v1');
@@ -63,13 +65,12 @@ export async function acquireDesktopTracks(
   options?: { mobile?: boolean; getDisplayMedia?: () => Promise<MediaStream> },
 ): Promise<JitsiTrack[]> {
   const mobile = options?.mobile ?? isMobileCaptureDevice();
-  const create = jsMeet.createLocalTracks as (opts: Record<string, unknown>) => Promise<JitsiTrack[]>;
   try {
     return markDesktop(
-      await create({
+      await jsMeet.createLocalTracks({
         ...desktopCaptureRequest(mobile),
         firePermissionPromptIsShownEvent: true,
-      }),
+      } as any),
     );
   } catch (error) {
     if (!mobile) throw error;

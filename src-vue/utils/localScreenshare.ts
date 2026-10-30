@@ -5,6 +5,7 @@ import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
 import { nextTick, markRaw } from 'vue';
 import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { isDesktopShareTrack } from '@/utils/screenshareCapture';
+import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 import type { JitsiTrack } from '@/types/jitsi';
 
 function stopAbandonedTracks(tracks: JitsiTrack[]) {
@@ -30,6 +31,7 @@ export async function stopLocalScreenshare(): Promise<void> {
   await nextTick();
   await waitForMediaElementDetach();
   await releaseLocalMediaTracks([track, audioTrack].filter(Boolean) as any[], engine.getConference());
+  scheduleReceiverRefresh();
 }
 
 export async function startLocalScreenshare(engine: MediaService): Promise<void> {
@@ -44,15 +46,25 @@ export async function startLocalScreenshare(engine: MediaService): Promise<void>
     return;
   }
 
-  await engine.addLocalTrack(newTrack);
+  try {
+    await engine.addLocalTrack(newTrack);
+  } catch (err) {
+    stopAbandonedTracks(tracks);
+    throw err;
+  }
   local.screenshare = markRaw(newTrack);
 
   const audioTrack = tracks.find((t: any) => t.getType?.() === 'audio');
   if (audioTrack) {
-    await engine.addLocalTrack(audioTrack);
-    local.screenshareAudio = markRaw(audioTrack);
-    local.screenshareAudioMuted = false;
+    try {
+      await engine.addLocalTrack(audioTrack);
+      local.screenshareAudio = markRaw(audioTrack);
+      local.screenshareAudioMuted = false;
+    } catch {
+      stopAbandonedTracks([audioTrack]);
+    }
   }
+  scheduleReceiverRefresh();
 }
 
 export async function toggleLocalScreenshare(engine: MediaService): Promise<void> {

@@ -33,8 +33,11 @@ export function canPromoteToStage(
   stagePromotionEnabled: boolean,
   stageOccupantId: string,
   targetId: string,
+  isModerator = false,
 ): { ok: true } | { ok: false; message: string } {
-  if (!isHost) return { ok: false, message: 'Only the host can promote to stage.' };
+  if (!isHost && !isModerator) {
+    return { ok: false, message: 'Only hosts or moderators can promote to stage.' };
+  }
   if (!stagePromotionEnabled) return { ok: false, message: 'Stage promotion is disabled.' };
   if (stageOccupantId && stageOccupantId !== targetId) {
     return { ok: false, message: STAGE_OCCUPIED_MESSAGE };
@@ -57,8 +60,10 @@ export function canDemoteFromStage(
 }
 
 function sendStageCommand(engine: MediaService, command: StageCommand): void {
+  const email = useSessionFeaturesStore().controlEmail();
   const cmdWithId = {
     ...command,
+    ...(email ? { email } : {}),
     _cmdId: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
   };
   engine.sendCommand('stage', JSON.stringify(cmdWithId));
@@ -137,6 +142,7 @@ export function promoteToStage(engine: MediaService, targetId: string): { ok: tr
     features.stagePromotionEnabled,
     features.stageOccupantId,
     targetId,
+    features.isModerator || features.canModerate,
   );
   if (!check.ok) return check;
 

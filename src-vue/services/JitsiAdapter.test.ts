@@ -177,6 +177,9 @@ describe('JitsiAdapter', () => {
     mock.conference._fire(ev.CONFERENCE_JOINED);
     mock.conference._fire(ev.USER_JOINED, 'u2', { name: 'Bob' });
     mock.conference._fire(ev.MESSAGE_RECEIVED, 'u2', 'hi', 1);
+    mock.conference._fire(ev.MESSAGE_RECEIVED, 'u2', JSON.stringify({ type: 'lm-cmd', name: 'lobby', value: '{"action":"approve"}' }), 2);
+    mock.conference._fire(ev.MESSAGE_RECEIVED, 'u2', { type: 'lm-cmd', name: 'mod', value: '{"action":"mute"}' }, 3);
+    mock.conference._fire(ev.MESSAGE_RECEIVED, 'local-1', { type: 'lm-cmd', name: 'lobby', value: '{}' }, 4);
     mock.conference._fire(ev.PARTICIPANT_PROPERTY_CHANGED, { _id: 'u2', _properties: { onStage: true } });
     mock.conference._fire(ev.PARTICIPANT_PROPERTY_CHANGED, { _id: undefined, _properties: { onStage: true } });
     mock.conference._fire(ev.PARTICIPANT_PROPERTY_CHANGED, { _id: 'u3' });
@@ -1725,5 +1728,55 @@ describe('JitsiAdapter', () => {
     adapter.disconnectParticipantAudio('user-1');
     expect(removeSpy).toHaveBeenCalledWith('user-1');
     removeSpy.mockRestore();
+  });
+
+  it('re-emits trackAdded when remote video track videoType changes and cleans up watches', async () => {
+    const onTrackAdded = vi.fn();
+    adapter.on('trackAdded', onTrackAdded);
+    await adapter.connect();
+    mock.connection._fire(mock.jsMeet.events.connection.CONNECTION_ESTABLISHED);
+    await adapter.joinRoom('room', 'Alice', {});
+    mock.conference._fire(mock.jsMeet.events.conference.CONFERENCE_JOINED);
+
+    const listeners = new Map<string, () => void>();
+    const offSpy = vi.fn((ev: string) => {
+      listeners.delete(ev);
+    });
+    const remoteVid = {
+      getType: () => 'video',
+      isLocal: () => false,
+      isMuted: () => false,
+      videoType: 'camera',
+      on: vi.fn((ev: string, cb: () => void) => {
+        listeners.set(ev, cb);
+      }),
+      off: offSpy,
+    } as any;
+
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, remoteVid);
+    // Duplicate TRACK_ADDED must not attach a second listener
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, remoteVid);
+    expect(remoteVid.on).toHaveBeenCalledTimes(1);
+    expect(remoteVid.on).toHaveBeenCalledWith('track.videoTypeChanged', expect.any(Function));
+
+    onTrackAdded.mockClear();
+    remoteVid.videoType = 'desktop';
+    listeners.get('track.videoTypeChanged')?.();
+    expect(onTrackAdded).toHaveBeenCalledTimes(1);
+    expect(onTrackAdded).toHaveBeenCalledWith(remoteVid);
+
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_REMOVED, remoteVid);
+    expect(offSpy).toHaveBeenCalledWith('track.videoTypeChanged', expect.any(Function));
+
+    // Also test custom TRACK_VIDEOTYPE_CHANGED event name + cleanup via leaveRoom without off()
+    (mock.jsMeet.events as any).track = { TRACK_VIDEOTYPE_CHANGED: 'custom.videoTypeChanged' };
+    const noOffTrack = {
+      getType: () => 'video',
+      isLocal: () => false,
+      on: vi.fn(),
+    } as any;
+    mock.conference._fire(mock.jsMeet.events.conference.TRACK_ADDED, noOffTrack);
+    expect(noOffTrack.on).toHaveBeenCalledWith('custom.videoTypeChanged', expect.any(Function));
+    adapter.leaveRoom();
   });
 });

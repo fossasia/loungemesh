@@ -522,4 +522,33 @@ describe('LocalStoreLogic', () => {
     addSpy.mockRestore();
     wrapper.unmount();
   });
+
+  it('publishes microphone audio without removing or colliding with screenshareAudio', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+
+    const screenAudio = makeTrack('audio');
+    const micAudio = makeTrack('audio');
+    local.screenshareAudio = screenAudio;
+    local.audio = micAudio;
+
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [screenAudio],
+    } as never);
+    const removeSpy = vi.spyOn(engine, 'removeLocalTrack').mockResolvedValue(undefined);
+    const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+
+    expect(removeSpy).not.toHaveBeenCalledWith(screenAudio);
+    expect(addSpy).toHaveBeenCalledWith(micAudio);
+
+    removeSpy.mockRestore();
+    addSpy.mockRestore();
+    wrapper.unmount();
+  });
 });

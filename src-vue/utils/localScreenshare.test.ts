@@ -121,6 +121,42 @@ describe('localScreenshare', () => {
     expect(local.screenshareAudio).toBe(audioTrack);
   });
 
+  it('cleans up abandoned tracks if adding desktop or system audio track fails', async () => {
+    const engine = getMediaEngineInstance();
+    const local = useLocalStore();
+
+    const stopVideo = vi.fn();
+    const desktopFailTrack = {
+      getType: () => 'video',
+      videoType: 'desktop',
+      getTrack: () => ({ stop: stopVideo }),
+      dispose: vi.fn(),
+    } as any;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([desktopFailTrack]);
+    vi.spyOn(engine, 'addLocalTrack').mockRejectedValueOnce(new Error('publish failed'));
+
+    await expect(startLocalScreenshare(engine)).rejects.toThrow('publish failed');
+    expect(stopVideo).toHaveBeenCalled();
+    expect(local.screenshare).toBeUndefined();
+
+    const desktopOk = { getType: () => 'video', videoType: 'desktop' } as any;
+    const stopAudio = vi.fn();
+    const audioFail = {
+      getType: () => 'audio',
+      getTrack: () => ({ stop: stopAudio }),
+      dispose: vi.fn(),
+    } as any;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([desktopOk, audioFail]);
+    vi.spyOn(engine, 'addLocalTrack')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('audio publish failed'));
+
+    await startLocalScreenshare(engine);
+    expect(local.screenshare).toBe(desktopOk);
+    expect(local.screenshareAudio).toBeUndefined();
+    expect(stopAudio).toHaveBeenCalled();
+  });
+
   it('toggleLocalScreenshare toggles screenshare on and off', async () => {
     const engine = getMediaEngineInstance();
     const desktopTrack = { getType: () => 'video', videoType: 'desktop' } as any;

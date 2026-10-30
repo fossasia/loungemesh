@@ -28,10 +28,31 @@ describe('screenshareCapture', () => {
     Reflect.deleteProperty(window, 'matchMedia');
   });
 
-  it('treats a desktop video type or a v1 source as a screenshare', () => {
+  it('treats a desktop video type or a remote v1 source as a screenshare while guarding local v1 cameras', () => {
     expect(isDesktopShareTrack({ videoType: 'desktop' })).toBe(true);
     expect(isDesktopShareTrack({ getVideoType: () => 'desktop', videoType: 'camera' })).toBe(true);
     expect(isDesktopShareTrack({ videoType: 'camera', getSourceName: () => 'abc-v1' })).toBe(true);
+    expect(
+      isDesktopShareTrack({
+        isLocal: () => false,
+        videoType: 'camera',
+        getSourceName: () => 'abc-v1',
+      }),
+    ).toBe(true);
+    expect(
+      isDesktopShareTrack({
+        isLocal: () => true,
+        videoType: 'camera',
+        getSourceName: () => 'abc-v1',
+      }),
+    ).toBe(false);
+    expect(
+      isDesktopShareTrack({
+        isLocal: () => true,
+        videoType: 'desktop',
+        getSourceName: () => 'abc-v0',
+      }),
+    ).toBe(true);
     expect(isDesktopShareTrack({ videoType: 'camera', getSourceName: () => 'abc-v0' })).toBe(false);
     expect(isDesktopShareTrack({})).toBe(false);
   });

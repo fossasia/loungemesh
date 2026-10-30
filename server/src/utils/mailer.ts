@@ -35,6 +35,32 @@ interface SendInviteParams {
   hostName: string;
   hostEmail: string;
   hostHeader: string;
+  protocol?: string;
+}
+
+export interface SendLiveInviteParams {
+  title: string;
+  roomName: string;
+  guestEmails: string[];
+  inviterName: string;
+  inviterEmail: string;
+  hostHeader: string;
+  protocol?: string;
+}
+
+export function buildMeetingJoinUrl(
+  roomName: string,
+  hostHeader: string,
+  protocol?: string,
+): string {
+  const configured = (process.env.LOUNGEMESH_PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (configured) {
+    return `${configured}/session/${encodeURIComponent(roomName)}`;
+  }
+  const proto =
+    protocol ||
+    (hostHeader.startsWith('localhost') || hostHeader.startsWith('127.0.0.1') ? 'http' : 'https');
+  return `${proto}://${hostHeader}/session/${encodeURIComponent(roomName)}`;
 }
 
 export async function sendMeetingInvitation(params: SendInviteParams) {
@@ -48,13 +74,14 @@ export async function sendMeetingInvitation(params: SendInviteParams) {
     hostName,
     hostEmail,
     hostHeader,
+    protocol,
   } = params;
 
   if (!guestEmails || guestEmails.length === 0) return;
 
   const durationMs = endTime.getTime() - startTime.getTime();
   const durationMin = Math.max(1, Math.floor(durationMs / 60000));
-  const joinUrl = `http://${hostHeader}/session/${roomName}`;
+  const joinUrl = buildMeetingJoinUrl(roomName, hostHeader, protocol || 'http');
 
   // Build standard ics event properties
   const eventAttributes: ics.EventAttributes = {
@@ -134,4 +161,68 @@ ${icsContent}
       console.error(`[MAILER] Failed to send email to ${email}:`, err);
     }
   }
+}
+
+export async function sendLiveMeetingInvitation(params: SendLiveInviteParams): Promise<boolean> {
+  const {
+    title,
+    roomName,
+    guestEmails,
+    inviterName,
+    inviterEmail,
+    hostHeader,
+    protocol,
+  } = params;
+
+  if (!guestEmails || guestEmails.length === 0) return false;
+
+  const joinUrl = buildMeetingJoinUrl(roomName, hostHeader, protocol);
+
+  if (!transporter) {
+    const logPath = path.resolve(process.cwd(), 'invitations-debug.log');
+    const logContent = `
+================================================================================
+[LIVE INVITATION SENT TO MOCK LOG]
+Timestamp : ${new Date().toISOString()}
+Inviter   : ${inviterName} <${inviterEmail}>
+Recipients: ${guestEmails.join(', ')}
+Subject   : ${inviterName} invited you to join "${title}" on LoungeMesh
+Join Link : ${joinUrl}
+================================================================================
+\n`;
+    fs.appendFileSync(logPath, logContent, 'utf8');
+    console.log(
+      `[MAILER] SMTP not configured. Logged live invitation for ${guestEmails.join(', ')} to server/invitations-debug.log`,
+    );
+    return false;
+  }
+
+  let sentCount = 0;
+  for (const email of guestEmails) {
+    try {
+      await transporter.sendMail({
+        from: `"${inviterName} via LoungeMesh" <${SMTP_FROM}>`,
+        to: email,
+        subject: `${inviterName} invited you to join "${title}" on LoungeMesh`,
+        text: `${inviterName} (${inviterEmail}) invited you to join an active LoungeMesh spatial meeting.\n\nMeeting: ${title}\nJoin now: ${joinUrl}\n`,
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #1e2240; max-width: 600px; margin: 0 auto; border: 1px solid rgba(79, 110, 247, 0.15); border-radius: 16px; background: #ffffff;">
+            <h2 style="color: #4f6ef7; margin-top: 0;">Join LoungeMesh Meeting</h2>
+            <p><strong>${inviterName}</strong> (${inviterEmail}) invited you to join a live spatial meeting.</p>
+            <div style="background: #f0f4ff; padding: 16px; border-radius: 12px; margin: 20px 0;">
+              <p style="margin: 0 0 12px;"><strong>Meeting:</strong> ${title}</p>
+              <p style="margin: 0;">
+                <a href="${joinUrl}" style="display: inline-block; background: #4f6ef7; color: #ffffff; padding: 10px 18px; border-radius: 9999px; font-weight: 600; text-decoration: none;">Join Session Now</a>
+              </p>
+            </div>
+            <p style="font-size: 12px; color: #6970a0; word-break: break-all;">Or open directly: <a href="${joinUrl}" style="color: #4f6ef7;">${joinUrl}</a></p>
+          </div>
+        `,
+      });
+      sentCount += 1;
+    } catch (err) {
+      console.error(`[MAILER] Failed to send live invite email to ${email}:`, err);
+    }
+  }
+  return sentCount > 0;
 }

@@ -609,5 +609,176 @@ describe('SessionFeaturePanels', () => {
 
     wrapper.unmount();
   });
+
+  it('supports disable camera, mic/camera locks, accurate moderator badges, and moderator stage promotion', async () => {
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+
+    local.setMyID('mod-user');
+    features.setHost('host-user');
+    features.isVerifiedModerator = true;
+    features.stagePromotionEnabled = true;
+    features.moderatorEmails = ['emailmod@example.com'];
+
+    conference.addUser('host-user', { _displayName: 'Host User' } as never);
+    conference.addUser('email-mod', { _displayName: 'Email Mod' } as never);
+    conference.users['email-mod'].email = 'emailmod@example.com';
+    conference.addUser('attendee-1', { _displayName: 'Attendee One' } as never);
+    conference.users['attendee-1'].video = { getType: () => 'video' } as never;
+
+    features.panel = 'moderator';
+    const { wrapper } = await mountPanels();
+    await flushPromises();
+
+    // Email-invited moderator is badged as Moderator (never Attendee)
+    const emailModCard = wrapper.findAll('.participantCard').find((c) => c.text().includes('Email Mod'));
+    expect(emailModCard).toBeTruthy();
+    expect(emailModCard!.text()).toContain('Moderator');
+    expect(emailModCard!.text()).not.toContain('Attendee');
+
+    // Moderator sees Make Presenter, Mute, Disable camera, Remove, Lock mic, and Lock cam for attendee
+    const attCard = wrapper.findAll('.participantCard').find((c) => c.text().includes('Attendee One'));
+    expect(attCard).toBeTruthy();
+    const promoteBtn = attCard!.findAll('button').find((b) => b.text().includes('Make Presenter'));
+    expect(promoteBtn).toBeTruthy();
+    await promoteBtn!.trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"invite"'));
+
+    const disableCamBtn = attCard!.find('button[title="Disable camera"]');
+    expect(disableCamBtn.exists()).toBe(true);
+    await disableCamBtn.trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('mod', expect.stringContaining('"action":"camera_off"'));
+
+    const lockMicBtn = attCard!.findAll('button.lockChip').find((b) => b.text().includes('Lock mic'));
+    const lockCamBtn = attCard!.findAll('button.lockChip').find((b) => b.text().includes('Lock cam'));
+    expect(lockMicBtn).toBeTruthy();
+    expect(lockCamBtn).toBeTruthy();
+
+    await lockMicBtn!.trigger('click');
+    expect(features.mediaLocks['attendee-1']?.mic).toBe(true);
+    await lockCamBtn!.trigger('click');
+    expect(features.mediaLocks['attendee-1']?.camera).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('lets host and moderators invite attendees by email and share meeting links from People tab', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+
+    local.setMyID('mod-user');
+    features.setHost('host-user');
+    features.isVerifiedModerator = true;
+    features.panel = 'moderator';
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ guestEmails: ['alice@example.com'], emailSent: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: shareMock,
+    });
+
+    const { wrapper } = await mountWithApp(SessionFeaturePanels, {
+      route: '/session/design-sync',
+      global: { stubs: { NotesEditor: notesEditorStub } },
+    });
+    await flushPromises();
+
+    // Switch between People and Room tabs
+    const tabs = wrapper.findAll('.settingsTab');
+    await tabs[1].trigger('click');
+    expect(features.moderatorTab).toBe('people');
+    await tabs[0].trigger('click');
+    expect(features.moderatorTab).toBe('room');
+    await tabs[1].trigger('click');
+
+    // Open Add pane, validate blur/input, test invalid submission then valid submission
+    const addBtn = wrapper.find('[data-testid="people-add-btn"]');
+    await addBtn.trigger('click');
+    expect(features.peopleActionPane).toBe('add');
+
+    const emailInput = wrapper.find('#session-invite-emails');
+    await emailInput.trigger('blur');
+    await emailInput.setValue('invalid-email');
+    await wrapper.find('[data-testid="people-invite-form"]').trigger('submit');
+    await flushPromises();
+    expect(wrapper.find('#session-invite-error').text()).toContain('Invalid email address');
+
+    await emailInput.setValue('alice@example.com');
+    await emailInput.trigger('input');
+    await wrapper.find('[data-testid="people-invite-form"]').trigger('submit');
+    await flushPromises();
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"invite"'));
+    expect(wrapper.find('.inviteSuccessMsg').text()).toContain('alice@example.com');
+    expect(wrapper.text()).toContain('Invited (1)');
+
+    // Toggle Add closed, then open Share pane
+    await addBtn.trigger('click');
+    expect(features.peopleActionPane).toBe('');
+
+    const shareBtn = wrapper.find('[data-testid="people-share-btn"]');
+    await shareBtn.trigger('click');
+    expect(features.peopleActionPane).toBe('share');
+
+    const shareInput = wrapper.find('#session-share-link');
+    expect((shareInput.element as HTMLInputElement).value).toContain('/session/design-sync');
+    await shareInput.trigger('focus');
+
+    const copyBtn = wrapper.find('[data-testid="people-copy-link-btn"]');
+    await copyBtn.trigger('click');
+    await flushPromises();
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/session/design-sync'));
+    expect(copyBtn.text()).toContain('Copied!');
+    vi.advanceTimersByTime(2000);
+    await flushPromises();
+    expect(copyBtn.text()).toContain('Copy link');
+
+    // Copy failing branch
+    writeText.mockRejectedValueOnce(new Error('denied'));
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: undefined,
+    });
+    await copyBtn.trigger('click');
+    await flushPromises();
+    expect(copyBtn.text()).toContain('Copy link');
+
+    // Native share button (shared + cancelled)
+    const nativeBtn = wrapper.find('[data-testid="people-native-share-btn"]');
+    expect(nativeBtn.exists()).toBe(true);
+    await nativeBtn.trigger('click');
+    await flushPromises();
+    expect(features.stageMessage).toBe('Meeting link shared.');
+
+    const abortErr = new Error('cancelled');
+    abortErr.name = 'AbortError';
+    shareMock.mockRejectedValueOnce(abortErr);
+    features.stageMessage = '';
+    await nativeBtn.trigger('click');
+    await flushPromises();
+    expect(features.stageMessage).toBe('');
+
+    // Toggle Share pane closed
+    await shareBtn.trigger('click');
+    expect(features.peopleActionPane).toBe('');
+
+    vi.unstubAllGlobals();
+    wrapper.unmount();
+  });
 });
 

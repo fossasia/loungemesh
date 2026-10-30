@@ -146,7 +146,8 @@ DATABASE_URL="postgresql://<db_user>:<db_password>@postgres:5432/loungemesh?sche
 | `GET` | `/api/meetings/state/:roomName/access` | Read room feature toggles and capability grants. |
 | `POST` | `/api/meetings/state/:roomName/access/defaults` | Update room feature toggles. |
 | `POST` | `/api/meetings/state/:roomName/access/grants` | Update per-user capability grants. |
-| `GET` / `POST` / `DELETE` | `/api/meetings/state/:roomName/background` | Get, set, or clear room floorplan background URL. |
+| `POST` | `/api/meetings/state/:roomName/invite` | Invite attendee email(s) to a live or scheduled meeting (host/moderator only); persists `guestEmails` in PostgreSQL & Redis, updates Google Calendar or sends SMTP invitation emails, and bypasses lobby for invited accounts. |
+| `GET` / `POST` / `DELETE` | `/api/meetings/state/:roomName/background` | Get, set, or clear room floorplan background URL (authorized for hosts and `moderate` capability; Express accepts up to `2mb` JSON payloads behind Nginx `5m` body size limit). |
 | `POST` | `/api/meetings/log/:roomName` | Record an audit log event in `SessionLog`. |
 
 ---

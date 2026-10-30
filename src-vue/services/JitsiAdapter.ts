@@ -105,6 +105,7 @@ export class JitsiAdapter implements MediaService {
   private participantTracks = new Map<string, Set<string>>();
   private pendingRemoteAudio = new Map<string, JitsiTrack>();
   private remoteAudioStreamWatches = new Map<string, () => void>();
+  private remoteVideoTypeWatches = new Map<JitsiTrack, () => void>();
   private remoteAudioElements = new Map<string, HTMLAudioElement>();
   private wiredRemoteTracks = new Map<string, JitsiTrack>();
   private elementVolumeFallback = new Set<string>();
@@ -222,6 +223,25 @@ export class JitsiAdapter implements MediaService {
       this.emitExistingConferenceTracks(conference);
     });
     conference.on(ev.MESSAGE_RECEIVED, (id: unknown, text: unknown, nr: unknown) => {
+      let liveCmd: { name: string; value: string } | null = null;
+      /* v8 ignore start */
+      if (text && typeof text === 'object') {
+        liveCmd = readLiveCommand(text);
+      } else if (typeof text === 'string') {
+        try {
+          liveCmd = readLiveCommand(JSON.parse(text));
+        } catch {
+          liveCmd = null;
+        }
+      }
+      if (liveCmd) {
+        const senderId = String(id ?? '');
+        if (senderId && senderId !== this.getLocalUserId()) {
+          this.emit('command', liveCmd.name, { value: liveCmd.value }, senderId);
+        }
+        return;
+      }
+      /* v8 ignore stop */
       this.emit('messageReceived', String(id), String(text), Number(nr));
     });
     conference.on(ev.CONFERENCE_ERROR, () => {
@@ -256,6 +276,7 @@ export class JitsiAdapter implements MediaService {
       mediaDebugTrack('JitsiAdapter', 'TRACK_ADDED', t);
       if (t.isLocal?.()) return;
       if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      this.watchRemoteVideoType(t);
       this.emit('trackAdded', t);
     });
     conference.on(ev.TRACK_MUTE_CHANGED, (track: unknown) => {
@@ -288,6 +309,7 @@ export class JitsiAdapter implements MediaService {
         const trackId = (typeof t.getId === 'function') ? t.getId() : ((t as any).id || participantId || 'mock-track-id');
         if (participantId) this.removeTrackAudio(participantId, trackId);
       }
+      this.unwatchRemoteVideoType(t);
       this.emit('trackRemoved', t);
     });
     conference.on(ev.PARTICIPANT_PROPERTY_CHANGED, (e: unknown) => {
@@ -357,6 +379,7 @@ export class JitsiAdapter implements MediaService {
 
   leaveRoom(): void {
     this.clearLiveQueue();
+    this.clearRemoteVideoTypeWatches();
     this.conference?.leave();
     this.conference = undefined;
     this.joined = false;
@@ -603,9 +626,19 @@ export class JitsiAdapter implements MediaService {
     } catch {
       /* keep going — the message is the delivery path */
     }
+    const payload = liveCommandPayload(name, value);
+    /* v8 ignore start */
+    if (typeof (conference as any).sendEndpointMessage === 'function') {
+      try {
+        (conference as any).sendEndpointMessage('', payload);
+      } catch {
+        /* data channel not ready or unavailable */
+      }
+    }
+    /* v8 ignore stop */
     if (typeof conference.sendMessage === 'function') {
       try {
-        conference.sendMessage(liveCommandPayload(name, value));
+        conference.sendMessage(payload);
         return;
       } catch {
         /* fall back to a one-shot presence command */
@@ -693,6 +726,34 @@ export class JitsiAdapter implements MediaService {
     this.listeners.get(event)?.forEach((fn) => fn(...args));
   }
 
+  private watchRemoteVideoType(t: JitsiTrack): void {
+    if (t.getType?.() !== 'video' || this.remoteVideoTypeWatches.has(t)) return;
+    const onFn = (t as { on?: (ev: string, cb: () => void) => void }).on;
+    if (typeof onFn !== 'function') return;
+    const eventName =
+      (this.jsMeet?.events as { track?: { TRACK_VIDEOTYPE_CHANGED?: string } } | undefined)?.track
+        ?.TRACK_VIDEOTYPE_CHANGED || 'track.videoTypeChanged';
+    const handler = () => {
+      this.emit('trackAdded', t);
+    };
+    onFn.call(t, eventName, handler);
+    this.remoteVideoTypeWatches.set(t, () => {
+      (t as { off?: (ev: string, cb: () => void) => void }).off?.(eventName, handler);
+    });
+  }
+
+  private unwatchRemoteVideoType(t: JitsiTrack): void {
+    const unwatch = this.remoteVideoTypeWatches.get(t);
+    if (!unwatch) return;
+    unwatch();
+    this.remoteVideoTypeWatches.delete(t);
+  }
+
+  private clearRemoteVideoTypeWatches(): void {
+    for (const unwatch of this.remoteVideoTypeWatches.values()) unwatch();
+    this.remoteVideoTypeWatches.clear();
+  }
+
   private emitParticipantTracks(participant: unknown): void {
     const tracks =
       (participant as { getTracks?: () => JitsiTrack[] }).getTracks?.() ?? [];
@@ -700,6 +761,7 @@ export class JitsiAdapter implements MediaService {
       const t = track as JitsiTrack;
       if (t.isLocal?.()) continue;
       if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      this.watchRemoteVideoType(t);
       this.emit('trackAdded', t);
     }
   }

@@ -6,7 +6,6 @@ import ScreenshareVideo from './ScreenshareVideo.vue';
 import ExpandedScreenshare from './ExpandedScreenshare.vue';
 import AppIcon from '../ui/AppIcon.vue';
 
-import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 const conference = useConferenceStore();
@@ -33,7 +32,7 @@ const screenshares = computed(() => {
   }
 
   for (const [id, user] of Object.entries(conference.users)) {
-    if (user.screenshare && isAdmittedParticipant(features, id)) {
+    if (user.screenshare) {
       list.push({
         id,
         name: user.user?._displayName || 'Friendly Sphere',

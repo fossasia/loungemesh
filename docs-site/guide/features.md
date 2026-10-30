@@ -67,7 +67,7 @@ This guide documents the comprehensive user flows and feature architectures impl
 ## 4. Stage Presentation & Screensharing Flow
 
 ### Requesting & Stepping on Stage
-1. Any participant can request stage access or be invited by the host.
+1. Any participant can be invited or promoted to stage by the host or a moderator when presenter promotion is enabled.
 2. When on stage, `isOnStage` becomes active:
    - Avatar is highlighted with a gold stage badge.
    - Video track subscription constraint escalates from 360p to **720p** (`STAGE_MAX_HEIGHT = 720`).
@@ -76,8 +76,8 @@ This guide documents the comprehensive user flows and feature architectures impl
 ### High-Definition Screensharing
 1. The presenter clicks the **Screenshare Button**.
 2. On a computer, the browser prompt allows selecting an entire screen, application window, or browser tab.
-3. Stream is captured at **720p @ 15–30 fps** with optional system audio sharing. Phones use the system share sheet and the same 720p cap, without desktop-only source locks.
-4. Screenshare renders in a dedicated viewport above the controls, including the sharer's own picture. Every admitted person sees it, even when avatars are far apart on the floor.
+3. Stream is captured at **720p @ 15–30 fps** with optional system audio sharing using headless `lib-jitsi-meet` multi-stream flags (`sourceNameSignaling`, `sendMultipleVideoStreams`, `receiveMultipleVideoStreams`), so camera video and desktop screensharing coexist independently. Phones use the system share sheet and the same 720p cap, without desktop-only source locks.
+4. Screenshare renders in the floating **Shared Screens** dock above the controls (with one-click expand to full view) as well as Stage Spotlight, including the sharer's own picture. Every admitted person sees it, even when avatars are far apart on the floor.
 
 ---
 
@@ -115,10 +115,12 @@ Hosts can open the **Room Settings Modal** to configure:
 - Lobby form: name only, or name and email.
 - Stage promotion permissions.
 - Notes template. The host or a moderator can save it, and that updates the shared document for everyone still in the room.
-- Custom floorplan background. The host or a moderator can save or clear it. Everyone reloads the image, and that reload is repeated on the session heartbeat.
+- Custom floorplan background. The host or a moderator can save or clear it. Everyone reloads the image with `cache: 'no-store'` (or assembles chunked XMPP payloads when unpersisted), and that sync is repeated on the session heartbeat.
 
 ### Moderation Actions
-- **Mute User**: Mute disruptive participants remotely.
+- **Invite Attendees (`Add`) & Share Link (`Share`)**: Hosts and moderators can invite one or more attendee emails live in-call (persisting to `guestEmails` via `POST /api/meetings/state/:roomName/invite`, sending email/Calendar invites, syncing over XMPP `lobby` `invite`, and auto-admitting matching lobby waiters) and copy or native-share the `/session/<roomName>` meeting link from either the top-right bar or the `People` tab.
+- **Mute / Disable Camera**: Soft-mute an attendee's microphone or turn off their camera remotely; the attendee sees a status notice and can re-enable later unless locked.
+- **Lock Mic / Lock Camera**: Force-lock an attendee's microphone and/or camera off so they cannot re-enable it until a host or moderator unlocks it (persisted across re-joins via host/moderator sync).
 - **Kick User**: Eject a participant from the room; the kicked user is routed to `/kicked`. Kicked, access denied, missing routes, the PIN prompt, and the public meeting states use the same light LoungeMesh page and card.
 
 ---

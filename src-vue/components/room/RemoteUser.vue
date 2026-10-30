@@ -48,8 +48,9 @@ const videoTrackKey = computed(() => {
 });
 const isPresenter = computed(() => features.stageOccupantId === props.id);
 const role = computed(() => {
-  if (props.id === features.hostId) return 'host';
-  if (features.userGrants[props.id]?.moderator || conference.users[props.id]?.properties?.role === 'moderator') {
+  conference.usersEpoch;
+  if (features.isParticipantHost(props.id)) return 'host';
+  if (features.isParticipantModerator(props.id)) {
     return 'moderator';
   }
   return 'attendee';
