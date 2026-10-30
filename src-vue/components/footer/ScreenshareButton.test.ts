@@ -172,7 +172,7 @@ describe('ScreenshareButton', () => {
     wrapper.unmount();
   });
 
-  it('disables screenshare while another user is on stage', async () => {
+  it('hides screenshare while another user is on stage', async () => {
     await connectAndJoinTestConference();
     const local = useLocalStore();
     const features = useSessionFeaturesStore();
@@ -180,10 +180,7 @@ describe('ScreenshareButton', () => {
     features.stageOccupantId = 'presenter';
     const createSpy = vi.spyOn(getMediaEngineInstance(), 'createLocalTracks');
     const { wrapper } = await mountWithApp(ScreenshareButton);
-    const btn = wrapper.find('button.ibtn');
-    expect(btn.attributes('disabled')).toBeDefined();
-    expect(btn.attributes('title')).toContain('unavailable while someone is on stage');
-    await btn.trigger('click');
+    expect(wrapper.find('button.ibtn').exists()).toBe(false);
     expect(createSpy).not.toHaveBeenCalled();
     wrapper.unmount();
   });
@@ -217,13 +214,11 @@ describe('ScreenshareButton', () => {
 
     const { wrapper } = await mountWithApp(ScreenshareButton);
 
-    // 1. Trigger click when blocked to cover line 41
     features.stageOccupantId = 'someone-else';
     await flushPromises();
-    await wrapper.findComponent(IconButton).vm.$emit('click');
-    await flushPromises();
+    expect(wrapper.findComponent(IconButton).exists()).toBe(false);
 
-    // 2. Watcher branch: occupantId is falsy
+    // Watcher branch: occupantId is falsy
     features.stageOccupantId = '';
     await flushPromises();
 

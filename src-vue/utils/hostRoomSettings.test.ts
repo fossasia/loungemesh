@@ -11,6 +11,24 @@ describe('hostRoomSettings', () => {
     setActivePinia(createPinia());
   });
 
+  it('broadcasts a moderator wallpaper and ignores attendees', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('mod');
+    features.setHost('host');
+    features.userGrants.mod = { moderator: true };
+    features.gridBackgroundUrl = 'data:image/jpeg;base64,abc';
+    const engine = { sendCommand: vi.fn() };
+    broadcastHostRoomSettings(engine as never, features);
+    expect(engine.sendCommand).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+
+    local.setMyID('guest');
+    features.userGrants = {};
+    engine.sendCommand.mockClear();
+    broadcastHostRoomSettings(engine as never, features);
+    expect(engine.sendCommand).not.toHaveBeenCalled();
+  });
+
   it('ignores broadcasts from non-host participants', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();

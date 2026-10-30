@@ -159,6 +159,13 @@ export const minScale = 0.35;
 export const maxScale = 1.4;
 export const defaultScale = 0.65;
 
+/** Phone floors start further out so a 200px sphere does not fill the screen. */
+export function preferredRoomScale(width = window.innerWidth): number {
+  if (width <= 480) return 0.4;
+  if (width <= 768) return 0.5;
+  return defaultScale;
+}
+
 /** Visible area inside the session UI (below header, above footer). */
 export function visibleViewport(): { width: number; height: number } {
   return {

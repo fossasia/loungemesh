@@ -421,6 +421,15 @@ defineExpose({ open, deleteMessage });
   flex-direction: column;
   top: auto;
 }
+@media (max-width: 768px) {
+  .chatCard {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    bottom: 112px !important;
+    height: min(70dvh, calc(100dvh - 140px)) !important;
+  }
+}
 .messages {
   flex: 1;
   min-height: 0;

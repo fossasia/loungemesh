@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useAuthStore } from '@/stores/authStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
@@ -18,6 +19,19 @@ import {
 
 export type CommandPayload = { value: string };
 
+export function buildHelloCommand(id: string): string {
+  const local = useLocalStore();
+  const conference = useConferenceStore();
+  const auth = useAuthStore();
+  return JSON.stringify({
+    id,
+    userKey: local.userKey,
+    pos: local.pos,
+    name: conference.displayName,
+    email: auth.user?.email || undefined,
+  });
+}
+
 const processedStageCommandIds = new Set<string>();
 
 function parse<T>(payload: CommandPayload): T | null {
@@ -29,14 +43,52 @@ function parse<T>(payload: CommandPayload): T | null {
 }
 
 /* v8 ignore start */
-function canModerateLobby(
-  senderId: string,
+function sameEmail(left?: string, right?: string): boolean {
+  const a = left?.trim().toLowerCase() || '';
+  const b = right?.trim().toLowerCase() || '';
+  return !!a && a === b;
+}
+
+/** Host or moderator room controls. A matching email still counts while hostId is the database id. */
+export function canApplyRoomControl(
+  senderId: string | undefined,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  conference: ReturnType<typeof useConferenceStore>,
+  email?: string,
+): boolean {
+  if (!senderId) return true;
+  if (features.hostId && senderId === features.hostId) return true;
+  if (features.userGrants[senderId]?.moderator) return true;
+  if (conference.users[senderId]?.properties?.role === 'moderator') return true;
+  if (sameEmail(email, features.hostEmail)) return true;
+  return features.moderatorEmails.some((item) => sameEmail(email, item));
+}
+
+/** Room-wide settings stay with the meeting host. */
+export function canApplyHostSettings(
+  senderId: string | undefined,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  email?: string,
+): boolean {
+  if (!senderId) return true;
+  if (features.hostId && senderId === features.hostId) return true;
+  return sameEmail(email, features.hostEmail);
+}
+
+/** Host can moderate anyone. A moderator cannot mute or remove the host or another moderator. */
+function canModerateParticipant(
+  senderId: string | undefined,
+  targetId: string,
   features: ReturnType<typeof useSessionFeaturesStore>,
   conference: ReturnType<typeof useConferenceStore>,
 ): boolean {
-  if (features.hostId === senderId) return true;
-  if (features.userGrants[senderId]?.moderator) return true;
-  return conference.users[senderId]?.properties?.role === 'moderator';
+  if (!senderId) return true;
+  if (!canApplyRoomControl(senderId, features, conference)) return false;
+  if (canApplyHostSettings(senderId, features)) return true;
+  if (targetId && targetId === features.hostId) return false;
+  if (targetId && features.userGrants[targetId]?.moderator) return false;
+  if (targetId && conference.users[targetId]?.properties?.role === 'moderator') return false;
+  return true;
 }
 
 function isSenderModeratorOrHost(senderId: string | undefined, features: ReturnType<typeof useSessionFeaturesStore>): boolean {
@@ -55,7 +107,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
 
   switch (name) {
     case 'hello': {
-      const data = parse<{ id?: string; userKey?: string; pos?: { x: number; y: number }; name?: string }>(payload);
+      const data = parse<{ id?: string; userKey?: string; pos?: { x: number; y: number }; name?: string; email?: string }>(payload);
       if (!data?.id || data.id === local.id || (senderId && data.id !== senderId)) break;
       if (data.userKey) {
         conference.dedupeUserByKey(data.id, data.userKey);
@@ -71,6 +123,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       if (data.name) {
         conference.updateUserDisplayName(data.id, data.name);
       }
+      features.admitParticipantEmail(data.id, data.email);
       conference.recordUserHeartbeat(data.id);
       break;
     }
@@ -79,15 +132,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       if (!data?.from || data.from === local.id) break;
       const engine = getMediaEngineInstance();
       if (engine && local.id) {
-        engine.sendCommand(
-          'hello',
-          JSON.stringify({
-            id: local.id,
-            userKey: local.userKey,
-            pos: local.pos,
-            name: conference.displayName,
-          }),
-        );
+        engine.sendCommand('hello', buildHelloCommand(local.id));
       }
       break;
     }
@@ -124,7 +169,9 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         reason?: string;
       }>(payload);
       if (!data) break;
-      if (data.enabled != null) features.lobbyEnabled = data.enabled;
+      if (data.enabled != null && canApplyHostSettings(senderId, features, data.email)) {
+        features.lobbyEnabled = data.enabled;
+      }
       if (data.action === 'wait' && data.id && data.name) {
         features.addLobbyWaiter({
           id: data.id,
@@ -141,11 +188,12 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         features.rejectLobby(data.id);
       }
       if (data.action === 'approve' && data.id) {
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
         features.approveLobby(data.id);
         if (data.id === local.id) features.localLobbyPending = false;
       }
       if (data.action === 'reject' && data.id) {
-        if (senderId && !canModerateLobby(senderId, features, conference)) break;
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
         features.rejectLobby(data.id);
         if (data.id === local.id) {
           features.localLobbyPending = false;
@@ -259,11 +307,13 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
     }
     case 'room': {
       const data = parse<
-        import('@/utils/roomBackgroundSync').RoomBackgroundCommand | {
-          gridBackgroundUrl?: string | null;
-        }
+        (
+          | import('@/utils/roomBackgroundSync').RoomBackgroundCommand
+          | { gridBackgroundUrl?: string | null }
+        ) & { email?: string }
       >(payload);
       if (!data) break;
+      if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
       if ('action' in data && data.action) {
         features.applyRoomBackgroundCommand(data);
         break;
@@ -280,10 +330,17 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         import('@/utils/sessionAccess').AccessCommandPayload & {
           notes?: boolean;
           whiteboard?: boolean;
+          email?: string;
         }
       >(payload);
       if (!data) break;
-      if (senderId && features.hostId && senderId !== features.hostId) break;
+      if (!canApplyRoomControl(senderId, features, conference, data.email)) break;
+      if (senderId && !canApplyHostSettings(senderId, features, data.email)) {
+        const grants = data.grants ? { ...data.grants } : undefined;
+        if (grants) delete grants.moderator;
+        features.applyAccessUpdate({ userId: data.userId, grants });
+        break;
+      }
       features.applyAccessUpdate(data);
       break;
     }
@@ -291,11 +348,13 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       const data = parse<{
         allowParticipantRecording?: boolean;
         lobbyEnabled?: boolean;
+        lobbyForm?: 'name' | 'details';
         stagePromotionEnabled?: boolean;
         enabledFeatures?: Partial<Record<import('@/utils/featureAccess').GatedFeatureKey, boolean>>;
+        email?: string;
       }>(payload);
       if (data) {
-        if (senderId && features.hostId && senderId !== features.hostId) break;
+        if (!canApplyHostSettings(senderId, features, data.email)) break;
         features.applyConfigUpdate(data);
       }
       break;
@@ -387,10 +446,12 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
     case 'mod': {
       const data = parse<{ action?: string; id?: string }>(payload);
       if (data?.action === 'kick' && data.id === local.id) {
+        if (!canModerateParticipant(senderId, data.id, features, conference)) break;
         conference.leaveConference();
         window.location.href = '/kicked';
       }
       if (data?.action === 'mute' && data.id) {
+        if (!canModerateParticipant(senderId, data.id, features, conference)) break;
         if (data.id === local.id && !local.mute) {
           void local.toggleMute();
         } else if (conference.users[data.id]) {
@@ -438,13 +499,17 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       }
       if (data.action === 'invite' && data.id) {
+        if (senderId && !canApplyHostSettings(senderId, features)) break;
         const engine = getMediaEngineInstance();
         applyStageInvite(engine, data.id);
       }
       if (data.action === 'promote' && data.id) {
+        if (senderId && !canApplyHostSettings(senderId, features)) break;
         applyStagePromote(data.id);
       }
       if (data.action === 'demote' && data.id) {
+        const self = !!senderId && senderId === data.id;
+        if (senderId && !self && !canApplyRoomControl(senderId, features, conference)) break;
         applyStageDemote(data.id);
       }
       if (data.action === 'layout' && data.layout) {
@@ -453,6 +518,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       }
       if (data.action === 'settings' && data.stagePromotionEnabled != null) {
+        if (senderId && !canApplyHostSettings(senderId, features)) break;
         features.stagePromotionEnabled = data.stagePromotionEnabled;
       }
       break;

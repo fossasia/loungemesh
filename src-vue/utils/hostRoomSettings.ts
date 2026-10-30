@@ -9,7 +9,7 @@ export function broadcastHostRoomSettings(
   features: SessionFeatures,
   { announceClear = false }: { announceClear?: boolean } = {},
 ): void {
-  if (!features.isHost) return;
+  if (!features.isHost && !features.isModerator) return;
   if (!features.gridBackgroundUrl && !announceClear) return;
   for (const command of buildRoomBackgroundCommands(features.gridBackgroundUrl)) {
     engine.sendCommand('room', JSON.stringify(command));

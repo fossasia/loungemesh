@@ -29,7 +29,7 @@ describe('AccessDeniedPage', () => {
         props: reason ? { reason } : {},
         global: { plugins: [createPinia()] },
       });
-      expect(wrapper.find('.denied-msg').text().length).toBeGreaterThan(10);
+      expect(wrapper.find('.message').text().length).toBeGreaterThan(10);
       wrapper.unmount();
     });
   }

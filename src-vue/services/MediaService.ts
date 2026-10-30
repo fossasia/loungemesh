@@ -76,6 +76,8 @@ export interface MediaService {
   refreshRemoteAudio?(): void;
   /** Drop remote playback while this client is waiting in the lobby. */
   setRemotePlaybackSuppressed?(suppressed: boolean): void;
+  /** Drop one participant's audio until they are admitted. */
+  setParticipantPlaybackSuppressed?(userId: string, suppressed: boolean): void;
   setReceiverConstraints(constraints: ReceiverConstraints): void;
   setDisplayName(name: string): void;
   setLocalParticipantProperty(key: string, value: unknown): void;

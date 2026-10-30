@@ -25,6 +25,9 @@ export async function startLocalScreenshare(engine: MediaService): Promise<void>
   if (!conf) return;
   const tracks = await engine.createLocalTracks(['desktop']);
   const newTrack = tracks.find((t: any) => t.getType?.() === 'video') ?? tracks[0];
+  if (newTrack && newTrack.getType?.() === 'video' && newTrack.videoType == null) {
+    newTrack.videoType = 'desktop';
+  }
   if (!newTrack || newTrack.videoType !== 'desktop') return;
 
   await engine.addLocalTrack(newTrack);

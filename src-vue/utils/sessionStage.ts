@@ -42,13 +42,18 @@ export function canPromoteToStage(
   return { ok: true };
 }
 
-export function canDemoteFromStage(isHost: boolean, stageOccupantId: string, targetId: string): boolean {
+export function canDemoteFromStage(
+  isHost: boolean,
+  stageOccupantId: string,
+  targetId: string,
+  isModerator = false,
+): boolean {
   const local = useLocalStore();
   const features = useSessionFeaturesStore();
   const isSelf = !!(local.id && local.id === targetId);
   const isOccupant = stageOccupantId === targetId;
   const isInvited = features.invitedStageUserId === targetId || (isSelf && features.stageInvitationPending);
-  return (isHost || isSelf) && (isOccupant || isInvited);
+  return (isHost || isModerator || isSelf) && (isOccupant || isInvited);
 }
 
 function sendStageCommand(engine: MediaService, command: StageCommand): void {
@@ -147,7 +152,7 @@ export function promoteToStage(engine: MediaService, targetId: string): { ok: tr
 
 export function demoteFromStage(engine: MediaService, targetId: string): void {
   const features = useSessionFeaturesStore();
-  if (!canDemoteFromStage(features.isHost, features.stageOccupantId, targetId)) return;
+  if (!canDemoteFromStage(features.isHost, features.stageOccupantId, targetId, features.isModerator)) return;
   sendStageCommand(engine, { action: 'demote', id: targetId });
   applyStageDemote(targetId);
 }

@@ -176,9 +176,8 @@ describe('useWhiteboard', () => {
       new PointerEvent('pointerup', { clientX: 20, clientY: 20, pointerId: 1, bubbles: true }),
     );
 
-    expect(features.whiteboardStrokes).toHaveLength(0);
-    expect(features.pendingModerationChanges).toHaveLength(1);
-    expect(features.pendingModerationChanges[0].type).toBe('whiteboard');
+    expect(features.whiteboardStrokes).toHaveLength(1);
+    expect(features.pendingModerationChanges).toHaveLength(0);
     wrapper.unmount();
   });
 

@@ -13,6 +13,7 @@ import ExpandedScreenshare from './ExpandedScreenshare.vue';
 describe('SharedScreens', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
   });
 
   it('hides screenshares while the local person is waiting in the lobby', async () => {
@@ -240,6 +241,24 @@ describe('SharedScreens', () => {
     await nextTick();
     expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
 
+    wrapper.unmount();
+  });
+
+  it('shows a distant screenshare on a phone', async () => {
+    const local = useLocalStore();
+    local.pos = { x: 0, y: 0 };
+    const conference = useConferenceStore();
+    conference.addUser('far-user', { _displayName: 'Far User' });
+    const user = conference.users['far-user'];
+    user.screenshare = makeTrack('desktop');
+    user.pos = { x: 1000, y: 1000 };
+    const { wrapper } = await mountWithApp(SharedScreens);
+    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
+    window.innerWidth = 390;
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+    expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
+    window.innerWidth = 1024;
     wrapper.unmount();
   });
 

@@ -59,6 +59,7 @@ describe('sessionStage', () => {
 
     // Non-host demoting another user
     expect(canDemoteFromStage(false, 'u1', 'u2')).toBe(false);
+    expect(canDemoteFromStage(false, 'u2', 'u2', true)).toBe(true);
 
     // Host canceling invitation for invited guest
     const features = useSessionFeaturesStore();

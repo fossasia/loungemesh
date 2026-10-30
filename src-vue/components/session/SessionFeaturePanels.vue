@@ -31,6 +31,12 @@ const panelBottom = sessionPanelLayout.bottom;
 const panelRight = sessionPanelLayout.right;
 const notesWidth = notesPanelWidth;
 
+const grantKeys = computed(() => {
+  const keys = Object.keys(featureLabels) as FeatureKey[];
+  if (features.isHost) return keys;
+  return keys.filter((key) => key !== 'moderator');
+});
+
 const featureLabels: Record<FeatureKey, string> = {
   notes: 'Notes',
   whiteboard: 'Board',
@@ -46,6 +52,7 @@ import { downloadBlob, markdownToRtf } from '@/utils/sessionExport';
 const features = useSessionFeaturesStore();
 const conference = useConferenceStore();
 const local = useLocalStore();
+const auth = useAuthStore();
 const { engine } = useMediaEngine();
 const route = useRoute();
 const roomId = computed(() => String(route.params.id || ''));
@@ -109,21 +116,8 @@ const { push: pushNotes, flush: flushNotes, cancel: cancelNotes, dispose: dispos
   () => notesDraft.value,
     (text) => {
       if (!shouldPublishNotesDraft(text, features.sharedNotes)) return;
-      if (features.canModerate) {
-        features.updateSharedNotes(text, true);
-      } else {
-        const changeId = `mod-notes-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const change = {
-          id: changeId,
-          type: 'notes' as const,
-          authorId: local.id || engine.getLocalUserId() || '',
-          authorName: conference.displayName || 'Participant',
-          payload: text,
-          timestamp: Date.now(),
-        };
-        features.addModerationChange(change, engine);
-        engine.sendCommand('mod_change', JSON.stringify({ action: 'propose', ...change }));
-      }
+      features.updateSharedNotes(text, true);
+      broadcastSharedNotes(engine, text);
     },
 );
 
@@ -132,7 +126,7 @@ const pendingNotesChanges = computed(() =>
 );
 
 const canResetNotesToTemplate = computed(
-  () => features.isHost && !!features.notesTemplate.trim(),
+  () => (features.isHost || features.isModerator) && !!features.notesTemplate.trim(),
 );
 
 function resetNotesToTemplate() {
@@ -159,8 +153,15 @@ function syncLobby() {
   void features.updateRoomConfig(roomId.value, { lobbyEnabled: features.lobbyEnabled }, engine);
 }
 
+function controlEmail(): string {
+  return (auth.user?.email || features.hostEmail || '').trim();
+}
+
 function syncRoomDefaults() {
-  engine.sendCommand('access', JSON.stringify({ defaults: features.roomDefaults }));
+  engine.sendCommand('access', JSON.stringify({
+    defaults: features.roomDefaults,
+    email: controlEmail(),
+  }));
 }
 
 function syncUserGrants(userId: string) {
@@ -168,7 +169,8 @@ function syncUserGrants(userId: string) {
     'access',
     JSON.stringify({
       userId,
-      grants: features.grantsForUser(userId),
+      grants: features.userGrants[userId] ?? {},
+      email: controlEmail(),
     }),
   );
 }
@@ -176,6 +178,11 @@ function syncUserGrants(userId: string) {
 function onRoomDefaultChange(key: FeatureKey, event: Event) {
   const checked = (event.target as HTMLInputElement).checked;
   features.setRoomDefault(key, checked);
+  for (const uid of participantIds.value) {
+    if (uid === features.hostId) continue;
+    features.setUserGrant(uid, key, checked);
+    syncUserGrants(uid);
+  }
   syncRoomDefaults();
 }
 
@@ -186,12 +193,12 @@ function onUserGrantChange(userId: string, key: FeatureKey, event: Event) {
 }
 
 function approve(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId }));
+  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId, email: features.controlEmail }));
   features.approveLobby(entryId);
 }
 
 function reject(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId }));
+  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId, email: features.controlEmail }));
   features.rejectLobby(entryId);
 }
 
@@ -298,6 +305,12 @@ const title = computed(() => {
   }
 });
 
+function canModerateUser(uid: string): boolean {
+  if (uid === local.id || uid === features.hostId) return false;
+  if (features.isHost) return true;
+  return features.isModerator && !isModeratorUser(uid);
+}
+
 function isModeratorUser(uid: string): boolean {
   if (uid === features.hostId) return false;
   if (uid === local.id && features.isModerator) return true;
@@ -337,12 +350,13 @@ const featureCardStyle = computed(() => {
     </template>
     <div v-if="features.panel === 'moderator'" class="body modBody">
       <HostRoomSettingsSection v-if="features.isHost" />
+      <HostRoomSettingsSection v-else-if="features.isModerator" appearance-only />
 
       <p v-if="features.stageMessage" class="stageMessage" role="status">{{ features.stageMessage }}</p>
 
       <section class="section">
-        <div class="roomControls">
-          <label v-if="features.isHost" class="roomToggle">
+        <div v-if="features.isHost" class="roomControls">
+          <label class="roomToggle">
             <input v-model="features.lobbyEnabled" type="checkbox" @change="syncLobby" />
             <span>Lobby</span>
           </label>
@@ -354,7 +368,7 @@ const featureCardStyle = computed(() => {
             />
             <span>Allow presenter promotion</span>
           </label>
-          <label v-if="features.isHost" class="roomToggle">
+          <label class="roomToggle">
             <input
               v-model="features.allowParticipantRecording"
               type="checkbox"
@@ -375,12 +389,9 @@ const featureCardStyle = computed(() => {
         </div>
       </section>
 
-      <section v-if="features.canModerate" class="section">
+      <section v-if="features.canModerate && features.pendingModerationChanges.length" class="section">
         <h3 class="sectionTitle">Whiteboard & Notes Review</h3>
-        <p v-if="features.pendingModerationChanges.length === 0" class="sectionHint">
-          No pending changes to review.
-        </p>
-        <div v-else class="modQueueList" data-testid="mod-queue-list">
+        <div class="modQueueList" data-testid="mod-queue-list">
           <div
             v-for="item in features.pendingModerationChanges"
             :key="item.id"
@@ -416,7 +427,7 @@ const featureCardStyle = computed(() => {
         <div class="grantTable" role="presentation">
           <span class="grantCorner" aria-hidden="true" />
           <span
-            v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+            v-for="key in grantKeys"
             :key="`head-${key}`"
             class="grantColHead"
           >
@@ -424,7 +435,7 @@ const featureCardStyle = computed(() => {
           </span>
           <span class="grantRowLabel">Everyone</span>
           <label
-            v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+            v-for="key in grantKeys"
             :key="`room-${key}`"
             class="grantCheck"
           >
@@ -480,7 +491,7 @@ const featureCardStyle = computed(() => {
                 {{ uid === features.stageOccupantId ? 'Remove presenter' : 'Cancel invite' }}
               </button>
               <button
-                v-if="uid !== features.hostId && (features.isHost || !isModeratorUser(uid))"
+                v-if="canModerateUser(uid)"
                 type="button"
                 class="pill subtle iconBtnOnly"
                 title="Mute"
@@ -489,7 +500,7 @@ const featureCardStyle = computed(() => {
                 <AppIcon name="mic-off" :size="16" />
               </button>
               <button
-                v-if="uid !== features.hostId && (features.isHost || !isModeratorUser(uid))"
+                v-if="canModerateUser(uid)"
                 type="button"
                 class="pill warn iconBtnOnly"
                 title="Remove"
@@ -499,10 +510,10 @@ const featureCardStyle = computed(() => {
               </button>
             </div>
           </div>
-          <div v-if="features.isHost && uid !== features.hostId" class="grantTable" role="presentation">
+          <div v-if="(features.isHost || features.isModerator) && uid !== features.hostId" class="grantTable" role="presentation">
             <span class="grantCorner" aria-hidden="true" />
             <span
-              v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+              v-for="key in grantKeys"
               :key="`head-${uid}-${key}`"
               class="grantColHead"
             >
@@ -510,7 +521,7 @@ const featureCardStyle = computed(() => {
             </span>
             <span class="grantRowLabel">Permissions</span>
             <label
-              v-for="key in (Object.keys(featureLabels) as FeatureKey[])"
+              v-for="key in grantKeys"
               :key="`${uid}-${key}`"
               class="grantCheck"
             >
@@ -654,6 +665,19 @@ const featureCardStyle = computed(() => {
 }
 .featureCard.notesCard {
   max-height: min(720px, calc(100vh - 100px));
+}
+@media (max-width: 768px) {
+  .featureCard,
+  .featureCard.modCard,
+  .featureCard.notesCard {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    bottom: 112px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: calc(100dvh - 140px) !important;
+  }
 }
 .notesCard :deep(.header) {
   align-items: center;

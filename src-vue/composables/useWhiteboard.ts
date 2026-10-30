@@ -2,8 +2,6 @@ import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { WHITEBOARD_DEFAULT_PEN } from '@/constants/whiteboardPens';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
-import { useConferenceStore } from '@/stores/conferenceStore';
-import { useLocalStore } from '@/stores/localStore';
 import type { WhiteboardStroke } from '@/utils/whiteboardSync';
 import {
   clientToCanvasPoint,
@@ -34,24 +32,8 @@ export function useWhiteboard(active: () => boolean, canDraw: () => boolean) {
   }
 
   function publishStroke(stroke: WhiteboardStroke, isLocal = false) {
-    if (features.canModerate) {
-      features.addWhiteboardStroke(stroke, isLocal);
-      engine.sendCommand('wb', JSON.stringify({ action: 'stroke', stroke }));
-    } else {
-      const changeId = `mod-wb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const conf = useConferenceStore();
-      const local = useLocalStore();
-      const change = {
-        id: changeId,
-        type: 'whiteboard' as const,
-        authorId: local.id,
-        authorName: conf.displayName,
-        payload: stroke,
-        timestamp: Date.now(),
-      };
-      features.addModerationChange(change, engine);
-      engine.sendCommand('mod_change', JSON.stringify({ action: 'propose', ...change }));
-    }
+    features.addWhiteboardStroke(stroke, isLocal);
+    engine.sendCommand('wb', JSON.stringify({ action: 'stroke', stroke }));
   }
 
   function onCanvasDown(e: PointerEvent) {

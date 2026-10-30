@@ -37,6 +37,7 @@ describe('LobbyOverlay', () => {
   });
 
   it('hides when not blocked', async () => {
+    useSessionFeaturesStore().lobbyEnabled = false;
     const { wrapper } = await mountWithApp(LobbyOverlay);
     expect(wrapper.find('.lobby').exists()).toBe(false);
     wrapper.unmount();
@@ -107,6 +108,7 @@ describe('LobbyOverlay', () => {
   it('handles guest join validations and submission', async () => {
     const features = useSessionFeaturesStore();
     features.lobbyEnabled = true;
+    features.lobbyForm = 'details';
     features.localLobbyPending = false;
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
@@ -116,6 +118,10 @@ describe('LobbyOverlay', () => {
     await wrapper.find('form').trigger('submit');
     expect(wrapper.find('.errorAlert').exists()).toBe(true);
     expect(wrapper.find('.errorAlert').text()).toBe('Please enter your name.');
+
+    await wrapper.find('#lobbyGuestName').setValue('Test Guest');
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.find('.errorAlert').text()).toBe('Please enter your email.');
 
     // Fill valid name, email, and reason
     await wrapper.find('#lobbyGuestName').setValue('Test Guest');

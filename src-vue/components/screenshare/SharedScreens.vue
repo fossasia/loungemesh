@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import ScreenshareVideo from './ScreenshareVideo.vue';
@@ -7,6 +7,8 @@ import ExpandedScreenshare from './ExpandedScreenshare.vue';
 import AppIcon from '../ui/AppIcon.vue';
 
 import { getVectorDistance } from '@/utils/vector';
+import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
+import { shouldShowRemoteShare } from '@/utils/screenshareCapture';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 const conference = useConferenceStore();
@@ -14,6 +16,14 @@ const local = useLocalStore();
 const features = useSessionFeaturesStore();
 
 const isCollapsed = ref(false);
+const viewportWidth = ref(window.innerWidth);
+
+function syncViewport() {
+  viewportWidth.value = window.innerWidth;
+}
+
+onMounted(() => window.addEventListener('resize', syncViewport));
+onUnmounted(() => window.removeEventListener('resize', syncViewport));
 const poppedOutIds = ref<string[]>([]);
 const showLocalPreview = ref(false);
 
@@ -34,10 +44,10 @@ const screenshares = computed(() => {
   }
 
   for (const [id, user] of Object.entries(conference.users)) {
-    if (user.screenshare) {
+    if (user.screenshare && isAdmittedParticipant(features, id)) {
       const dist = getVectorDistance(local.pos, user.pos);
       const isPresenter = features.stageOccupantId === id;
-      if (dist > 650 && !isPresenter) {
+      if (!shouldShowRemoteShare(dist, isPresenter, viewportWidth.value)) {
         continue;
       }
       list.push({
@@ -281,6 +291,17 @@ function toggleScreenshareAudio(item: any) {
   flex-direction: column;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@media (max-width: 768px) {
+  .sharedScreensBox {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 112px;
+    width: auto;
+    max-height: min(42dvh, calc(100dvh - 160px));
+  }
 }
 
 .boxHeader {

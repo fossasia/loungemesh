@@ -63,22 +63,27 @@ describe('sessionFeaturesStore', () => {
 
   it('prevents non-authorized users from toggling restricted panels', () => {
     const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('guest');
     features.setHost('real-host');
     features.isVerifiedHost = false;
     features.isVerifiedModerator = false;
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false, moderator: false };
 
     features.panel = '';
     features.togglePanel('poll');
-    expect(features.panel).toBe('');
+    expect(features.panel).toBe('poll');
 
     features.togglePanel('moderator');
-    expect(features.panel).toBe('');
+    expect(features.panel).toBe('poll');
 
+    features.userGrants.guest = { notes: false, whiteboard: false, poll: false, moderator: false };
+
+    features.panel = '';
     features.togglePanel('notes');
     expect(features.panel).toBe('');
-
     features.togglePanel('whiteboard');
+    expect(features.panel).toBe('');
+    features.togglePanel('poll');
     expect(features.panel).toBe('');
   });
 
@@ -152,6 +157,8 @@ describe('sessionFeaturesStore', () => {
     features.resetHostForJoin();
     features.pendingHostClaim = false;
     expect(features.isHost).toBe(false);
+    expect(features.canUseNotes).toBe(true);
+    features.userGrants.first = { notes: false };
     expect(features.canUseNotes).toBe(false);
     expect(features.lobbyEnabled).toBe(true);
   });
@@ -188,6 +195,40 @@ describe('sessionFeaturesStore', () => {
     expect(engine.sendCommand).not.toHaveBeenCalledWith('host', expect.any(String));
   });
 
+  it('writes the notes template into the document and repeats grants', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const engine = { sendCommand: vi.fn() };
+    local.setMyID('host');
+    expect(features.publishNotesTemplate(engine)).toBe(false);
+    features.seedNotesDocumentIfEmpty();
+    features.sharedNotes = 'Late note';
+    features.seedNotesDocumentIfEmpty();
+    features.seedNotesDocumentIfEmpty();
+    features.isVerifiedHost = true;
+    features.setHost('host');
+    features.setNotesTemplate('# Agenda');
+    features.isVerifiedHost = false;
+    local.setMyID('mod');
+    features.userGrants.mod = { moderator: true };
+    expect(features.publishNotesTemplate(engine)).toBe(true);
+    features.isVerifiedHost = true;
+    local.setMyID('host');
+    features.setHost('host');
+    expect(features.publishNotesTemplate(engine)).toBe(true);
+    expect(engine.sendCommand).toHaveBeenCalledWith('notes', expect.stringContaining('yjs_begin'));
+    features.userGrants.guest = { notes: false };
+    engine.sendCommand.mockClear();
+    features.resendSessionIdentity(engine);
+    expect(engine.sendCommand).toHaveBeenCalledWith('access', expect.stringContaining('"notes":false'));
+    features.isVerifiedHost = false;
+    features.isVerifiedModerator = true;
+    engine.sendCommand.mockClear();
+    features.resendSessionIdentity(engine);
+    expect(engine.sendCommand).toHaveBeenCalledWith('access', expect.stringContaining('"notes":false'));
+    expect(engine.sendCommand).not.toHaveBeenCalledWith('host', expect.any(String));
+  });
+
   it('claims host on join after resetHostForJoin', () => {
     const features = useSessionFeaturesStore();
     features.resetHostForJoin();
@@ -219,15 +260,16 @@ describe('sessionFeaturesStore', () => {
     local.setMyID('guest');
     features.setHost('host');
     features.togglePanel('notes');
-    expect(features.panel).toBe('');
-    features.togglePanel('whiteboard');
-    expect(features.panel).toBe('');
-    features.setRoomDefault('notes', true);
-    features.togglePanel('notes');
     expect(features.panel).toBe('notes');
-    features.setRoomDefault('whiteboard', true);
+    features.panel = '';
     features.togglePanel('whiteboard');
     expect(features.panel).toBe('whiteboard');
+    features.userGrants.guest = { notes: false, whiteboard: false };
+    features.panel = '';
+    features.togglePanel('notes');
+    expect(features.panel).toBe('');
+    features.togglePanel('whiteboard');
+    expect(features.panel).toBe('');
     expect(features.canClearWhiteboard).toBe(false);
     local.setMyID('host');
     expect(features.canClearWhiteboard).toBe(true);
@@ -244,6 +286,9 @@ describe('sessionFeaturesStore', () => {
       grants: { poll: true },
     });
     expect(features.grantsForUser('u2').poll).toBe(true);
+    features.setHost('host');
+    expect(features.grantsForUser('').notes).toBe(true);
+    expect(features.grantsForUser('host').notes).toBe(true);
   });
 
   it('keeps later room defaults when a join sync sends empty per-user grants', () => {
@@ -451,6 +496,11 @@ describe('sessionFeaturesStore', () => {
     local.setMyID('guest');
     features.setHost('host');
     expect(features.applyNotesTemplateIfNeeded()).toBe(false);
+
+    features.sharedNotes = '';
+    local.setMyID('mod');
+    features.userGrants.mod = { moderator: true };
+    expect(features.applyNotesTemplateIfNeeded()).toBe(true);
   });
 
   it('resets shared notes to the host template on demand', () => {
@@ -469,7 +519,11 @@ describe('sessionFeaturesStore', () => {
     features.setHost('host');
     features.sharedNotes = 'guest edit';
     expect(features.resetSharedNotesToTemplate()).toBe(false);
-    expect(features.sharedNotes).toBe('guest edit');
+
+    local.setMyID('mod');
+    features.userGrants.mod = { moderator: true };
+    expect(features.resetSharedNotesToTemplate()).toBe(true);
+    expect(features.sharedNotes).toBe('# Agenda');
 
     local.setMyID('host');
     features.setHost('host');
@@ -699,6 +753,7 @@ describe('sessionFeaturesStore', () => {
     // With specific capabilities
     features.capabilities = ['whiteboard', 'poll_manage', 'moderate'];
     expect(features.canUseNotes).toBe(false);
+    expect(features.canUseChat).toBe(true);
     expect(features.canUseWhiteboard).toBe(true);
     expect(features.canUsePoll).toBe(true);
     expect(features.canPromoteToStage).toBe(true);
@@ -758,16 +813,16 @@ describe('sessionFeaturesStore', () => {
     features.capabilities = ['moderate'];
     expect(features.canManagePoll).toBe(true);
 
-    // Guest in standard room without poll grant cannot request poll
+    // Guest in a standard room can request a poll until it is revoked
     features.setHost('other-host');
     features.eventyayMeet = false;
     features.capabilities = [];
-    features.roomDefaults.poll = false;
+    expect(features.canRequestPoll).toBe(true);
+    expect(features.canAccessPoll).toBe(true);
+    features.userGrants['attendee-1'] = { poll: false };
     expect(features.canRequestPoll).toBe(false);
     expect(features.canAccessPoll).toBe(false);
-
-    // Guest in standard room with poll grant can request poll
-    features.roomDefaults.poll = true;
+    features.userGrants['attendee-1'] = { poll: true };
     expect(features.canRequestPoll).toBe(true);
     expect(features.canAccessPoll).toBe(true);
 

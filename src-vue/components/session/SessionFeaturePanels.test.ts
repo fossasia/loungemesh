@@ -57,7 +57,7 @@ describe('SessionFeaturePanels', () => {
     await ta.trigger('blur');
     vi.advanceTimersByTime(500);
     expect(features.sharedNotes).toBe('blur published');
-    expect(cmdSpy).not.toHaveBeenCalled();
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.any(String));
     wrapper.unmount();
   });
 
@@ -118,6 +118,8 @@ describe('SessionFeaturePanels', () => {
     conference.addUser('host', { _displayName: 'Host' } as never);
     conference.addUser('peer', { _displayName: 'Peer' } as never);
     features.panel = 'moderator';
+    features.lobbyEnabled = false;
+    features.stagePromotionEnabled = false;
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountPanels();
     await flushPromises();
@@ -139,7 +141,7 @@ describe('SessionFeaturePanels', () => {
     await muteBtn!.trigger('click');
     await removeBtn!.trigger('click');
     const peerGrant = peerCard!.find('.grantCheck input');
-    await peerGrant.setValue(true);
+    await peerGrant.setValue(false);
     expect(cmdSpy).toHaveBeenCalledWith('access', expect.stringContaining('"userId":"peer"'));
     wrapper.unmount();
   });
@@ -169,7 +171,7 @@ describe('SessionFeaturePanels', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
+    features.userGrants.guest = { notes: false, whiteboard: false, poll: false };
     features.panel = 'notes';
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
     const { wrapper } = await mountPanels();
@@ -442,8 +444,10 @@ describe('SessionFeaturePanels', () => {
     local.setMyID('mod1');
     features.setHost('host1');
     features.userGrants['mod1'] = { moderator: true };
+    features.userGrants['mod2'] = { moderator: true };
     conference.addUser('host1', { _displayName: 'Host User' } as never);
     conference.addUser('mod1', { _displayName: 'Mod User' } as never);
+    conference.addUser('mod2', { _displayName: 'Other Mod' } as never);
     conference.addUser('attendee1', { _displayName: 'Attendee User' } as never);
     features.panel = 'moderator';
 
@@ -451,14 +455,27 @@ describe('SessionFeaturePanels', () => {
     await flushPromises();
 
     expect(wrapper.find('.title').text()).toBe('Moderator Controls');
-    expect(wrapper.findComponent({ name: 'HostRoomSettingsSection' }).exists()).toBe(false);
-    expect(wrapper.find('.grantTable').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Room appearance');
+    expect(wrapper.text()).toContain('Notes template');
+    expect(wrapper.text()).not.toContain('What people in the lobby enter');
+    expect(wrapper.text()).not.toContain('Room features');
+    expect(wrapper.text()).not.toContain('Allow presenter promotion');
+    expect(wrapper.text()).not.toContain('Allow participant recording');
+    expect(wrapper.text()).not.toContain('Whiteboard & Notes Review');
+    expect(wrapper.find('.grantTable').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Default permissions');
 
     // Host user card cannot be muted or kicked by moderator
     const hostCard = wrapper.findAll('.participantCard').find((c) => c.text().includes('Host User'));
     expect(hostCard).toBeTruthy();
     expect(hostCard!.find('button[title="Mute"]').exists()).toBe(false);
     expect(hostCard!.find('button[title="Remove"]').exists()).toBe(false);
+
+    const selfCard = wrapper.findAll('.participantCard').find((c) => c.text().includes('You'));
+    expect(selfCard!.find('button[title="Mute"]').exists()).toBe(false);
+    const otherModCard = wrapper.findAll('.participantCard').find((c) => c.text().includes('Other Mod'));
+    expect(otherModCard!.find('button[title="Mute"]').exists()).toBe(false);
+    expect(otherModCard!.find('button[title="Remove"]').exists()).toBe(false);
 
     // Attendee card can be muted and kicked by moderator
     const attendeeCard = wrapper.findAll('.participantCard').find((c) => c.text().includes('Attendee User'));
@@ -486,6 +503,12 @@ describe('SessionFeaturePanels', () => {
     expect(wrapper.find('.grantTable').exists()).toBe(false);
     expect(wrapper.find('.modActions').exists()).toBe(false);
     expect(wrapper.findAll('.participantCard').length).toBe(2);
+
+    features.panel = 'moderator';
+    await flushPromises();
+    expect(wrapper.find('button[title="Mute"]').exists()).toBe(false);
+    expect(wrapper.find('button[title="Remove"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Allow presenter promotion');
 
     wrapper.unmount();
   });
@@ -563,7 +586,7 @@ describe('SessionFeaturePanels', () => {
     wrapper.unmount();
   });
 
-  it('proposes notes edit as moderation change when non-moderator user edits notes', async () => {
+  it('publishes an attendee notes edit without waiting for approval', async () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
@@ -580,13 +603,9 @@ describe('SessionFeaturePanels', () => {
     await ta.setValue('Attendee draft edit');
     vi.advanceTimersByTime(500);
 
-    // Should propose change via mod_change command
-    expect(cmdSpy).toHaveBeenCalledWith(
-      'mod_change',
-      expect.stringContaining('"action":"propose"'),
-    );
-    expect(features.pendingModerationChanges).toHaveLength(1);
-    expect(features.pendingModerationChanges[0].payload).toBe('Attendee draft edit');
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.any(String));
+    expect(features.pendingModerationChanges).toHaveLength(0);
+    expect(features.sharedNotes).toContain('Attendee draft edit');
 
     wrapper.unmount();
   });

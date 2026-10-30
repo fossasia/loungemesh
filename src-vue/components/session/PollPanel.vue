@@ -17,7 +17,6 @@ const {
   addPollOption,
   removePollOption,
   createPoll,
-  requestPoll,
   cancelPollRequest,
   approvePollRequest,
   rejectPollRequest,
@@ -256,64 +255,9 @@ function optionPercent(votes: number): number {
         <div class="emptyState">
           <AppIcon name="bar-chart" :size="36" class="emptyIcon" />
           <p class="emptyTitle">No active poll</p>
-          <p class="hint">Waiting for the host to start a poll, or request one below.</p>
+          <p class="hint">Waiting for the host or a moderator to start a poll.</p>
         </div>
 
-        <div class="requestSection">
-          <h4 class="subHeading">Request a poll</h4>
-          <div class="pollQuestionGroup">
-            <label class="fieldLabel questionLabel" for="poll-req-question">Question</label>
-            <input
-              id="poll-req-question"
-              v-model="pollQuestion"
-              class="field"
-              type="text"
-              placeholder="What should we ask the room?"
-              maxlength="200"
-            />
-          </div>
-
-          <div class="optionsHead">
-            <span class="fieldLabel">Options</span>
-            <button type="button" class="textBtn" @click="addPollOption">
-              <AppIcon name="plus" :size="16" />
-              Add option
-            </button>
-          </div>
-
-          <div class="optionDrafts">
-            <div v-for="(_, index) in pollOptionDrafts" :key="index" class="optionDraftRow">
-              <span class="optionIndex" aria-hidden="true">{{ index + 1 }}</span>
-              <input
-                v-model="pollOptionDrafts[index]"
-                class="field optionField"
-                type="text"
-                :placeholder="`Option ${index + 1}`"
-                maxlength="120"
-              />
-              <button
-                type="button"
-                class="iconBtn"
-                :disabled="pollOptionDrafts.length <= 2"
-                :title="pollOptionDrafts.length <= 2 ? 'At least two options are required' : 'Remove option'"
-                :aria-label="`Remove option ${index + 1}`"
-                @click="removePollOption(index)"
-              >
-                <AppIcon name="minus" :size="16" />
-              </button>
-            </div>
-          </div>
-
-          <p v-if="!createReady" class="hint">Enter a question and at least two options.</p>
-          <button
-            type="button"
-            class="primaryBtn"
-            :disabled="!createReady"
-            @click="requestPoll"
-          >
-            Submit poll request
-          </button>
-        </div>
       </template>
     </div>
 

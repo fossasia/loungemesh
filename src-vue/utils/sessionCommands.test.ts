@@ -688,8 +688,33 @@ describe('handleSessionCommand', () => {
     expect(features.lobbyWaiting).toHaveLength(0);
 
     features.addLobbyWaiter({ id: 'guest', name: 'Guest' });
+    handleSessionCommand('lobby', { value: JSON.stringify({ action: 'approve', id: 'guest' }) }, 'stranger');
+    expect(features.lobbyApproved.guest).toBeFalsy();
     handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) }, 'stranger');
     expect(features.lobbyWaiting).toHaveLength(1);
+    features.hostId = 'database-host';
+    features.hostEmail = 'host@uat.test';
+    const local = useLocalStore();
+    local.setMyID('guest');
+    features.localLobbyPending = true;
+    handleSessionCommand(
+      'lobby',
+      { value: JSON.stringify({ action: 'reject', id: 'guest', email: 'host@uat.test' }) },
+      'jitsi-host',
+    );
+    expect(features.lobbyRejected).toBe(true);
+    features.lobbyRejected = false;
+    features.localLobbyPending = true;
+    handleSessionCommand(
+      'lobby',
+      { value: JSON.stringify({ action: 'approve', id: 'guest', email: 'host@uat.test' }) },
+      'jitsi-host',
+    );
+    expect(features.lobbyApproved.guest).toBe(true);
+    expect(features.localLobbyPending).toBe(false);
+    features.hostId = 'host';
+    features.localLobbyPending = false;
+    features.lobbyRejected = false;
     handleSessionCommand('lobby', { value: JSON.stringify({ action: 'reject', id: 'guest' }) }, 'host');
     expect(features.lobbyWaiting).toHaveLength(0);
 
@@ -776,13 +801,122 @@ describe('handleSessionCommand', () => {
     expect(features.roomDefaults.whiteboard).toBe(true);
     expect(features.roomDefaults.poll).toBe(true);
     features.hostId = '';
+    features.hostEmail = 'host@example.com';
     features.roomDefaults = { ...features.roomDefaults, whiteboard: false };
     handleSessionCommand(
       'access',
       { value: JSON.stringify({ whiteboard: true }) },
       'someone',
     );
+    expect(features.roomDefaults.whiteboard).toBe(false);
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ whiteboard: true, email: 'host@example.com' }) },
+      'someone',
+    );
     expect(features.roomDefaults.whiteboard).toBe(true);
+    features.userGrants.mod = { moderator: true };
+    features.roomDefaults = { ...features.roomDefaults, notes: false };
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ notes: true }) },
+      'mod',
+    );
+    expect(features.roomDefaults.notes).toBe(false);
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ notes: true, userId: 'att', grants: { notes: false, moderator: true } }) },
+      'mod',
+    );
+    expect(features.roomDefaults.notes).toBe(false);
+    expect(features.userGrants.att?.notes).toBe(false);
+    expect(features.userGrants.att?.moderator).toBeUndefined();
+    features.moderatorEmails = ['moderator@example.com'];
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ notes: true, email: 'other@example.com' }) },
+      'email-mod',
+    );
+    expect(features.roomDefaults.notes).toBe(false);
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ userId: 'att', grants: { whiteboard: false }, email: 'moderator@example.com' }) },
+      'email-mod',
+    );
+    expect(features.roomDefaults.notes).toBe(false);
+    expect(features.userGrants.att?.whiteboard).toBe(false);
+    const conference = useConferenceStore();
+    conference.addUser('bridge-mod');
+    conference.users['bridge-mod'].properties = { role: 'moderator' };
+    handleSessionCommand(
+      'access',
+      { value: JSON.stringify({ notes: true, userId: 'att', grants: { poll: false } }) },
+      'bridge-mod',
+    );
+    expect(features.roomDefaults.notes).toBe(false);
+    expect(features.userGrants.att?.poll).toBe(false);
+  });
+
+  it('keeps meeting-wide controls with the host and moderation with host or moderator', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const conference = useConferenceStore();
+    local.setMyID('me');
+    features.setHost('host');
+    features.lobbyEnabled = true;
+    handleSessionCommand('lobby', { value: JSON.stringify({ enabled: false }) }, 'guest');
+    expect(features.lobbyEnabled).toBe(true);
+    features.hostEmail = 'host@example.com';
+    handleSessionCommand('lobby', { value: JSON.stringify({ enabled: false, email: 'host@example.com' }) }, 'guest');
+    expect(features.lobbyEnabled).toBe(false);
+
+    features.gridBackgroundUrl = 'keep';
+    handleSessionCommand('room', { value: JSON.stringify({ action: 'clear' }) }, 'guest');
+    expect(features.gridBackgroundUrl).toBe('keep');
+    features.userGrants.mod = { moderator: true };
+    handleSessionCommand('room', { value: JSON.stringify({ action: 'clear' }) }, 'mod');
+    expect(features.gridBackgroundUrl).toBe('');
+
+    features.stagePromotionEnabled = true;
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'settings', stagePromotionEnabled: false }) }, 'guest');
+    expect(features.stagePromotionEnabled).toBe(true);
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'promote', id: 'me' }) }, 'guest');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'invite', id: 'me' }) }, 'guest');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'demote', id: 'host' }) }, 'guest');
+    expect(features.stageOccupantId).toBe('');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'settings', stagePromotionEnabled: false }) }, 'host');
+    expect(features.stagePromotionEnabled).toBe(false);
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'invite', id: 'me' }) }, 'host');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'promote', id: 'me' }) }, 'host');
+    expect(features.stageOccupantId).toBe('me');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'demote', id: 'me' }) }, 'me');
+    expect(features.stageOccupantId).toBe('');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'promote', id: 'me' }) }, 'host');
+    handleSessionCommand('stage', { value: JSON.stringify({ action: 'demote', id: 'me' }) }, 'mod');
+    expect(features.stageOccupantId).toBe('');
+
+    const leaveSpy = vi.spyOn(conference, 'leaveConference');
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'kick', id: 'me' }) }, 'guest');
+    expect(leaveSpy).not.toHaveBeenCalled();
+    local.setMyID('host');
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'kick', id: 'host' }) }, 'mod');
+    expect(leaveSpy).not.toHaveBeenCalled();
+    features.userGrants.otherMod = { moderator: true };
+    local.setMyID('otherMod');
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'kick', id: 'otherMod' }) }, 'mod');
+    expect(leaveSpy).not.toHaveBeenCalled();
+    conference.addUser('peer');
+    conference.users.peer.properties = { role: 'moderator' };
+    local.setMyID('peer');
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'mute', id: 'peer' }) }, 'mod');
+    expect(conference.users.peer.mute).not.toBe(true);
+    local.setMyID('att');
+    const toggleSpy = vi.spyOn(local, 'toggleMute').mockResolvedValue(undefined);
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'mute', id: 'att' }) }, 'mod');
+    expect(toggleSpy).toHaveBeenCalled();
+    local.setMyID('att2');
+    handleSessionCommand('mod', { value: JSON.stringify({ action: 'kick', id: 'att2' }) }, 'host');
+    expect(leaveSpy).toHaveBeenCalled();
   });
 
   it('ignores partial command payloads', () => {
@@ -883,8 +1017,31 @@ describe('handleSessionCommand', () => {
     );
     expect(features.allowParticipantRecording).toBe(true);
 
+    features.userGrants.mod = { moderator: true };
+    features.allowParticipantRecording = false;
+    handleSessionCommand(
+      'config',
+      { value: JSON.stringify({ allowParticipantRecording: true }) },
+      'mod',
+    );
+    expect(features.allowParticipantRecording).toBe(false);
+    features.hostEmail = 'host@example.com';
+    handleSessionCommand(
+      'config',
+      { value: JSON.stringify({ allowParticipantRecording: true, email: 'host@example.com' }) },
+      'mod',
+    );
+    expect(features.allowParticipantRecording).toBe(true);
+
     handleSessionCommand('config', { value: 'not-json' });
     expect(features.allowParticipantRecording).toBe(true);
+
+    handleSessionCommand('config', { value: JSON.stringify({ lobbyForm: 'details' }) });
+    expect(features.lobbyForm).toBe('details');
+    handleSessionCommand('config', { value: JSON.stringify({ lobbyForm: 'name' }) });
+    expect(features.lobbyForm).toBe('name');
+    handleSessionCommand('config', { value: JSON.stringify({ lobbyForm: 'other' }) });
+    expect(features.lobbyForm).toBe('name');
   });
 
   it('prevents non-moderators from starting polls or clearing whiteboard', () => {
@@ -1003,6 +1160,24 @@ describe('handleSessionCommand', () => {
     expect(conference.users['peer_1']).toBeDefined();
     expect(conference.users['peer_1'].pos).toEqual({ x: 500, y: 500 });
     expect(conference.users['peer_1'].user?._displayName).toBe('Peer 1');
+    const features = useSessionFeaturesStore();
+    features.admitParticipantEmail('', 'a@b.c');
+    features.admitParticipantEmail('blank', '   ');
+    features.guestEmails = ['guest@uat.test'];
+    features.lobbyEnabled = true;
+    handleSessionCommand('hello', {
+      value: JSON.stringify({ id: 'peer_invited', email: 'guest@uat.test', name: 'Invited' }),
+    });
+    expect(features.lobbyApproved.peer_invited).toBe(true);
+    handleSessionCommand('hello', {
+      value: JSON.stringify({ id: 'peer_stranger', email: 'stranger@uat.test', name: 'Stranger' }),
+    });
+    expect(features.lobbyApproved.peer_stranger).toBeFalsy();
+    features.hostEmail = 'host@uat.test';
+    handleSessionCommand('hello', {
+      value: JSON.stringify({ id: 'peer_host', email: 'host@uat.test' }),
+    });
+    expect(features.lobbyApproved.peer_host).toBe(true);
 
     // Hello with minimal data (no userKey, no pos, no name)
     handleSessionCommand('hello', {

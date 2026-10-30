@@ -19,12 +19,6 @@ const screenshareBlocked = computed(
   () => !shouldAllowScreenshare(local.id, features.stageOccupantId) && !sharing.value,
 );
 
-const screenshareTitle = computed(() =>
-  screenshareBlocked.value
-    ? 'Screen sharing is unavailable while someone is on stage.'
-    : 'Screenshare',
-);
-
 function bindDesktopEndWatch() {
   stopEndedWatch?.();
   stopEndedWatch = bindScreenshareEndWatch(local.screenshare, () => {
@@ -38,7 +32,6 @@ async function finishShare() {
 }
 
 async function toggleShare() {
-  if (screenshareBlocked.value) return;
   const conf = engine.getConference();
   if (!conf) return;
   try {
@@ -76,10 +69,10 @@ onUnmounted(() => {
 
 <template>
   <IconButton
-    :label="screenshareTitle"
-    :title="screenshareTitle"
+    v-if="!screenshareBlocked"
+    label="Screenshare"
+    title="Screenshare"
     :active="sharing"
-    :disabled="screenshareBlocked"
     :sound="sharing ? 'toggleOff' : 'toggleOn'"
     @click="toggleShare"
   >

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 const route = useRoute();
 const eventSlug = String(route.params.event || '');
@@ -43,11 +44,7 @@ onMounted(async () => {
 
       <div v-else-if="error" class="error-view">
         <div class="icon-circle error">
-          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
+          <AppIcon name="alert-triangle" :size="32" />
         </div>
         <h2>Session Unavailable</h2>
         <p class="desc">{{ error }}</p>
@@ -55,10 +52,7 @@ onMounted(async () => {
 
       <div v-else-if="meet" class="meet-info">
         <div class="icon-circle live">
-          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="23 7 16 12 23 17 23 7" />
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-          </svg>
+          <AppIcon name="video" :size="32" />
         </div>
         <span class="badge" :class="{ full: meet.is_full }">
           {{ meet.is_full ? 'At Capacity' : 'Live Lounge' }}
@@ -89,7 +83,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 50%, #1e1b4b 0%, #0f0c1b 100%);
+  background: var(--color-bg-page);
   font-family: var(--font-body, system-ui, sans-serif);
   padding: 24px;
   box-sizing: border-box;
@@ -98,15 +92,12 @@ onMounted(async () => {
 .public-card {
   width: 100%;
   max-width: 480px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--color-bg-card);
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
   padding: 44px 36px;
   text-align: center;
-  color: #fff;
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+  color: var(--color-mono10);
 }
 
 .icon-circle {
@@ -120,15 +111,15 @@ onMounted(async () => {
 }
 
 .icon-circle.live {
-  background: rgba(79, 110, 247, 0.15);
-  border: 2px solid rgba(79, 110, 247, 0.4);
-  color: #4f6ef7;
+  background: var(--color-mono100);
+  border: 2px solid var(--color-blue100);
+  color: var(--color-blue100);
 }
 
 .icon-circle.error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 2px solid rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  background: var(--color-mono100);
+  border: 2px solid var(--color-red100);
+  color: var(--color-red100);
 }
 
 .badge {
@@ -139,14 +130,14 @@ onMounted(async () => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
+  background: var(--color-mono95);
+  color: var(--color-blue100);
   margin-bottom: 12px;
 }
 
 .badge.full {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
+  background: var(--color-bg-card);
+  color: var(--color-red100);
 }
 
 .meet-title {
@@ -158,7 +149,7 @@ onMounted(async () => {
 
 .capacity-note {
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-mono30);
   margin-bottom: 28px;
 }
 
@@ -171,16 +162,16 @@ onMounted(async () => {
 .join-btn {
   display: inline-block;
   padding: 14px 24px;
-  border-radius: 12px;
-  background: #4f6ef7;
-  color: #fff;
+  border-radius: var(--radius-round);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
   font-weight: 600;
   text-decoration: none;
   transition: background 0.2s;
 }
 
 .join-btn:hover {
-  background: #3b5bdb;
+  background: var(--color-blue100);
 }
 
 .spinner-wrap {
@@ -188,14 +179,14 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-mono30);
 }
 
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #4f6ef7;
+  border: 3px solid var(--color-mono95);
+  border-top-color: var(--color-blue100);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

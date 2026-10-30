@@ -10,6 +10,7 @@ import { conferenceOptions } from '@/config/jitsiOptions';
 describe('localStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
   });
 
   it('expands room bounds when users move far from the center', () => {

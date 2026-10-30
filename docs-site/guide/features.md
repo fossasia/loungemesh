@@ -27,9 +27,9 @@ This guide documents the comprehensive user flows and feature architectures impl
 
 ### Lobby & Waiting Room Flow
 1. Lobby is on by default. The host is the account whose email owns the meeting. Invited emails enter directly. Everyone else, including a signed-in account that was not invited, waits.
-2. The waiting screen asks for a name. Email is optional. It does not show the meeting, and it does not play anyone's audio or video.
-3. The host sees who is asking to join and can admit or deny them. Cancel, or leaving the page, removes that person from the host's list. A deny can only come from the host or a moderator.
-4. On approval, the guest is transitioned onto the live lounge.
+2. New meetings use the open lobby form: a required name, with no email field and nothing prefilled. The host can choose the details form when creating the meeting or from in-call settings. That form requires a name and an email, and the message to the host stays optional.
+3. While someone is waiting, their camera and microphone are not published. People already in the room do not see or hear them. The waiting screen does not play the meeting.
+4. The host sees who is asking to join and can admit or deny them. Cancel, or leaving the page, removes that person from the host's list. A deny can only come from the host or a moderator. Admit, deny, and cancel update every client as the message arrives.
 
 ### Host Key Claim Flow
 1. In un-moderated rooms without an Eventyay token, any user possessing the secret host key can claim host ownership.
@@ -75,9 +75,9 @@ This guide documents the comprehensive user flows and feature architectures impl
 
 ### High-Definition Screensharing
 1. The presenter clicks the **Screenshare Button**.
-2. Browser prompt allows selecting entire screen, application window, or browser tab.
-3. Stream is captured at **720p @ 15–30 fps** with optional system audio sharing.
-4. Screenshare renders in a dedicated high-visibility viewport for all participants.
+2. On a computer, the browser prompt allows selecting an entire screen, application window, or browser tab.
+3. Stream is captured at **720p @ 15–30 fps** with optional system audio sharing. Phones use the system share sheet and the same 720p cap, without desktop-only source locks.
+4. Screenshare renders in a dedicated viewport. On a phone it sits above the controls and stays visible even when avatars are far apart on the floor.
 
 ---
 
@@ -94,14 +94,14 @@ This guide documents the comprehensive user flows and feature architectures impl
 1. Open the **Notes Panel**.
 2. Type live notes with markdown formatting support.
 3. Edits sync live to everyone who can open notes. The API keeps a durable copy for the next join.
-4. Hosts can load pre-configured meeting agendas or templates (`notesTemplate`).
+4. When the host or a moderator sets a notes template, it is written into the shared document and sent to every open editor. People who join later start from that template when the document is still empty.
 5. Notes can be downloaded as `.md` files at any time.
 
 ### Live Polling & Voting
 1. Hosts/moderators click **Create Poll** and specify a question with multiple options.
 2. A notification alerts all participants, opening the poll panel.
 3. Participants cast anonymous votes.
-4. Real-time tally updates live; hosts can reveal or close the poll.
+4. Real-time tally updates live. The host or a moderator starts and ends the poll. Attendees vote when polls are enabled for them. A control that role cannot use is left off the screen.
 
 ---
 
@@ -109,17 +109,17 @@ This guide documents the comprehensive user flows and feature architectures impl
 
 ### Host Room Settings
 Hosts can open the **Room Settings Modal** to configure:
-- Feature toggles: enable/disable Chat, Whiteboard, Notes, Polls, or Stage.
-- Default permissions for everyone. Notes, whiteboard, and polls stay off for attendees until the host turns them on. An empty per-user grant does not override that room default.
+- Feature toggles: enable/disable Chat, Whiteboard, Notes, Polls, or Stage. A feature that is on can be used by every attendee. An explicit revoke for one person is the only way to turn it off for them.
+- Per-person revoke and restore. Moderators get the same per-person controls, not the room-wide switches. They also cannot assign another moderator. The change appears on that person's screen as soon as the command arrives, and the host repeats current grants on the session heartbeat.
 - Lobby is on by default. The host is the meeting owner's email. Other people enter only when their email is invited, or after the host admits them from the lobby.
-- Lobby enable/disable.
+- Lobby form: name only, or name and email.
 - Stage promotion permissions.
-- Notes template default text.
-- Custom floorplan background wallpaper (image upload or URL).
+- Notes template. The host or a moderator can save it, and that updates the shared document for everyone still in the room.
+- Custom floorplan background. The host or a moderator can save or clear it. Everyone reloads the image, and that reload is repeated on the session heartbeat.
 
 ### Moderation Actions
 - **Mute User**: Mute disruptive participants remotely.
-- **Kick User**: Eject a participant from the room; the kicked user is routed to `/kicked`.
+- **Kick User**: Eject a participant from the room; the kicked user is routed to `/kicked`. Kicked, access denied, missing routes, the PIN prompt, and the public meeting states use the same light LoungeMesh page and card.
 
 ---
 
