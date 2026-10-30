@@ -273,10 +273,11 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     isLobbyBlocked(): boolean {
       if (!this.lobbyEnabled) return false;
+      if (!this.configLoaded) return true;
       if (this.isHost || this.isModerator) return false;
       if (this.isInvited) return false;
       const local = useLocalStore();
-      if (!local.id) return this.localLobbyPending;
+      if (!local.id) return true;
       return this.localLobbyPending || !this.lobbyApproved[local.id];
     },
     grantsForUser:

@@ -3,8 +3,8 @@ import type { JitsiMeetJS, JitsiTrack } from '@/types/jitsi';
 import {
   acquireDesktopTracks,
   desktopCaptureRequest,
+  isDesktopShareTrack,
   isMobileCaptureDevice,
-  shouldShowRemoteShare,
 } from './screenshareCapture';
 
 describe('screenshareCapture', () => {
@@ -28,11 +28,12 @@ describe('screenshareCapture', () => {
     Reflect.deleteProperty(window, 'matchMedia');
   });
 
-  it('keeps distant shares visible on a phone and for the presenter', () => {
-    expect(shouldShowRemoteShare(900, false, 1024)).toBe(false);
-    expect(shouldShowRemoteShare(100, false, 1024)).toBe(true);
-    expect(shouldShowRemoteShare(900, true, 1024)).toBe(true);
-    expect(shouldShowRemoteShare(900, false, 390)).toBe(true);
+  it('treats a desktop video type or a v1 source as a screenshare', () => {
+    expect(isDesktopShareTrack({ videoType: 'desktop' })).toBe(true);
+    expect(isDesktopShareTrack({ getVideoType: () => 'desktop', videoType: 'camera' })).toBe(true);
+    expect(isDesktopShareTrack({ videoType: 'camera', getSourceName: () => 'abc-v1' })).toBe(true);
+    expect(isDesktopShareTrack({ videoType: 'camera', getSourceName: () => 'abc-v0' })).toBe(false);
+    expect(isDesktopShareTrack({})).toBe(false);
   });
 
   it('publishes a desktop capture and marks an unmarked video track', async () => {

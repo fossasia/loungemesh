@@ -28,7 +28,7 @@ This guide documents the comprehensive user flows and feature architectures impl
 ### Lobby & Waiting Room Flow
 1. Lobby is on by default. The host is the account whose email owns the meeting. Invited emails enter directly. Everyone else, including a signed-in account that was not invited, waits.
 2. New meetings use the open lobby form: a required name, with no email field and nothing prefilled. The host can choose the details form when creating the meeting or from in-call settings. That form requires a name and an email, and the message to the host stays optional.
-3. While someone is waiting, their camera and microphone are not published. People already in the room do not see or hear them. The waiting screen does not play the meeting.
+3. The meeting floor stays hidden until the room knows who is joining. An uninvited person sees the entry form first. While someone is waiting, their camera and microphone are not published, and people already in the room do not see or hear them.
 4. The host sees who is asking to join and can admit or deny them. Cancel, or leaving the page, removes that person from the host's list. A deny can only come from the host or a moderator. Admit, deny, and cancel update every client as the message arrives.
 
 ### Host Key Claim Flow
@@ -77,7 +77,7 @@ This guide documents the comprehensive user flows and feature architectures impl
 1. The presenter clicks the **Screenshare Button**.
 2. On a computer, the browser prompt allows selecting an entire screen, application window, or browser tab.
 3. Stream is captured at **720p @ 15–30 fps** with optional system audio sharing. Phones use the system share sheet and the same 720p cap, without desktop-only source locks.
-4. Screenshare renders in a dedicated viewport. On a phone it sits above the controls and stays visible even when avatars are far apart on the floor.
+4. Screenshare renders in a dedicated viewport above the controls, including the sharer's own picture. Every admitted person sees it, even when avatars are far apart on the floor.
 
 ---
 

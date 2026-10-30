@@ -60,10 +60,12 @@ defineProps<{
 /* Phone footer: two even rows so mic, camera, screenshare, and leave stay on screen. */
 @media (max-width: 768px) {
   .footer {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 4px;
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
     background: color-mix(in srgb, var(--color-bg-page) 92%, white);
   }
@@ -74,17 +76,18 @@ defineProps<{
   .right {
     display: contents;
   }
-  .footer :deep(button) {
+  .footer :deep(button),
+  .footer :deep(select) {
     pointer-events: auto;
     margin: 0;
-    width: 100%;
-    min-width: 0;
+    width: auto;
+    flex: 0 0 auto;
+    min-width: 72px;
     min-height: 40px;
     padding: 6px;
-    justify-self: stretch;
   }
   .footer :deep(.btn-leave-call) {
-    grid-column: span 2;
+    flex: 0 0 auto;
     font-size: 0.8rem;
   }
 }

@@ -17,10 +17,10 @@ import {
 
 describe('pan constants', () => {
   it('starts further out on a phone', () => {
-    expect(preferredRoomScale(390)).toBe(0.4);
-    expect(preferredRoomScale(700)).toBe(0.5);
-    expect(preferredRoomScale(1200)).toBe(defaultScale);
-    expect(preferredRoomScale()).toBe(defaultScale);
+    expect(preferredRoomScale(390, 844)).toBeCloseTo(72 / 200);
+    expect(preferredRoomScale(700, 900)).toBeCloseTo(88 / 200);
+    expect(preferredRoomScale(1400, 1000)).toBeCloseTo(104 / 200);
+    expect(preferredRoomScale()).toBe(preferredRoomScale(window.innerWidth, window.innerHeight));
   });
 
   it('randomInitialUserPosition centers in room', () => {
@@ -67,8 +67,8 @@ describe('pan constants', () => {
   });
 
   it('clampScale respects bounds', () => {
-    expect(clampScale(0.1)).toBe(0.35);
-    expect(clampScale(10)).toBe(1.4);
+    expect(clampScale(0.1)).toBe(0.28);
+    expect(clampScale(10)).toBe(2.4);
     expect(clampScale(1)).toBe(1);
   });
 

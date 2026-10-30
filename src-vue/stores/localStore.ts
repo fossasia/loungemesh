@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { markRaw, nextTick } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   clampPan,
@@ -163,8 +164,8 @@ export const useLocalStore = defineStore('local', {
     },
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
-      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType !== 'desktop');
-      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType === 'desktop');
+      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && !isDesktopShareTrack(t));
+      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && isDesktopShareTrack(t));
       if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
         if (this.cameraOff) {

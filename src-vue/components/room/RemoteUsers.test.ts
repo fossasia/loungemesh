@@ -31,9 +31,12 @@ describe('RemoteUsers', () => {
   it('filters users in lobby mode until approved', async () => {
     const conference = useConferenceStore();
     const features = useSessionFeaturesStore();
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     features.hostId = 'host';
     features.lobbyApproved.host = true;
+    const { useLocalStore } = await import('@/stores/localStore');
+    useLocalStore().setMyID('host');
     conference.addUser('host');
     conference.addUser('guest');
     conference.updateUserPosition('host', { x: 0, y: 0 });

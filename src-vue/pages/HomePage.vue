@@ -436,9 +436,9 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
                     <label class="toggleRow">
                       <span class="toggleLabel">
                         <strong>Lobby form</strong>
-                        <small>{{ meetingDefaults.lobbyForm === 'details' ? 'Name and email' : 'Name only' }}</small>
+                        <small>What guests enter before asking to join</small>
                       </span>
-                      <select v-model="meetingDefaults.lobbyForm" class="toggleCheckbox" aria-label="Lobby form">
+                      <select v-model="meetingDefaults.lobbyForm" class="toggleSelect" aria-label="Lobby form">
                         <option value="name">Name only</option>
                         <option value="details">Name and email</option>
                       </select>
@@ -709,7 +709,7 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at 8% 18%, rgba(228, 234, 255, 1) 0%, rgba(242, 245, 255, 1) 50%, rgba(255, 255, 255, 1) 100%);
+  background: var(--color-bg-page);
   position: relative;
   overflow-x: hidden;
 }
@@ -913,6 +913,40 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
 
 .toggleCheckbox:checked::before {
   transform: translateX(16px);
+}
+
+.toggleSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  min-width: 9.5rem;
+  max-width: 100%;
+  padding: 6px 28px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 110, 247, 0.2);
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231e2240' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  color: var(--color-mono10, #1e2240);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  outline: none;
+}
+
+.toggleSelect:focus {
+  border-color: #4f6ef7;
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.15);
+}
+
+.toggleLabel small {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--color-mono30, #6b7190);
+  font-weight: 500;
 }
 
 /* Styling for generalSettingsSection and generalSettingsCard */
@@ -1735,13 +1769,26 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
   .featuresGrid {
     grid-template-columns: 1fr;
   }
+  .page {
+    padding: 16px;
+  }
+  .container {
+    width: 100%;
+    max-width: 100%;
+  }
+  .cardJoinInput,
+  .cardInputGroup {
+    width: 100%;
+    min-width: 0;
+  }
+  .cardJoinInput {
+    font-size: 16px;
+  }
 }
 
 .featureCard {
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: var(--color-bg-card);
+  border: 1px solid var(--line-light);
   border-radius: 18px;
   padding: 24px;
   display: flex;

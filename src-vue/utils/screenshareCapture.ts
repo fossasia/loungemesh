@@ -38,19 +38,21 @@ export function isMobileCaptureDevice(
   return coarsePointer && width <= 900;
 }
 
-/** On a phone the floor is too small to walk into the 650px share radius, so every admitted share stays visible. */
-export function shouldShowRemoteShare(
-  distance: number,
-  presenting: boolean,
-  viewportWidth: number,
-): boolean {
-  if (presenting || viewportWidth <= 768) return true;
-  return distance <= 650;
+/** A second video source (`-v1`) is a screenshare even when videoType has not been set yet. */
+export function isDesktopShareTrack(track: {
+  videoType?: string;
+  getVideoType?: () => string;
+  getSourceName?: () => string;
+}): boolean {
+  const typed = track.getVideoType?.() || track.videoType;
+  if (typed === 'desktop') return true;
+  const source = track.getSourceName?.() ?? '';
+  return source.endsWith('-v1');
 }
 
 function markDesktop(tracks: JitsiTrack[]): JitsiTrack[] {
   for (const track of tracks) {
-    if (track.getType() === 'video' && !track.videoType) track.videoType = 'desktop';
+    if (track.getType() === 'video') track.videoType = 'desktop';
   }
   return tracks;
 }

@@ -138,7 +138,12 @@ const sessionStubs = {
 };
 
 describe('SessionPage', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    const features = useSessionFeaturesStore();
+    features.configLoaded = true;
+    features.lobbyEnabled = false;
+  });
 
   afterEach(async () => {
     await flushPromises();
