@@ -8,6 +8,7 @@ import LocalUser from '@/components/room/LocalUser.vue';
 import FooterBar from '@/components/layout/FooterBar.vue';
 import IconButton from '@/components/ui/IconButton.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
+import ConnectionBanner from '@/components/common/ConnectionBanner.vue';
 import AppHeader from '@/components/layout/AppHeader.vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
@@ -58,6 +59,7 @@ onBeforeUnmount(() => {
     </Room>
   </PanWrapper>
   <ErrorHandler />
+  <ConnectionBanner />
   <div id="centerContainer" class="centerOverlay">
     <p class="sub">Move around the space, then join when you are ready.</p>
   </div>

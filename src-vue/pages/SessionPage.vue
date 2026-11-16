@@ -11,6 +11,7 @@ import RemoteUsers from '@/components/room/RemoteUsers.vue';
 import LocalUser from '@/components/room/LocalUser.vue';
 import AppHeader from '@/components/layout/AppHeader.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
+import ConnectionBanner from '@/components/common/ConnectionBanner.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
 import SharedScreens from '@/components/screenshare/SharedScreens.vue';
@@ -37,6 +38,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import AppIcon from '@/components/ui/AppIcon.vue';
+import StatusScreen from '@/components/common/StatusScreen.vue';
 import { sessionIdentifier } from '@/utils/sessionIdentifier';
 import LeaveDialog from '@/components/session/LeaveDialog.vue';
 import SessionRecordButton from '@/components/session/SessionRecordButton.vue';
@@ -45,6 +47,8 @@ import { useSessionRecording } from '@/composables/useSessionRecording';
 import { useSessionExport } from '@/composables/useSessionExport';
 import { makeRecorderSources } from '@/utils/sessionRecorderSources';
 import { playUiSound } from '@/utils/uiSounds';
+import { minScale, preferredRoomScale } from '@/constants/pan';
+import { buildSessionShareUrl, copyMeetingShareLink } from '@/utils/sessionInviteShare';
 
 /** Absorbs `props: true` route param so it is not forwarded as a stray DOM attribute (multi-root page). */
 /* v8 ignore next */
@@ -63,8 +67,16 @@ const router = useRouter();
 
 // Pinia can preserve pan/zoom across navigations; force a deterministic recenter per session.
 watch(
-  () => identifier.value,
-  () => local.resetViewportForRoom(),
+  [() => identifier.value, () => route.query.zoom],
+  () => {
+    /* v8 ignore next 6 */
+    const shouldZoomOut =
+      route.query.zoom === 'out' ||
+      route.query.zoom === 'min' ||
+      (typeof window !== 'undefined' && window.self !== window.top && route.query.zoom !== 'in');
+    const targetScale = shouldZoomOut ? minScale : preferredRoomScale();
+    local.resetViewportForRoom(targetScale);
+  },
   { immediate: true },
 );
 
@@ -77,6 +89,7 @@ watch(
 );
 
 const sessionId = computed(() => String(route.params.id ?? props.id ?? ''));
+const roomOpen = computed(() => features.configLoaded && !features.isLobbyBlocked);
 const { exportNotes, exportNotesRtf, exportWhiteboard, exportRecording } = useSessionExport(() => sessionId.value);
 
 const recorder = useSessionRecorder(makeRecorderSources(local, conf));
@@ -85,15 +98,61 @@ const selectedQuality = ref<'720p' | '480p'>('720p');
 
 const showLeaveDialog = ref(false);
 const showLobbyDropdown = ref(false);
+const quickShareCopied = ref(false);
+
+function openAddAttendeeQuick() {
+  showLobbyDropdown.value = false;
+  features.openModeratorPeoplePane('add');
+}
+
+async function quickShareMeetingLink() {
+  showLobbyDropdown.value = false;
+  features.openModeratorPeoplePane('share');
+  const url = buildSessionShareUrl(sessionId.value);
+  const copied = await copyMeetingShareLink(url);
+  if (copied) {
+    quickShareCopied.value = true;
+    features.setStageMessage('Meeting link copied to clipboard!');
+    window.setTimeout(() => {
+      quickShareCopied.value = false;
+    }, 2000);
+  }
+}
 
 function approve(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'approve', id: entryId }));
+  const email = features.controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ action: 'approve', id: entryId, ...(email ? { email } : {}) }),
+  );
   features.approveLobby(entryId);
 }
 
 function reject(entryId: string) {
-  engine.sendCommand('lobby', JSON.stringify({ action: 'reject', id: entryId }));
+  const email = features.controlEmail();
+  engine.sendCommand(
+    'lobby',
+    JSON.stringify({ action: 'reject', id: entryId, ...(email ? { email } : {}) }),
+  );
   features.rejectLobby(entryId);
+}
+
+watch(
+  () => [conf.isJoined, features.userRole] as const,
+  ([joined, role]) => {
+    if (!joined) return;
+    engine.setLocalParticipantProperty('role', role);
+  },
+  { immediate: true },
+);
+
+const latestLobbyWaiter = computed(() => features.lobbyWaiting[0] || null);
+
+function admitAll() {
+  const waiters = [...features.lobbyWaiting];
+  for (const w of waiters) {
+    approve(w.id);
+  }
 }
 
 function requestLeave() {
@@ -118,7 +177,11 @@ async function doLeave() {
   leaveRoom();
   conf.leaveConference();
   disconnect();
-  router.push('/');
+  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    window.parent.postMessage({ source: 'loungemesh', action: 'leave', event: 'hangup', type: 'hangup' }, '*');
+  } else {
+    router.push('/');
+  }
 }
 
 const showStagePreviewDialog = ref(false);
@@ -178,21 +241,28 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="sessionRoot" :data-session-id="props.id">
+  <ConnectionBanner />
   <ErrorHandler />
   <AppHeader />
   <JitsiConnection />
   <LocalStoreLogic />
+  <StatusScreen
+    v-if="!features.configLoaded"
+    title="Joining…"
+    message="Checking who can enter this meeting."
+    icon="user"
+  />
   <LobbyOverlay />
-  <PanWrapper :event-identifier="identifier">
+  <PanWrapper v-if="roomOpen" :event-identifier="identifier">
     <Room :identifier="identifier">
       <RemoteUsers />
       <LocalUser />
     </Room>
   </PanWrapper>
-  <SharedScreens v-if="!features.isStageModeActive" />
-  <SessionFeaturePanels />
+  <SharedScreens v-if="roomOpen && !features.isStageModeActive" />
+  <SessionFeaturePanels v-if="roomOpen" />
   <WhiteboardOverlay
-    v-if="features.panel === 'whiteboard'"
+    v-if="roomOpen && features.panel === 'whiteboard'"
     :on-close="() => (features.panel = '')"
   />
   <StagePreviewDialog
@@ -204,28 +274,143 @@ onBeforeUnmount(() => {
     mode="audience"
   />
   <p v-if="features.stageMessage" class="stageToast" role="status">{{ features.stageMessage }}</p>
-  <!-- Top-right Lobby Queue Dropdown Menu -->
+
+  <!-- Google Meet-Style Floating Admission Banner for Host & Moderator -->
+  <Transition name="slide-down">
+    <div
+      v-if="roomOpen && (features.isHost || features.isModerator) && latestLobbyWaiter"
+      class="gmeetLobbyBanner"
+      role="alert"
+    >
+      <div class="bannerAvatar">
+        {{ (latestLobbyWaiter.name || 'G').slice(0, 2).toUpperCase() }}
+      </div>
+      <div class="bannerText">
+        <strong class="bannerName">{{ latestLobbyWaiter.name }}</strong>
+        <span class="bannerSubtitle">
+          {{ features.lobbyWaiting.length > 1 ? `and ${features.lobbyWaiting.length - 1} other(s) want to join` : 'wants to join this call' }}
+        </span>
+        <span v-if="latestLobbyWaiter.reason" class="bannerReason">"{{ latestLobbyWaiter.reason }}"</span>
+      </div>
+      <div class="bannerActions">
+        <button
+          type="button"
+          class="btnBannerDeny"
+          title="Deny entry"
+          @click="reject(latestLobbyWaiter.id)"
+        >
+          Deny
+        </button>
+        <button
+          type="button"
+          class="btnBannerAdmit"
+          title="Admit to meeting"
+          @click="approve(latestLobbyWaiter.id)"
+        >
+          Admit
+        </button>
+        <button
+          v-if="features.lobbyWaiting.length > 1"
+          type="button"
+          class="btnBannerAdmitAll"
+          title="Admit all waiting participants"
+          @click="admitAll"
+        >
+          Admit all ({{ features.lobbyWaiting.length }})
+        </button>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Top Moderation Changes Banner -->
+  <div
+    v-if="features.canModerate && features.pendingModerationChanges.length > 0"
+    class="modPendingBanner"
+    data-testid="mod-pending-banner"
+  >
+    <div
+      v-for="item in features.pendingModerationChanges"
+      :key="item.id"
+      class="modPendingItem"
+    >
+      <div class="modPendingText">
+        <span>Pending <strong>{{ item.type === 'whiteboard' ? 'Whiteboard' : 'Notes' }}</strong> from <strong>{{ item.authorName }}</strong></span>
+        <span class="modPendingTimer">(Auto-approves in 15s)</span>
+      </div>
+      <div class="modPendingButtons">
+        <button
+          type="button"
+          class="btnAccept"
+          @click="features.approveModerationChange(item.id, engine)"
+        >
+          Accept
+        </button>
+        <button
+          type="button"
+          class="btnReject"
+          @click="features.rejectModerationChange(item.id, engine)"
+        >
+          Reject
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top-right Host & Moderator Quick Actions (Add, Share, Lobby) -->
   <div
     v-if="features.isHost || features.isModerator"
     class="lobbyMenuContainer"
   >
-    <button
-      type="button"
-      class="lobbyMenuBtn"
-      :class="{ hasWaiters: features.lobbyWaiting.length > 0 }"
-      @click="showLobbyDropdown = !showLobbyDropdown"
-      title="Lobby Queue"
-    >
-      <AppIcon name="user" :size="16" />
-      <span class="lobbyBtnLabel">Lobby</span>
-      <span v-if="features.lobbyWaiting.length > 0" class="lobbyBadge">
-        {{ features.lobbyWaiting.length }}
-      </span>
-    </button>
+    <div class="hostQuickBar">
+      <button
+        type="button"
+        class="quickActionBtn"
+        data-testid="quick-add-attendee-btn"
+        title="Invite attendee by email"
+        @click="openAddAttendeeQuick"
+      >
+        <AppIcon name="user-plus" :size="15" />
+        <span class="quickActionLabel">Add</span>
+      </button>
+      <button
+        type="button"
+        class="quickActionBtn"
+        :class="{ copied: quickShareCopied }"
+        data-testid="quick-share-link-btn"
+        title="Copy and share meeting link"
+        @click="quickShareMeetingLink"
+      >
+        <AppIcon :name="quickShareCopied ? 'check' : 'share'" :size="15" />
+        <span class="quickActionLabel">{{ quickShareCopied ? 'Copied' : 'Share' }}</span>
+      </button>
+      <button
+        type="button"
+        class="lobbyMenuBtn"
+        :class="{ hasWaiters: features.lobbyWaiting.length > 0 }"
+        @click="showLobbyDropdown = !showLobbyDropdown"
+        title="Lobby Queue"
+      >
+        <AppIcon name="user" :size="16" />
+        <span class="lobbyBtnLabel">Lobby</span>
+        <span v-if="features.lobbyWaiting.length > 0" class="lobbyBadge">
+          {{ features.lobbyWaiting.length }}
+        </span>
+      </button>
+    </div>
     <div v-if="showLobbyDropdown" class="lobbyDropdownCard">
       <div class="lobbyDropdownHeader">
         <h3>Waiting Room</h3>
-        <span class="lobbyCount">{{ features.lobbyWaiting.length }} waiting</span>
+        <div class="lobbyHeaderMeta">
+          <span class="lobbyCount">{{ features.lobbyWaiting.length }} waiting</span>
+          <button
+            v-if="features.lobbyWaiting.length > 1"
+            type="button"
+            class="btnDropdownAdmitAll"
+            @click="admitAll"
+          >
+            Admit all
+          </button>
+        </div>
       </div>
       <div class="lobbyDropdownBody">
         <div v-if="features.lobbyWaiting.length === 0" class="lobbyEmptyState">
@@ -276,28 +461,30 @@ onBeforeUnmount(() => {
       @click="features.panel = ''"
     />
   </Transition>
-  <FooterBar>
+  <FooterBar v-if="roomOpen">
     <SessionTools />
     <IconButton
-      :label="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
-      :warning="local.cameraOff"
-      :error="local.videoError"
+      :label="features.isLocalCameraLocked ? 'Camera locked' : local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
+      :title="features.isLocalCameraLocked ? 'Camera locked by a moderator' : undefined"
+      :warning="local.cameraOff || features.isLocalCameraLocked"
+      :error="local.videoError || features.isLocalCameraLocked"
       :sound="local.cameraOff ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleCamera()"
     >
       <template #icon>
-        <AppIcon :name="local.cameraOff ? 'video-off' : 'video'" />
+        <AppIcon :name="features.isLocalCameraLocked ? 'lock' : local.cameraOff ? 'video-off' : 'video'" />
       </template>
     </IconButton>
     <IconButton
-      :label="local.mute ? 'Unmute' : 'Mute'"
-      :warning="local.mute"
-      :error="local.audioError"
+      :label="features.isLocalMicLocked ? 'Mic locked' : local.mute ? 'Unmute' : 'Mute'"
+      :title="features.isLocalMicLocked ? 'Microphone locked by a moderator' : undefined"
+      :warning="local.mute || features.isLocalMicLocked"
+      :error="local.audioError || features.isLocalMicLocked"
       :sound="local.mute ? 'toggleOn' : 'toggleOff'"
       @click="local.toggleMute()"
     >
       <template #icon>
-        <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
+        <AppIcon :name="features.isLocalMicLocked ? 'lock' : local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
     <ScreenshareButton />
@@ -327,8 +514,17 @@ onBeforeUnmount(() => {
         label="Moderator"
         :active="features.panel === 'moderator'"
         sound="panel"
+        :title="features.isHost ? 'Host Controls & Settings' : 'Moderator Controls'"
         @click="features.togglePanel('moderator')"
-      ><template #icon><AppIcon name="settings" /></template></IconButton>
+      ><template #icon><AppIcon :name="features.isHost ? 'settings' : 'shield'" /></template></IconButton>
+      <IconButton
+        v-else
+        label="Participants"
+        :active="features.panel === 'participants'"
+        sound="panel"
+        title="View Participants"
+        @click="features.togglePanel('participants')"
+      ><template #icon><AppIcon name="user" /></template></IconButton>
       <ChatPanel />
     </template>
   </FooterBar>
@@ -371,6 +567,21 @@ onBeforeUnmount(() => {
 @media (max-width: 768px) {
   .stageToast {
     top: 56px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+  .gmeetLobbyBanner {
+    top: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 16px;
+    padding: 8px;
+    gap: 8px;
+  }
+  .lobbyMenuContainer {
+    top: 8px;
+    right: 8px;
   }
 }
 
@@ -379,6 +590,40 @@ onBeforeUnmount(() => {
   top: 14px;
   right: 18px;
   z-index: 6000;
+}
+
+.hostQuickBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quickActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--line-light, #cbd5e1);
+  background: var(--btn-default-bg, #ffffff);
+  color: var(--color-text-default, #1e293b);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: var(--fw-medium, 500);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.quickActionBtn:hover {
+  background: var(--btn-default-bg-hover, #f8fafc);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.quickActionBtn.copied {
+  border-color: rgba(22, 163, 74, 0.45);
+  color: #15803d;
 }
 
 .lobbyMenuBtn {
@@ -431,7 +676,7 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  width: 360px;
+  width: min(360px, calc(100vw - 24px));
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(79, 110, 247, 0.15);
   border-radius: 16px;
@@ -627,5 +872,228 @@ onBeforeUnmount(() => {
   animation: pulseBtn 2s infinite;
   background: var(--btn-primary-bg) !important;
   color: var(--btn-primary-fg) !important;
+}
+
+/* Floating Google Meet Admission Banner */
+.gmeetLobbyBanner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10003;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--color-bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line-light);
+  border-radius: 16px;
+  padding: 8px 18px 8px 10px;
+  box-shadow: 0 12px 28px rgba(30, 34, 64, 0.12);
+  animation: bannerEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: calc(100vw - 32px);
+}
+
+.bannerAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+}
+
+.bannerText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.bannerName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-mono10);
+}
+
+.bannerSubtitle {
+  font-size: 12px;
+  color: var(--color-mono30);
+}
+
+.bannerReason {
+  font-size: 11px;
+  color: var(--color-mono40);
+  font-style: italic;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bannerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+}
+
+.btnBannerDeny {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--color-red100);
+  background: transparent;
+  color: var(--color-red100);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnBannerDeny:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ffffff;
+}
+
+.btnBannerAdmit {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 9999px;
+  border: none;
+  background: #22c55e;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(34, 197, 94, 0.4);
+  transition: all 0.15s ease;
+}
+
+.btnBannerAdmit:hover {
+  background: #16a34a;
+  transform: translateY(-1px);
+}
+
+.btnBannerAdmitAll {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid rgba(79, 110, 247, 0.4);
+  background: rgba(79, 110, 247, 0.2);
+  color: #818cf8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnBannerAdmitAll:hover {
+  background: rgba(79, 110, 247, 0.35);
+  color: #ffffff;
+}
+
+.btnDropdownAdmitAll {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnDropdownAdmitAll:hover {
+  background: #22c55e;
+  color: #ffffff;
+}
+
+.lobbyHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  transform: translate(-50%, -30px);
+  opacity: 0;
+}
+
+.modPendingBanner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 500px;
+  width: calc(100vw - 32px);
+  pointer-events: auto;
+}
+.modPendingItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line-dark, rgba(0, 0, 0, 0.15));
+  border-radius: 8px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+}
+.modPendingText {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-default, #1e293b);
+}
+.modPendingTimer {
+  font-size: 11px;
+  color: var(--color-mono40, #64748b);
+}
+.modPendingButtons {
+  display: flex;
+  gap: 6px;
+}
+.btnAccept {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnAccept:hover {
+  background: #059669;
+}
+.btnReject {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnReject:hover {
+  background: #dc2626;
 }
 </style>

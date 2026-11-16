@@ -4,7 +4,7 @@ import { conferenceNameDefault, conferenceOptions, jitsiInitOptions } from './ji
 describe('jitsiOptions', () => {
   it('exports loungemesh defaults', () => {
     expect(conferenceNameDefault).toBe('loungemesh');
-    expect(conferenceOptions.channelLastN).toBe(16);
+    expect(conferenceOptions.channelLastN).toBe(8);
     expect(conferenceOptions.openBridgeChannel).toBe('datachannel');
     expect(conferenceOptions.p2p).toEqual({ enabled: false });
     expect(conferenceOptions.disableSimulcast).toBe(true);

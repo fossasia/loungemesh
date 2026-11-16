@@ -1,5 +1,5 @@
 /** Session feature flags that the host can grant per participant. */
-export type FeatureKey = 'notes' | 'whiteboard' | 'poll' | 'moderator';
+export type FeatureKey = 'notes' | 'whiteboard' | 'poll' | 'moderator' | 'chat';
 
 export type UserGrants = Record<FeatureKey, boolean>;
 
@@ -8,6 +8,7 @@ export const defaultUserGrants = (): UserGrants => ({
   whiteboard: false,
   poll: false,
   moderator: false,
+  chat: true,
 });
 
 export const fullUserGrants = (): UserGrants => ({
@@ -15,4 +16,5 @@ export const fullUserGrants = (): UserGrants => ({
   whiteboard: true,
   poll: true,
   moderator: true,
+  chat: true,
 });

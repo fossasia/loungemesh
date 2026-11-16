@@ -7,10 +7,18 @@ describe('AccessDeniedPage', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
   const reasons = [
-    'no_token',
+    'room_full',
+    'not_allowed',
+    'grant_expired',
     'token_expired',
+    'single_user_replayed',
+    'token_already_claimed',
+    'invalid_pin',
+    'grant_replayed',
     'token_already_used',
+    'meet_not_found',
     'event_not_found',
+    'no_token',
     'network_error',
     undefined,
   ] as const;
@@ -21,7 +29,7 @@ describe('AccessDeniedPage', () => {
         props: reason ? { reason } : {},
         global: { plugins: [createPinia()] },
       });
-      expect(wrapper.find('.denied-msg').text().length).toBeGreaterThan(10);
+      expect(wrapper.find('.message').text().length).toBeGreaterThan(10);
       wrapper.unmount();
     });
   }

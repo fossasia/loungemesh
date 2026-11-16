@@ -747,4 +747,96 @@ describe('ChatPanel', () => {
     editWrapper.unmount();
     wrapper.unmount();
   });
+
+  it('allows owner to delete their message, moderator to delete others, and prevents non-moderators from deleting others', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+
+    local.setMyID('attendee1');
+    features.setHost('host1'); // attendee1 is not moderator
+
+    conference.conferenceObject = {} as never;
+    conference.isJoined = true;
+    conference.messages = [
+      chatMsg('attendee1', 'my message', 1),
+      chatMsg('attendee2', 'their message', 2),
+    ];
+
+    const { wrapper } = await mountWithApp(ChatPanel);
+    await wrapper.find('button.ibtn').trigger('click');
+
+    // attendee1 sees edit and delete on their own message, but NEITHER on attendee2's message
+    const deleteBtns = wrapper.findAll('.msgDeleteActions .delBtn');
+    expect(deleteBtns).toHaveLength(1); // Only for attendee1's message
+
+    const editBtns = wrapper.findAll('.msgActions .linkBtn');
+    expect(editBtns).toHaveLength(1); // Only for attendee1's message
+
+    // Delete own message
+    await deleteBtns[0]!.trigger('click');
+    expect(conference.messages).toHaveLength(1);
+    expect(conference.messages[0].id).toBe('attendee2');
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'chat',
+      expect.stringContaining('"action":"delete"'),
+    );
+
+    // Calling deleteMessage on non-existent or unauthorized message is no-op
+    (wrapper.vm as any).deleteMessage('non-existent');
+    (wrapper.vm as any).deleteMessage('attendee2', 2);
+    expect(conference.messages).toHaveLength(1);
+
+    // Deleting message with negative nr
+    conference.messages.unshift({ id: 'attendee1', text: 'neg', nr: -1, messageId: 'm-neg' });
+    (wrapper.vm as any).deleteMessage('m-neg', -1);
+    expect(conference.messages).toHaveLength(1);
+
+    wrapper.unmount();
+
+    // Now test as moderator (host)
+    local.setMyID('host1');
+    features.setHost('host1');
+    features.panel = '';
+    conference.messages = [
+      chatMsg('attendee2', 'their message', 2),
+    ];
+
+    const { wrapper: modWrapper } = await mountWithApp(ChatPanel);
+    await modWrapper.find('button.ibtn').trigger('click');
+
+    // Moderator sees Delete on other's message, but NOT Edit (only original owner can edit!)
+    const modDeleteBtns = modWrapper.findAll('.msgDeleteActions .delBtn');
+    expect(modDeleteBtns).toHaveLength(1);
+
+    const modEditBtns = modWrapper.findAll('.msgActions .linkBtn');
+    expect(modEditBtns).toHaveLength(0); // Moderator CANNOT edit other's message!
+
+    // Moderator deletes attendee2's message
+    await modDeleteBtns[0]!.trigger('click');
+    expect(conference.messages).toHaveLength(0);
+
+    modWrapper.unmount();
+  });
+
+  it('closes and hides when chat feature is disabled', async () => {
+    const features = useSessionFeaturesStore();
+    const { wrapper } = await mountWithApp(ChatPanel);
+    const trigger = wrapper.find('button.ibtn');
+    await trigger.trigger('click');
+    expect(wrapper.find('.chatCard').exists()).toBe(true);
+
+    features.enabledFeatures.chat = false;
+    await nextTick();
+    expect(wrapper.find('.wrap').exists()).toBe(false);
+
+    // when open is already false and canUseChat turns false, watcher is a no-op
+    features.enabledFeatures.chat = true;
+    await nextTick();
+    features.enabledFeatures.chat = false;
+    await nextTick();
+
+    wrapper.unmount();
+  });
 });

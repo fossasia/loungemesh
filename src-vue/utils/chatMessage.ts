@@ -25,6 +25,16 @@ export function canEditChatMessage(message: ChatMessage, localUserId: string): b
   return !!localUserId && message.id === localUserId;
 }
 
+export function canDeleteChatMessage(
+  message: ChatMessage,
+  localUserId: string,
+  canModerate: boolean,
+): boolean {
+  if (!localUserId) return false;
+  if (canModerate) return true;
+  return message.id === localUserId;
+}
+
 export type ChatMessageRef = {
   messageId: string;
   nr?: number;

@@ -9,6 +9,8 @@ import { handleSessionConnectionWatch } from './sessionConnectionWatch';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useReconnectStore } from '@/stores/reconnectStore';
+import { applyLobbyPlayback } from '@/utils/lobbyPlayback';
 import { formatSphereName } from '@/utils/formatSphereName';
 
 const route = useRoute();
@@ -17,6 +19,7 @@ const connectionStore = useConnectionStore();
 const conferenceStore = useConferenceStore();
 const localStore = useLocalStore();
 const auth = useAuthStore();
+const reconnectStore = useReconnectStore();
 
 // Sync auth display name to conference store displayName reactively
 watch(
@@ -49,8 +52,8 @@ watch(
 );
 /* v8 ignore stop */
 
-function syncSession() {
-  /* v8 ignore start */
+/* v8 ignore start */
+function syncSession(isReconnect = false) {
   const roomId = String(route.params.id ?? '');
   return handleSessionConnectionWatch(roomId, connectionStore.connected, {
     connect,
@@ -59,9 +62,10 @@ function syncSession() {
     conferenceStore,
     engine,
     conferenceOptions,
-    resetSessionForJoin: () => {
+    isReconnect,
+    resetSessionForJoin: (options?: { isReconnect?: boolean }) => {
       const features = useSessionFeaturesStore();
-      features.resetHostForJoin();
+      features.resetHostForJoin(options);
       features.loadPersistedHostSettings(roomId);
       void features.fetchRoomConfigAndRole(roomId, engine);
     },
@@ -71,12 +75,26 @@ function syncSession() {
 
 watch(() => route.params.id, () => void syncSession(), { immediate: true });
 
-const onConnected = () => void syncSession();
+const features = useSessionFeaturesStore();
+watch(
+  () => features.isLobbyBlocked,
+  (blocked) => {
+    applyLobbyPlayback(engine, blocked);
+  },
+  { immediate: true },
+);
+
+const onConnected = () => {
+  const isReconnect = reconnectStore.attempt > 0 || reconnectStore.phase === 'attempting' || reconnectStore.phase === 'waiting';
+  void syncSession(isReconnect);
+};
 const onDisconnected = () => void syncSession();
 engine.on('connected', onConnected);
 engine.on('disconnected', onDisconnected);
 
 function cleanupSession() {
+  reconnectStore.setIntentionalLeave(true);
+  reconnectStore.setRetryAction(undefined);
   engine.off('connected', onConnected);
   engine.off('disconnected', onDisconnected);
   // stopAllLocalMedia stops the underlying MediaStream tracks synchronously
@@ -94,6 +112,8 @@ function onPageHide() {
 }
 
 onMounted(() => {
+  reconnectStore.setIntentionalLeave(false);
+  reconnectStore.setRetryAction(() => syncSession(true));
   window.addEventListener('pagehide', onPageHide);
 });
 

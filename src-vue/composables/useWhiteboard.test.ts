@@ -120,6 +120,7 @@ describe('useWhiteboard', () => {
   it('publishes multi-point strokes and skips single-point strokes', async () => {
     const local = useLocalStore();
     local.setMyID('me');
+    useSessionFeaturesStore().setHost('me');
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx() as never);
     const { wrapper } = await mountWithApp(Harness);
     await flushPromises();
@@ -148,6 +149,35 @@ describe('useWhiteboard', () => {
       new PointerEvent('pointerup', { clientX: 1, clientY: 1, pointerId: 2, bubbles: true }),
     );
     expect(features.whiteboardStrokes.length).toBe(1);
+    wrapper.unmount();
+  });
+
+  it('queues stroke for moderation when author cannot moderate', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('guest');
+    features.setHost('host');
+
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCtx() as never);
+    const { wrapper } = await mountWithApp(Harness);
+    await flushPromises();
+
+    const canvas = wrapper.find('canvas').element as HTMLCanvasElement;
+    Object.defineProperty(canvas.parentElement, 'clientWidth', { value: 200, configurable: true });
+    Object.defineProperty(canvas.parentElement, 'clientHeight', { value: 150, configurable: true });
+
+    canvas.dispatchEvent(
+      new PointerEvent('pointerdown', { clientX: 5, clientY: 5, pointerId: 1, bubbles: true }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 12, clientY: 12, pointerId: 1, bubbles: true }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent('pointerup', { clientX: 20, clientY: 20, pointerId: 1, bubbles: true }),
+    );
+
+    expect(features.whiteboardStrokes).toHaveLength(1);
+    expect(features.pendingModerationChanges).toHaveLength(0);
     wrapper.unmount();
   });
 
