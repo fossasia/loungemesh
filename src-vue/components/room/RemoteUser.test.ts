@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useLocalStore } from '@/stores/localStore';
 import { makeTrack } from '@/test/makeTrack';
 import RemoteUser from './RemoteUser.vue';
 
@@ -20,6 +21,8 @@ describe('RemoteUser', () => {
 
   it('shows speaking highlight on camera video', async () => {
     const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.pos = { x: 10, y: 20 };
     conference.addUser('u1', { _displayName: 'Bob' } as never);
     const u = conference.users.u1;
     u.speaking = true;
@@ -34,6 +37,8 @@ describe('RemoteUser', () => {
 
   it('shows speaking highlight on avatar when camera is off', async () => {
     const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.pos = { x: 0, y: 0 };
     conference.addUser('u-avatar', { _displayName: 'Cam Off' } as never);
     const u = conference.users['u-avatar'];
     u.speaking = true;
@@ -42,6 +47,16 @@ describe('RemoteUser', () => {
 
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-avatar' } });
     expect(wrapper.find('.videoContainer.speaking').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('shows avatar tile ring when remote camera is off', async () => {
+    const conference = useConferenceStore();
+    conference.addUser('u-ring', { _displayName: 'No Cam' } as never);
+    conference.users['u-ring'].pos = { x: 0, y: 0 };
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-ring' } });
+    expect(wrapper.find('.videoContainer.avatarTile').exists()).toBe(true);
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -56,16 +71,6 @@ describe('RemoteUser', () => {
     wrapper.unmount();
   });
 
-  it('renders desktop share layout', async () => {
-    const conference = useConferenceStore();
-    conference.addUser('u1', { _displayName: 'Bob' } as never);
-    conference.users.u1.pos = { x: 0, y: 0 };
-    conference.users.u1.video = makeTrack('desktop');
-    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u1' } });
-    expect(wrapper.find('.desktopVideo').exists()).toBe(true);
-    wrapper.unmount();
-  });
-
   it('treats onStage string property as presenting', async () => {
     const conference = useConferenceStore();
     conference.addUser('u3', { _displayName: 'Sam' } as never);
@@ -77,6 +82,7 @@ describe('RemoteUser', () => {
   });
 
   it('shows reaction emoji and raised hand', async () => {
+    vi.useFakeTimers();
     const conference = useConferenceStore();
     const features = useSessionFeaturesStore();
     conference.addUser('u4', { _displayName: 'Lee' } as never);
@@ -84,9 +90,14 @@ describe('RemoteUser', () => {
     conference.users.u4.properties = { handRaised: true };
     features.setReaction('u4', '🎉');
     const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u4' } });
-    expect(wrapper.text()).toContain('🎉');
-    expect(wrapper.text()).toContain('✋');
+    expect(wrapper.find('.floatReact').text()).toBe('🎉');
+    expect(wrapper.find('.handBadge').exists()).toBe(true);
+    vi.advanceTimersByTime(2500);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.floatReact').exists()).toBe(false);
+    expect(wrapper.find('.handBadge').exists()).toBe(true);
     wrapper.unmount();
+    vi.useRealTimers();
   });
 
   it('falls back to a default name when no display name is known', async () => {
@@ -107,4 +118,58 @@ describe('RemoteUser', () => {
     expect(wrapper.text()).toContain('Presenting');
     wrapper.unmount();
   });
+
+  it('shows avatar when remote user is outside sphere and stage/presenter mode is active', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.pos = { x: 0, y: 0 };
+    conference.addUser('u-outside', { _displayName: 'Outside' } as never);
+    const u = conference.users['u-outside'];
+    u.pos = { x: 1000, y: 0 };
+    u.video = makeTrack('video');
+
+    features.stageOccupantId = 'some-other';
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-outside' } });
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(false);
+
+    features.stageOccupantId = null;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('video.remoteVideo').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('renders host role badge on nametag when user is host', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u-host', { _displayName: 'Host User' } as never);
+    conference.users['u-host'].pos = { x: 0, y: 0 };
+    features.hostId = 'u-host';
+
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-host' } });
+    expect(wrapper.find('.hostIcon').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('renders moderator role badge when granted or defined in properties', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u-mod-grant', { _displayName: 'Mod Grant' } as never);
+    conference.users['u-mod-grant'].pos = { x: 0, y: 0 };
+    features.userGrants['u-mod-grant'] = { moderator: true };
+
+    const { wrapper: w1 } = await mountWithApp(RemoteUser, { props: { id: 'u-mod-grant' } });
+    expect(w1.find('.modIcon').exists()).toBe(true);
+    w1.unmount();
+
+    conference.addUser('u-mod-prop', { _displayName: 'Mod Prop' } as never);
+    conference.users['u-mod-prop'].pos = { x: 0, y: 0 };
+    conference.users['u-mod-prop'].properties = { role: 'moderator' };
+
+    const { wrapper: w2 } = await mountWithApp(RemoteUser, { props: { id: 'u-mod-prop' } });
+    expect(w2.find('.modIcon').exists()).toBe(true);
+    w2.unmount();
+  });
 });
+

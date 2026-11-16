@@ -31,6 +31,8 @@ const PASSWORD_KEYS = new Set([
   'JIGASI_TRANSCRIBER_PASSWORD',
   'JIBRI_RECORDER_PASSWORD',
   'JIBRI_XMPP_PASSWORD',
+  'JWT_SECRET',
+  'ENCRYPTION_KEY',
 ]);
 
 const PRODUCTION_URL_KEYS = new Set([
@@ -59,14 +61,13 @@ function parseArgs(argv) {
     else if (arg === '--force-passwords') out.forcePasswords = true;
     else if (arg === 'production' || arg === 'development') out.mode = arg;
     else if (arg.startsWith('--app-host=')) out.appHost = arg.slice('--app-host='.length);
-    else if (arg.startsWith('--jitsi-host=')) out.jitsiHost = arg.slice('--jitsi-host='.length);
     else if (arg.startsWith('--public-ip=')) out.publicIp = arg.slice('--public-ip='.length);
   }
   return out;
 }
 
-function rand() {
-  return crypto.randomBytes(16).toString('hex');
+function rand(bytes = 16) {
+  return crypto.randomBytes(bytes).toString('hex');
 }
 
 function stripProtocol(host) {
@@ -133,30 +134,29 @@ function isPlaceholder(value) {
   return PLACEHOLDER.test(value);
 }
 
-function applyProductionPlaceholders(text, { appHost, jitsiHost, publicIp }) {
-  const app = appHost || jitsiHost;
+function applyProductionPlaceholders(text, { appHost, publicIp }) {
   return text
-    .replaceAll('__APP_HOST__', app)
-    .replaceAll('__JITSI_HOST__', jitsiHost)
+    .replaceAll('__APP_HOST__', appHost)
+    .replaceAll('__JITSI_HOST__', appHost)
     .replaceAll('__PUBLIC_IP__', publicIp);
 }
 
 function passwordValue(key, current, templateValue, { forcePasswords }) {
-  if (forcePasswords) return rand();
+  const bytes = key === 'JWT_SECRET' || key === 'ENCRYPTION_KEY' ? 32 : 16;
+  if (forcePasswords) return rand(bytes);
   if (!isPlaceholder(current) && current !== undefined) return current;
-  if (isPlaceholder(templateValue)) return rand();
+  if (isPlaceholder(templateValue)) return rand(bytes);
   return templateValue;
 }
 
 /**
  * @returns {{ merged: Map<string, string>, summary: { added: string[], updated: string[], preservedSecrets: string[], preserved: string[] } }}
  */
-function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, jitsiHost, publicIp }) {
+function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, publicIp }) {
   const out = new Map(existing);
   const summary = { added: [], updated: [], preservedSecrets: [], preserved: [] };
-  const jitsiUrl = jitsiHost ? `https://${stripProtocol(jitsiHost)}` : '';
-  const appUrl = appHost ? `https://${stripProtocol(appHost)}` : jitsiUrl;
-  const cliUrls = Boolean(jitsiHost && publicIp);
+  const appUrl = appHost ? `https://${stripProtocol(appHost)}` : '';
+  const cliUrls = Boolean(appHost && publicIp);
 
   for (const [key, templateValue] of template) {
     const current = out.get(key);
@@ -179,9 +179,9 @@ function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, j
     if (mode === 'production' && PRODUCTION_URL_KEYS.has(key) && cliUrls) {
       let next = current;
       if (key === 'DOCKER_HOST_ADDRESS') next = publicIp;
-      else if (key === 'PUBLIC_URL') next = jitsiUrl;
+      else if (key === 'PUBLIC_URL') next = appUrl;
       else if (key === 'VITE_JITSI_PUBLIC_URL' || key === 'LOUNGEMESH_PUBLIC_URL') next = appUrl;
-      else if (key === 'JVB_WS_DOMAIN') next = jitsiHost;
+      else if (key === 'JVB_WS_DOMAIN') next = appHost;
       else if (key === 'JVB_WS_TLS') next = '1';
 
       if (!hadKey) {
@@ -321,38 +321,32 @@ if (!fs.existsSync(templatePath)) {
 let templateText = fs.readFileSync(templatePath, 'utf8');
 
 if (args.mode === 'production') {
-  let jitsiHost = args.jitsiHost ? stripProtocol(args.jitsiHost) : '';
+  let appHost = args.appHost ? stripProtocol(args.appHost) : '';
   let publicIp = args.publicIp?.trim() ?? '';
 
   const prior = fs.existsSync(target) ? parseEnvLines(fs.readFileSync(target, 'utf8')) : new Map();
-  if (args.fromEnv && (!jitsiHost || !publicIp)) {
-    if (!jitsiHost) {
-      jitsiHost = stripProtocol(prior.get('PUBLIC_URL') || prior.get('VITE_JITSI_PUBLIC_URL') || '');
+  if (args.fromEnv && (!appHost || !publicIp)) {
+    if (!appHost) {
+      appHost = stripProtocol(prior.get('LOUNGEMESH_APP_HOST') || prior.get('LOUNGEMESH_PUBLIC_URL') || prior.get('VITE_JITSI_PUBLIC_URL') || '');
     }
     if (!publicIp) {
       publicIp = (prior.get('DOCKER_HOST_ADDRESS') || prior.get('JVB_ADVERTISE_IPS') || '').trim();
     }
   }
 
-  if (!jitsiHost || !publicIp || isPlaceholder(jitsiHost) || isPlaceholder(publicIp)) {
+  if (!appHost || !publicIp || isPlaceholder(appHost) || isPlaceholder(publicIp)) {
     console.error(
-      'Production setup requires jitsi host and public IP.\n' +
-        '  First time: ./scripts/loungemesh.sh bootstrap --app-host=... --jitsi-host=... --email=...\n' +
+      'Production setup requires app host and public IP.\n' +
+        '  First time: ./scripts/loungemesh.sh bootstrap --app-host=... --email=...\n' +
         '  Or re-run deploy after bootstrap (npm run deploy merges .env from your existing values)',
     );
     process.exit(1);
   }
 
-  args.jitsiHost = jitsiHost;
+  args.appHost = appHost;
   args.publicIp = publicIp;
-  if (!args.appHost) {
-    args.appHost = stripProtocol(
-      prior.get('LOUNGEMESH_APP_HOST') || prior.get('LOUNGEMESH_PUBLIC_URL') || '',
-    );
-  }
   templateText = applyProductionPlaceholders(templateText, {
-    appHost: args.appHost || jitsiHost,
-    jitsiHost,
+    appHost,
     publicIp,
   });
 }
@@ -366,7 +360,6 @@ const { merged, summary } = mergeMaps(existingMap, templateMap, {
   forcePasswords: args.forcePasswords,
   mode: args.mode,
   appHost: args.appHost ? stripProtocol(args.appHost) : '',
-  jitsiHost: args.jitsiHost ? stripProtocol(args.jitsiHost) : '',
   publicIp: args.publicIp?.trim() ?? '',
 });
 

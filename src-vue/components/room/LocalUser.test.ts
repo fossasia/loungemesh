@@ -3,6 +3,7 @@ import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
+import { connectAndJoinTestConference } from '@/test/jitsiTestContext';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { makeTrack } from '@/test/makeTrack';
@@ -16,7 +17,7 @@ describe('LocalUser', () => {
     local.setMyID('local-1');
     local.video = makeTrack('video');
     local.audio = makeTrack('audio');
-    local.videoType = 'desktop';
+    local.videoType = 'camera';
     local.mute = true;
 
     const { wrapper } = await mountWithApp(LocalUser);
@@ -74,16 +75,29 @@ describe('LocalUser', () => {
     wrapper.unmount();
   });
 
-  it('shows speaking highlight and share placeholder', async () => {
+  it('shows speaking highlight on camera video when unmuted', async () => {
     const local = useLocalStore();
+    local.setMyID('local-1');
+    local.video = makeTrack('video');
+    local.videoType = 'camera';
+    local.cameraOff = false;
     local.speaking = true;
     local.mute = false;
-    local.videoType = 'desktop';
-    local.video = undefined;
     const { wrapper } = await mountWithApp(LocalUser);
-    expect(wrapper.find('video.speaking').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Starting screen share');
+    await flushPromises();
+    expect(wrapper.find('video.vid.speaking').exists()).toBe(true);
     wrapper.unmount();
+  });
+
+  it('uses camera video class', async () => {
+    const local = useLocalStore();
+    local.setMyID('local-1');
+    local.video = makeTrack('video');
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    const camera = await mountWithApp(LocalUser);
+    expect(camera.wrapper.find('video.vid').exists()).toBe(true);
+    camera.wrapper.unmount();
   });
 
   it('shows avatar backdrop when camera is off', async () => {
@@ -91,7 +105,8 @@ describe('LocalUser', () => {
     local.cameraOff = true;
     local.video = undefined;
     const { wrapper } = await mountWithApp(LocalUser);
-    expect(wrapper.find('video.vid').isVisible()).toBe(false);
+    expect(wrapper.find('video.vid').exists()).toBe(false);
+    expect(wrapper.find('.videoContainer.avatarTile').exists()).toBe(true);
     expect(wrapper.find('.base.avatar').exists()).toBe(true);
     wrapper.unmount();
   });
@@ -102,6 +117,44 @@ describe('LocalUser', () => {
     local.videoType = 'camera';
     const { wrapper } = await mountWithApp(LocalUser);
     expect(wrapper.find('video.vid').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('does not replace the avatar tile with the compact stage preview when on stage, but shows presenting', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('presenter');
+    local.video = makeTrack('video');
+    local.videoType = 'camera';
+    local.cameraOff = false;
+    features.stageOccupantId = 'presenter';
+    local.onStage = true;
+
+    const { wrapper } = await mountWithApp(LocalUser);
+    await flushPromises();
+    expect(wrapper.find('.stageTileHost').exists()).toBe(false);
+    expect(wrapper.find('.videoContainer').exists()).toBe(true);
+    expect(wrapper.find('.videoContainer').classes()).toContain('onStageOccupant');
+    expect(wrapper.findComponent({ name: 'UserBackdrop' }).props('onStage')).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('shows mute control while on stage', async () => {
+    await connectAndJoinTestConference();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('presenter');
+    features.stageOccupantId = 'presenter';
+    local.onStage = true;
+    local.mute = true;
+    local.video = makeTrack('video');
+
+    const { wrapper } = await mountWithApp(LocalUser);
+    await flushPromises();
+    const mute = wrapper.findComponent({ name: 'MuteIndicator' });
+    expect(mute.exists()).toBe(true);
+    if (mute.exists()) await mute.trigger('click');
     wrapper.unmount();
   });
 
@@ -245,8 +298,8 @@ describe('LocalUser', () => {
     local.setMyID('local-1');
     local.scale = 0;
     local.pan = { x: 0, y: 0 };
-    local.videoType = 'desktop';
-    local.video = makeTrack('desktop');
+    local.videoType = 'camera';
+    local.video = makeTrack('video');
 
     const { wrapper } = await mountWithApp(LocalUser, { props: { draggable: false } });
     const tile = wrapper.find('.dragSurface').element;

@@ -1,3 +1,4 @@
+/** Coordinates in whiteboard logical pixel space (1280×720). */
 export type WhiteboardPoint = { x: number; y: number };
 export type WhiteboardStroke = {
   id: string;

@@ -24,12 +24,13 @@ export function effectiveGrants(
     notes: !!base.notes,
     whiteboard: !!base.whiteboard,
     poll: !!base.poll,
-    stage: !!base.stage,
+    moderator: !!base.moderator,
+    chat: base.chat !== false,
   };
 }
 
 export function canUseFeature(grants: UserGrants, key: FeatureKey): boolean {
-  return grants[key];
+  return grants[key] ?? true;
 }
 
 /** Merge partial grants into room defaults or a user entry. */
@@ -38,7 +39,8 @@ export function mergeGrants(current: UserGrants, patch: Partial<UserGrants>): Us
     notes: patch.notes ?? current.notes,
     whiteboard: patch.whiteboard ?? current.whiteboard,
     poll: patch.poll ?? current.poll,
-    stage: patch.stage ?? current.stage,
+    moderator: patch.moderator ?? current.moderator,
+    chat: patch.chat ?? current.chat ?? true,
   };
 }
 

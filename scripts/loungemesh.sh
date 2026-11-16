@@ -28,7 +28,6 @@ COMMAND="${1:-dev}"
 shift || true
 
 APP_HOST=""
-JITSI_HOST=""
 PUBLIC_IP=""
 CADDY_EMAIL=""
 SKIP_SYSTEM=0
@@ -40,7 +39,6 @@ AUTO_IP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app-host=*)      APP_HOST="${1#*=}" ;;
-    --jitsi-host=*)    JITSI_HOST="${1#*=}" ;;
     --public-ip=*)     PUBLIC_IP="${1#*=}" ;;
     --email=*)         CADDY_EMAIL="${1#*=}" ;;
     --skip-system)     SKIP_SYSTEM=1 ;;
@@ -60,6 +58,11 @@ _usage() {
 }
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+SUDO=""
+if [[ "$(uname)" != "Darwin" ]] && command -v sudo >/dev/null 2>&1; then
+  SUDO="sudo"
+fi
 
 strip_proto() { echo "${1#https://}" | sed 's|^http://||' | sed 's|/$||'; }
 
@@ -117,7 +120,6 @@ merge_env() {
     [[ ${#extra[@]} -gt 0 ]] && prod_extra+=("${extra[@]}")
     # Bootstrap may still have host/IP in shell vars when deploy runs immediately after.
     [[ -n "$PUBLIC_IP" ]] && prod_extra+=(--public-ip="$PUBLIC_IP")
-    [[ -n "$JITSI_HOST" ]] && prod_extra+=(--jitsi-host="$(strip_proto "$JITSI_HOST")")
     [[ -n "$APP_HOST" ]] && prod_extra+=(--app-host="$(strip_proto "$APP_HOST")")
     node scripts/setup-env.mjs production "${prod_extra[@]}" $FORCE_FLAGS
   else
@@ -179,7 +181,7 @@ update_ip_in_env() {
   rm -f .env.bak
   # Mark JVB config for full regeneration so it picks up the new IP
   docker compose stop jvb jicofo 2>/dev/null || true
-  sudo rm -rf docker/jitsi-config/jvb
+  $SUDO rm -rf docker/jitsi-config/jvb
   mkdir -p docker/jitsi-config/jvb
   echo "${new_ip}" > docker/jitsi-config/.loungemesh-docker-host
   export DOCKER_HOST_ADDRESS="$new_ip"
@@ -230,7 +232,7 @@ regenerate_jvb_if_needed() {
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$ip" ]]; then
     echo "==> DOCKER_HOST_ADDRESS changed to ${ip} — recreating JVB config"
     docker compose stop jvb jicofo 2>/dev/null || true
-    sudo rm -rf docker/jitsi-config/jvb
+    $SUDO rm -rf docker/jitsi-config/jvb
     mkdir -p docker/jitsi-config/jvb
     echo "${ip}" > "$marker"
   fi
@@ -242,7 +244,7 @@ regenerate_web_if_needed() {
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$url" ]]; then
     echo "==> PUBLIC_URL changed to ${url} — regenerating Jitsi web config"
     docker compose stop jitsi-web 2>/dev/null || true
-    sudo rm -rf docker/jitsi-config/web
+    $SUDO rm -rf docker/jitsi-config/web
     mkdir -p docker/jitsi-config/web/crontabs docker/jitsi-config/transcripts
     echo "${url}" > "$marker"
   fi
@@ -273,20 +275,47 @@ patch_jitsi_nginx() {
   local nginx_conf="docker/jitsi-config/web/nginx/nginx.conf"
   [[ -f "$meet_conf" ]] || return 0
   echo "==> Patching Jitsi nginx for WebSocket"
-  if [[ -f "$nginx_conf" ]] && grep -q 'gzip on' "$nginx_conf"; then
-    sudo sed -i 's/gzip on;/gzip off;/' "$nginx_conf"
-  fi
-  if grep -q 'location = /xmpp-websocket' "$meet_conf" && \
-     ! grep -A10 'location = /xmpp-websocket' "$meet_conf" | grep -q 'gzip off'; then
-    sudo sed -i '/location = \/xmpp-websocket {/a\    gzip off;' "$meet_conf"
-  fi
-  if grep -q 'location ~ \^/colibri-ws/' "$meet_conf" && \
-     ! grep -A6 'location ~ \^/colibri-ws/' "$meet_conf" | head -8 | grep -q 'gzip off'; then
-    sudo sed -i '/location ~ \^\/colibri-ws\//a\    gzip off;' "$meet_conf"
-  fi
-  sudo sed -i \
-    's/proxy_set_header Connection \$connection_upgrade;/proxy_set_header Connection "upgrade";/g' \
-    "$meet_conf" 2>/dev/null || true
+  $SUDO node -e '
+    const fs = require("fs");
+    
+    // Patch nginx_conf
+    const nginxConfPath = process.argv[1];
+    if (fs.existsSync(nginxConfPath)) {
+      let content = fs.readFileSync(nginxConfPath, "utf8");
+      if (content.includes("gzip on;")) {
+        fs.writeFileSync(nginxConfPath, content.replace("gzip on;", "gzip off;"));
+      }
+    }
+    
+    // Patch meet_conf
+    const meetConfPath = process.argv[2];
+    if (fs.existsSync(meetConfPath)) {
+      let content = fs.readFileSync(meetConfPath, "utf8");
+      
+      // Patch /xmpp-websocket
+      if (content.includes("location = /xmpp-websocket {")) {
+        const idx = content.indexOf("location = /xmpp-websocket {");
+        const nextLines = content.slice(idx, idx + 200);
+        if (!nextLines.includes("gzip off;")) {
+          content = content.replace("location = /xmpp-websocket {", "location = /xmpp-websocket {\n    gzip off;");
+        }
+      }
+      
+      // Patch /colibri-ws
+      if (content.includes("location ~ ^/colibri-ws/")) {
+        const idx = content.indexOf("location ~ ^/colibri-ws/");
+        const nextLines = content.slice(idx, idx + 200);
+        if (!nextLines.includes("gzip off;")) {
+          content = content.replace("location ~ ^/colibri-ws/ {", "location ~ ^/colibri-ws/ {\n    gzip off;");
+        }
+      }
+      
+      // Patch Connection header upgrade
+      content = content.replace("proxy_set_header Connection $connection_upgrade;", "proxy_set_header Connection \"upgrade\";");
+      
+      fs.writeFileSync(meetConfPath, content);
+    }
+  ' "$nginx_conf" "$meet_conf"
   if docker compose ps --status running jitsi-web 2>/dev/null | grep -q jitsi-web; then
     docker compose exec -T jitsi-web nginx -t >/dev/null 2>&1 && \
       docker compose exec -T jitsi-web nginx -s reload 2>/dev/null || \
@@ -294,16 +323,58 @@ patch_jitsi_nginx() {
   fi
 }
 
+wait_for_prosody_config() {
+  local prosody_conf="docker/jitsi-config/prosody/config/prosody.cfg.lua"
+  local jitsi_conf="docker/jitsi-config/prosody/config/conf.d/jitsi-meet.cfg.lua"
+  echo "==> Waiting for Prosody configuration to generate..."
+  for _ in $(seq 1 45); do
+    if [[ -f "$prosody_conf" && -f "$jitsi_conf" ]]; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "WARN: Prosody configuration was not generated in time — prosody patch skipped" >&2
+  return 1
+}
+
+patch_prosody_limits() {
+  local prosody_conf="docker/jitsi-config/prosody/config/prosody.cfg.lua"
+  local jitsi_conf="docker/jitsi-config/prosody/config/conf.d/jitsi-meet.cfg.lua"
+  [[ -f "$prosody_conf" && -f "$jitsi_conf" ]] || return 0
+  echo "==> Patching Prosody rate limits and stanza buffer"
+  $SUDO node -e '
+    const fs = require("fs");
+    const pPath = process.argv[1];
+    if (fs.existsSync(pPath)) {
+      let content = fs.readFileSync(pPath, "utf8");
+      if (content.includes("rate = \"10kb/s\";")) {
+        fs.writeFileSync(pPath, content.replace(/rate\s*=\s*"10kb\/s";/, "rate = \"128kb/s\";"));
+      }
+    }
+    const jPath = process.argv[2];
+    if (fs.existsSync(jPath)) {
+      let content = fs.readFileSync(jPath, "utf8");
+      if (content.includes("smacks_max_unacked_stanzas = 5;")) {
+        fs.writeFileSync(jPath, content.replace("smacks_max_unacked_stanzas = 5;", "smacks_max_unacked_stanzas = 25;"));
+      }
+    }
+  ' "$prosody_conf" "$jitsi_conf"
+  if docker compose ps --status running prosody 2>/dev/null | grep -q prosody; then
+    docker compose exec -T prosody prosodyctl reload 2>/dev/null || \
+      docker compose restart prosody
+  fi
+}
+
 check_ws() {
   local target="$1"; local origin="${2:-}"; local extra=()
   [[ -n "$origin" ]] && extra+=(-H "Origin: $origin")
-  curl -si --http1.1 \
-    "${extra[@]}" \
+  (set +o pipefail; curl -si --http1.1 --max-time 5 \
+    ${extra[@]+"${extra[@]}"} \
     -H "Connection: Upgrade" -H "Upgrade: websocket" \
     -H "Sec-WebSocket-Version: 13" \
     -H "Sec-WebSocket-Protocol: xmpp" \
     -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-    "$target" 2>/dev/null | head -1
+    "$target" 2>/dev/null | head -1)
 }
 
 verify_websockets() {
@@ -338,40 +409,24 @@ write_caddyfile() {
   local app_host="$1" jitsi_host="$2" email_line=""
   [[ -n "$CADDY_EMAIL" ]] && email_line=$'\temail '"$CADDY_EMAIL"
 
-  sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
-{
-${email_line}
-}
+  local redir_block=""
+  if [[ "$app_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$app_host" == "localhost" ]]; then
+    :
+  elif [[ "$app_host" == www.* ]]; then
+    local other_host="${app_host#www.}"
+    redir_block=$'\n'"${other_host} {
+	redir https://${app_host}{uri}
+}"
+  else
+    local other_host="www.${app_host}"
+    redir_block=$'\n'"${other_host} {
+	redir https://${app_host}{uri}
+}"
+  fi
 
-${app_host} {
-	route {
-		handle /xmpp-websocket* {
-			reverse_proxy 127.0.0.1:8001 {
-				transport http {
-					versions 1.1
-				}
-				stream_timeout 24h
-			}
-		}
-		handle /http-bind* {
-			reverse_proxy 127.0.0.1:8001
-		}
-		handle /colibri-ws* {
-			reverse_proxy 127.0.0.1:8001 {
-				transport http {
-					versions 1.1
-				}
-				stream_timeout 24h
-			}
-		}
-		handle {
-			encode gzip zstd
-			reverse_proxy 127.0.0.1:8780
-		}
-	}
-}
-
-${jitsi_host} {
+  local jitsi_block=""
+  if [[ "$app_host" != "$jitsi_host" ]]; then
+    jitsi_block=$'\n'"${jitsi_host} {
 	route {
 		handle /xmpp-websocket* {
 			reverse_proxy 127.0.0.1:8001 {
@@ -402,7 +457,43 @@ ${jitsi_host} {
 			}
 		}
 	}
+}"
+  fi
+
+  sudo tee /etc/caddy/Caddyfile >/dev/null <<EOF
+{
+${email_line}
 }
+${redir_block}
+
+${app_host} {
+	route {
+		handle /xmpp-websocket* {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+				}
+				stream_timeout 24h
+			}
+		}
+		handle /http-bind* {
+			reverse_proxy 127.0.0.1:8001
+		}
+		handle /colibri-ws* {
+			reverse_proxy 127.0.0.1:8001 {
+				transport http {
+					versions 1.1
+				}
+				stream_timeout 24h
+			}
+		}
+		handle {
+			encode gzip zstd
+			reverse_proxy 127.0.0.1:8780
+		}
+	}
+}
+${jitsi_block}
 EOF
   sudo systemctl enable --now caddy
   sudo systemctl reload caddy || sudo systemctl restart caddy
@@ -490,12 +581,13 @@ cmd_deploy() {
   regenerate_jvb_if_needed "$mode"
   regenerate_web_if_needed
   ensure_jitsi_dirs
+  patch_prosody_limits
 
   echo "==> Pulling latest Jitsi images"
   docker compose pull
 
-  echo "==> Building LoungeMesh SPA (VITE_* vars are baked into the image)"
-  docker compose build --pull --no-cache loungemesh
+  echo "==> Building LoungeMesh SPA and backend server (VITE_* vars baked into SPA image)"
+  docker compose build --pull --no-cache loungemesh server
 
   # --force-recreate with NO service list restarts EVERY container so each one
   # picks up the fresh .env values and the rebuilt image. Docker Compose resolves
@@ -508,6 +600,8 @@ cmd_deploy() {
   # Wait for that file, then patch WebSocket headers (gzip off, Connection: upgrade).
   wait_for_jitsi_nginx || true
   patch_jitsi_nginx
+  wait_for_prosody_config || true
+  patch_prosody_limits
 
   echo "==> Waiting for all services to fully initialise..."
   sleep 20
@@ -519,8 +613,8 @@ cmd_deploy() {
 }
 
 cmd_bootstrap() {
-  [[ -n "$JITSI_HOST" ]] || {
-    echo "Usage: ./scripts/loungemesh.sh bootstrap --app-host=... --jitsi-host=... [--public-ip=...] [--email=...] [--deploy]"
+  [[ -n "$APP_HOST" ]] || {
+    echo "Usage: ./scripts/loungemesh.sh bootstrap --app-host=... [--public-ip=...] [--email=...] [--deploy]"
     echo "  --public-ip is optional; omit to auto-detect the server's public IP."
     exit 1
   }
@@ -558,7 +652,7 @@ cmd_bootstrap() {
       sudo apt-get install -y docker-compose-plugin
       echo ""
       echo "Docker installed. Log out and back in (docker group), then re-run:"
-      echo "  ./scripts/loungemesh.sh bootstrap --skip-system --app-host=${APP_HOST} --jitsi-host=${JITSI_HOST} --public-ip=${PUBLIC_IP} --deploy"
+      echo "  ./scripts/loungemesh.sh bootstrap --skip-system --app-host=${APP_HOST} --public-ip=${PUBLIC_IP} --deploy"
       exit 0
     fi
     sudo apt-get install -y docker-compose-plugin
@@ -570,11 +664,10 @@ cmd_bootstrap() {
   echo "==> Production .env"
   ensure_node
   local ah jh
-  ah=$(strip_proto "${APP_HOST:-$JITSI_HOST}")
-  jh=$(strip_proto "$JITSI_HOST")
+  ah=$(strip_proto "$APP_HOST")
+  jh="${ah}"
   node scripts/setup-env.mjs production \
     --app-host="$ah" \
-    --jitsi-host="$jh" \
     --public-ip="$PUBLIC_IP" \
     $FORCE_FLAGS
 
@@ -582,7 +675,7 @@ cmd_bootstrap() {
 
   if [[ "$UPDATE_CADDY" -eq 1 || ! -f /etc/caddy/Caddyfile || "$DEPLOY_NOW" -eq 1 ]]; then
     echo "==> Writing Caddyfile"
-    write_caddyfile "$ah" "$jh"
+    write_caddyfile "$ah" "$ah"
   else
     echo "==> Caddyfile unchanged (pass --update-caddy to rewrite)"
     sudo systemctl enable --now caddy 2>/dev/null || true
@@ -629,12 +722,11 @@ cmd_fix_jvb() {
     exit 1
   fi
 
-  local app_host jitsi_host
+  local app_host
   app_host=$(strip_proto "${LOUNGEMESH_PUBLIC_URL:-${LOUNGEMESH_APP_HOST:-}}")
-  jitsi_host=$(strip_proto "${PUBLIC_URL:-}")
 
-  [[ -n "$app_host" && -n "$jitsi_host" ]] || {
-    echo "Set LOUNGEMESH_PUBLIC_URL and PUBLIC_URL in .env first."
+  [[ -n "$app_host" ]] || {
+    echo "Set LOUNGEMESH_PUBLIC_URL in .env first."
     exit 1
   }
 
@@ -642,7 +734,6 @@ cmd_fix_jvb() {
   ensure_node
   node scripts/setup-env.mjs production \
     --app-host="$app_host" \
-    --jitsi-host="$jitsi_host" \
     --public-ip="$PUBLIC_IP"
 
   # Ensure JVB_ADVERTISE_IPS is explicitly set
@@ -661,7 +752,7 @@ cmd_fix_jvb() {
 
   echo "==> Wiping cached JVB config (forces re-generation with new IP)"
   docker compose stop jvb jicofo 2>/dev/null || true
-  sudo rm -rf docker/jitsi-config/jvb
+  $SUDO rm -rf docker/jitsi-config/jvb
   mkdir -p docker/jitsi-config/jvb
   echo "${PUBLIC_IP}" > docker/jitsi-config/.loungemesh-docker-host
 

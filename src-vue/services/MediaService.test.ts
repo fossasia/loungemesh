@@ -35,6 +35,7 @@ class StubMediaService implements MediaService {
   setLocalParticipantProperty() {}
   sendTextMessage() {}
   sendCommand() {}
+  removeCommand() {}
   getLocalUserId() { return 'stub-user'; }
   getConference() { return undefined; }
   isConnected() { return this._connected; }

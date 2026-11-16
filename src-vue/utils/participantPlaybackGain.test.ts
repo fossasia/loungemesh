@@ -15,4 +15,8 @@ describe('playbackGainForUser', () => {
     expect(playbackGainForUser({ mute: false }, 1.5)).toBe(1);
     expect(playbackGainForUser({ mute: false }, -0.2)).toBe(0);
   });
+
+  it('returns full volume for presenter regardless of proximity', () => {
+    expect(playbackGainForUser({ mute: false }, 0.2, true)).toBe(1.0);
+  });
 });
