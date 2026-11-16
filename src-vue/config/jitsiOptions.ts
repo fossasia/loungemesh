@@ -23,6 +23,6 @@ export const conferenceOptions = {
    * avoids simulcast setParameters edge cases across Chrome/Firefox.
    */
   disableSimulcast: true,
-  channelLastN: 16,
+  channelLastN: 8,
   enableLayerSuspension: false,
 };

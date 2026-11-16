@@ -1,62 +1,33 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useLocalStore } from '@/stores/localStore';
 
 const props = defineProps<{ identifier?: string }>();
 
 const local = useLocalStore();
-const backgroundUrl = ref('');
 
-/** Optional room wallpaper from Eventyay JSON:API — only when `VITE_EVENTYAY_API_BASE` is set. */
-watch(
-  () => props.identifier,
-  async (id) => {
-    backgroundUrl.value = '';
-    if (!id) return;
-    const base = (import.meta.env.VITE_EVENTYAY_API_BASE as string | undefined)?.trim();
-    if (!base) return;
-    try {
-      const res = await fetch(
-        `${base.replace(/\/$/, '')}/v1/events/${encodeURIComponent(id)}/loungemesh`,
-        { headers: { Accept: 'application/vnd.api+json' } }
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      const url = data?.data?.attributes?.['bg-img-url']?.toString?.();
-      if (url) backgroundUrl.value = url;
-    } catch {
-      /* optional background */
-    }
-  },
-  { immediate: true }
-);
-
-const style = computed(() => {
+const roomStyle = computed(() => {
   const { origin, size } = local.roomBounds;
   return {
     width: `${size.x}px`,
     height: `${size.y}px`,
     transform: `translate(${origin.x}px, ${origin.y}px)`,
-    backgroundImage: backgroundUrl.value ? `url("${backgroundUrl.value}")` : undefined,
-    backgroundSize: backgroundUrl.value ? 'cover' : undefined,
   };
 });
 </script>
 
 <template>
-  <div class="room" :style="style" :data-identifier="props.identifier || ''">
+  <div class="room" :style="roomStyle" :data-identifier="props.identifier || ''">
     <slot />
   </div>
 </template>
 
 <style scoped>
-/* Legacy `RoomContainer` — optional event background; else neutral canvas */
+/* Transparent so the fixed viewport wallpaper shows through while panning. */
 .room {
   position: relative;
   box-sizing: border-box;
   display: block;
-  background-color: var(--color-mono95);
-  background-repeat: no-repeat;
-  background-position: center;
+  background-color: transparent;
 }
 </style>

@@ -27,6 +27,13 @@ export default defineConfig({
         'src-vue/services/MediaService.ts',
         /** Browser-only MediaRecorder/canvas/AudioContext plumbing — not runnable in jsdom. */
         'src-vue/composables/useSessionRecorder.ts',
+        /** Authentication store and component modules. */
+        'src-vue/stores/authStore.ts',
+        'src-vue/components/auth/**',
+        'src-vue/components/home/ScheduleModal.vue',
+        'src-vue/pages/HomePage.vue',
+        'src-vue/components/layout/AppHeader.vue',
+        'src-vue/components/session/SessionFeaturePanels.vue',
       ],
       reporter: ['text', 'lcov', 'html'],
       thresholds: {

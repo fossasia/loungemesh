@@ -1,12 +1,16 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { toRaw } from 'vue';
 import { setActivePinia, createPinia } from 'pinia';
 import { useLocalStore } from './localStore';
 import { useConferenceStore } from './conferenceStore';
+import { useSessionFeaturesStore } from './sessionFeaturesStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+import { conferenceOptions } from '@/config/jitsiOptions';
 
 describe('localStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
   });
 
   it('expands room bounds when users move far from the center', () => {
@@ -45,7 +49,8 @@ describe('localStore', () => {
       { getType: () => 'video', videoType: 'desktop' } as never,
     ]);
     expect(store.audio).toBeTruthy();
-    expect(store.videoType).toBe('desktop');
+    expect(store.screenshare).toBeTruthy();
+    expect(store.videoType).toBe('camera');
   });
 
   it('setLocalTracks disposes camera tracks while camera is off', () => {
@@ -122,9 +127,10 @@ describe('localStore', () => {
 
   it('calculateUsersOnScreen updates constraints from DOM', () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
     conference.addUser('u1');
-    conference.users.u1.properties = { onStage: 'true' };
     conference.users.u1.pos = { x: 100, y: 100 };
+    features.stageOccupantId = 'u1';
 
     const el = document.createElement('div');
     el.id = 'u1';
@@ -136,7 +142,6 @@ describe('localStore', () => {
 
     const store = useLocalStore();
     store.id = 'me';
-    store.onStage = true;
     store.calculateUsersOnScreen();
 
     expect(store.usersOnStage).toContain('u1');
@@ -149,7 +154,38 @@ describe('localStore', () => {
     constraintsSpy.mockRestore();
   });
 
-  it('toggleMute fully releases the mic on mute and re-acquires it on unmute', async () => {
+  it('requests no video while the local person is waiting in the lobby', () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u1');
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'waiting';
+    store.calculateUsersOnScreen();
+    expect(store.visibleUsers).toEqual([]);
+    expect(constraintsSpy).toHaveBeenCalledTimes(1);
+    expect(constraintsSpy.mock.calls[0][0].selectedSources).toEqual([]);
+    expect(constraintsSpy.mock.calls[0][0].lastN).toBe(0);
+    constraintsSpy.mockRestore();
+  });
+
+  it('skips receiver constraints in the lobby when nobody else is present', () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'waiting';
+    store.calculateUsersOnScreen();
+    expect(constraintsSpy).not.toHaveBeenCalled();
+    constraintsSpy.mockRestore();
+  });
+
+  it('toggleMute releases the mic on mute and re-acquires it on unmute', async () => {
     const existing = {
       getType: () => 'audio',
       isMuted: vi.fn().mockReturnValue(false),
@@ -180,7 +216,6 @@ describe('localStore', () => {
     store.audio = existing as never;
     store.mute = false;
 
-    // Mute → signal mute to peers, then stop and release the device entirely.
     await store.toggleMute();
     expect(existing.mute).toHaveBeenCalled();
     expect(store.mute).toBe(true);
@@ -189,13 +224,99 @@ describe('localStore', () => {
     expect(existing.dispose).toHaveBeenCalled();
     expect(refreshSpy).toHaveBeenCalled();
 
-    // Unmute → acquire a brand-new track and publish it.
     await store.toggleMute();
     expect(store.mute).toBe(false);
     expect(createSpy).toHaveBeenCalledWith(['audio']);
     expect(addSpy).toHaveBeenCalledWith(fresh);
-    expect(store.audio).toBe(fresh);
+    expect(toRaw(store.audio)).toBe(fresh);
     expect(refreshSpy).toHaveBeenCalled();
+  });
+
+  it('disableMic fully releases the mic', async () => {
+    const existing = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(false),
+      mute: vi.fn().mockResolvedValue(undefined),
+      dispose: vi.fn(),
+      getOriginalStream: () => ({ getTracks: () => [{ stop: vi.fn() }] }),
+    };
+    const engine = getMediaEngineInstance();
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [],
+      removeTrack,
+    } as never);
+    const store = useLocalStore();
+    store.audio = existing as never;
+    store.mute = false;
+    await store.disableMic();
+    expect(existing.mute).toHaveBeenCalled();
+    expect(store.mute).toBe(true);
+    expect(store.audio).toBeUndefined();
+    expect(removeTrack).toHaveBeenCalledWith(existing);
+    expect(existing.dispose).toHaveBeenCalled();
+  });
+
+  it('disableMic skips mute when the track is already muted', async () => {
+    const track = {
+      isMuted: vi.fn().mockReturnValue(true),
+      mute: vi.fn(),
+    };
+    const store = useLocalStore();
+    store.audio = track as never;
+    store.mute = false;
+    await store.disableMic();
+    expect(track.mute).not.toHaveBeenCalled();
+    expect(store.mute).toBe(true);
+  });
+
+  it('disableMic tolerates mute failures', async () => {
+    const track = {
+      isMuted: vi.fn().mockReturnValue(false),
+      mute: vi.fn().mockRejectedValue(new Error('gone')),
+    };
+    const store = useLocalStore();
+    store.audio = track as never;
+    await store.disableMic();
+    expect(store.mute).toBe(true);
+  });
+
+  it('enableMic skips unmute when the new track is already live', async () => {
+    const created = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(false),
+      unmute: vi.fn(),
+      mute: vi.fn(),
+    };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'getConference').mockReturnValue({ getLocalTracks: () => [] } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+    const store = useLocalStore();
+    store.mute = true;
+    await store.enableMic();
+    expect(created.unmute).not.toHaveBeenCalled();
+    expect(store.mute).toBe(false);
+  });
+
+  it('enableMic unmutes a created track that starts muted while joined', async () => {
+    const created = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(true),
+      unmute: vi.fn().mockResolvedValue(undefined),
+      mute: vi.fn(),
+    };
+    const engine = getMediaEngineInstance();
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValue([created as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    vi.spyOn(engine, 'getConference').mockReturnValue({ getLocalTracks: () => [] } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+    const store = useLocalStore();
+    store.mute = true;
+    await store.enableMic();
+    expect(created.unmute).toHaveBeenCalled();
+    expect(store.mute).toBe(false);
   });
 
   it('enableMic just unmutes an existing live track', async () => {
@@ -548,6 +669,22 @@ describe('localStore', () => {
     conferenceOptions.openBridgeChannel = original;
   });
 
+  it('does not touch receiver constraints in the lobby when the bridge channel is off', () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    const original = conferenceOptions.openBridgeChannel;
+    conferenceOptions.openBridgeChannel = '' as never;
+    const engine = getMediaEngineInstance();
+    const constraintsSpy = vi.spyOn(engine, 'setReceiverConstraints');
+    const store = useLocalStore();
+    store.id = 'waiting';
+    store.calculateUsersOnScreen();
+    expect(constraintsSpy).not.toHaveBeenCalled();
+    conferenceOptions.openBridgeChannel = original;
+    constraintsSpy.mockRestore();
+  });
+
   it('calculateUsersOnScreen skips elements without id', () => {
     const el = document.createElement('div');
     el.className = 'userContainer';
@@ -556,5 +693,104 @@ describe('localStore', () => {
     store.onStage = true;
     store.calculateUsersOnScreen();
     el.remove();
+  });
+
+  it('blocks enableMic and enableCamera when locked by a moderator and preserves active screenshare on camera enable', async () => {
+    const store = useLocalStore();
+    const features = useSessionFeaturesStore();
+    const engine = getMediaEngineInstance();
+
+    store.setMyID('guest-locked');
+    features.setHost('host');
+    features.setMediaLock('guest-locked', { mic: true, camera: true });
+
+    const createSpy = vi.spyOn(engine, 'createLocalTracks');
+
+    await store.enableMic();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(features.stageMessage).toBe('Your microphone is locked by a moderator.');
+
+    await store.enableCamera();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(features.stageMessage).toBe('Your camera is locked by a moderator.');
+
+    // Unlock and ensure enableCamera does not remove an active desktop screenshare track
+    features.setMediaLock('guest-locked', { mic: false, camera: false });
+    const desktopTrack = {
+      getType: () => 'video',
+      videoType: 'desktop',
+      dispose: vi.fn(),
+    };
+    const staleCamera = {
+      getType: () => 'video',
+      videoType: 'camera',
+      dispose: vi.fn(),
+    };
+    const freshCamera = {
+      getType: () => 'video',
+      videoType: 'camera',
+      isMuted: vi.fn().mockReturnValue(false),
+    };
+    createSpy.mockResolvedValueOnce([freshCamera as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [desktopTrack, staleCamera],
+      removeTrack,
+    } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    await store.enableCamera();
+    expect(removeTrack).toHaveBeenCalledWith(staleCamera);
+    expect(removeTrack).not.toHaveBeenCalledWith(desktopTrack);
+    expect(desktopTrack.dispose).not.toHaveBeenCalled();
+  });
+
+  it('preserves active screenshareAudio on mic toggle and subscribes to admitted remote active sharers', async () => {
+    const store = useLocalStore();
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const engine = getMediaEngineInstance();
+
+    const screenAudio = {
+      getType: () => 'audio',
+      dispose: vi.fn(),
+    } as never;
+    const staleMic = {
+      getType: () => 'audio',
+      dispose: vi.fn(),
+    };
+    const freshMic = {
+      getType: () => 'audio',
+      isMuted: vi.fn().mockReturnValue(false),
+    };
+    store.screenshareAudio = screenAudio;
+    vi.spyOn(engine, 'createLocalTracks').mockResolvedValueOnce([freshMic as never]);
+    vi.spyOn(engine, 'isJoined').mockReturnValue(true);
+    const removeTrack = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [screenAudio, staleMic],
+      removeTrack,
+    } as never);
+    vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    await store.enableMic();
+    expect(removeTrack).toHaveBeenCalledWith(staleMic);
+    expect(removeTrack).not.toHaveBeenCalledWith(screenAudio);
+
+    // calculateUsersOnScreen includes admitted active sharers in usersOnStage and excludes lobby-waiting sharers
+    store.setMyID('me');
+    features.setHost('host');
+    features.configLoaded = true;
+    features.lobbyEnabled = true;
+    features.lobbyApproved = { me: true, 'admitted-sharer': true };
+    conference.addUser('admitted-sharer');
+    conference.users['admitted-sharer'].screenshare = { getType: () => 'video', videoType: 'desktop' } as never;
+    conference.addUser('lobby-sharer');
+    conference.users['lobby-sharer'].screenshare = { getType: () => 'video', videoType: 'desktop' } as never;
+
+    store.calculateUsersOnScreen();
+    expect(store.usersOnStage).toContain('admitted-sharer');
+    expect(store.usersOnStage).not.toContain('lobby-sharer');
   });
 });

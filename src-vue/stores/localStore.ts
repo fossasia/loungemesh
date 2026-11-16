@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
-import { markRaw, nextTick } from 'vue';
+import { markRaw, nextTick, toRaw } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
+import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   clampPan,
@@ -34,7 +36,9 @@ import {
 import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
+import { getOrCreateSessionUserKey } from '@/utils/userKey';
 import { useConferenceStore } from './conferenceStore';
+import { useSessionFeaturesStore } from './sessionFeaturesStore';
 
 function uniqueTracks(tracks: Array<JitsiTrack | undefined>): JitsiTrack[] {
   return [...new Set(tracks.filter(Boolean) as JitsiTrack[])];
@@ -48,11 +52,19 @@ function getConferenceLocalTracksOfKind(
 }
 
 function getConferenceLocalVideoTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
-  return getConferenceLocalTracksOfKind(conference, 'video');
+  return getConferenceLocalTracksOfKind(conference, 'video').filter(
+    (track) => !isDesktopShareTrack(track),
+  );
 }
 
-function getConferenceLocalAudioTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
-  return getConferenceLocalTracksOfKind(conference, 'audio');
+function getConferenceLocalAudioTracks(
+  conference: { getLocalTracks?: () => JitsiTrack[] } | undefined,
+  screenshareAudio?: JitsiTrack,
+) {
+  const screenRaw = screenshareAudio ? toRaw(screenshareAudio) : undefined;
+  return getConferenceLocalTracksOfKind(conference, 'audio').filter(
+    (track) => !screenRaw || toRaw(track) !== screenRaw,
+  );
 }
 
 export type Vector2 = { x: number; y: number };
@@ -68,6 +80,10 @@ export type LocalState = {
   roomBounds: RoomBounds;
   audio?: JitsiTrack;
   video?: JitsiTrack;
+  screenshare?: JitsiTrack;
+  screenshareAudio?: JitsiTrack;
+  screenshareAudioMuted: boolean;
+  mutedRemoteScreenshareAudios: Record<string, boolean>;
   videoType?: 'camera' | 'desktop';
   onStage: boolean;
   stageVisible: boolean;
@@ -75,6 +91,10 @@ export type LocalState = {
   visibleUsers: string[];
   usersOnStage: string[];
   selectedUsersOnStage: string[];
+  audioError: boolean;
+  videoError: boolean;
+  privateNotes: string;
+  userKey: string;
 };
 
 export const useLocalStore = defineStore('local', {
@@ -82,6 +102,7 @@ export const useLocalStore = defineStore('local', {
     const { pos, pan, scale, roomBounds } = initialLocalViewport();
     return {
     id: '',
+    userKey: getOrCreateSessionUserKey(),
     mute: false,
     cameraOff: false,
     speaking: false,
@@ -91,6 +112,10 @@ export const useLocalStore = defineStore('local', {
     roomBounds,
     audio: undefined,
     video: undefined,
+    screenshare: undefined,
+    screenshareAudio: undefined,
+    screenshareAudioMuted: false,
+    mutedRemoteScreenshareAudios: {},
     videoType: 'camera',
     onStage: false,
     stageVisible: true,
@@ -98,6 +123,9 @@ export const useLocalStore = defineStore('local', {
     visibleUsers: [],
     usersOnStage: [],
     selectedUsersOnStage: [],
+    audioError: false,
+    videoError: false,
+    privateNotes: '',
   };
   },
   actions: {
@@ -122,14 +150,15 @@ export const useLocalStore = defineStore('local', {
       this.scale = scale;
       this.pan = clampPan(payload.pan, scale, this.roomBounds);
     },
-    resetViewportForRoom() {
+    resetViewportForRoom(targetScale?: number) {
       const conference = useConferenceStore();
       const existing = Object.values(conference.users).map((u) => u.pos);
       this.setLocalPosition(spreadInitialUserPosition(existing));
+      const scaleToUse = targetScale !== undefined ? clampScale(targetScale) : defaultScale;
       const centerNow = () => {
-        if (window.innerWidth < 200 || window.innerHeight < 200) return;
-        const pan = initialPanCenterOnUser(this.pos, defaultScale);
-        this.setPanZoom({ pan, scale: defaultScale });
+        if (typeof window === 'undefined' || window.innerWidth < 200 || window.innerHeight < 200) return;
+        const pan = initialPanCenterOnUser(this.pos, scaleToUse);
+        this.setPanZoom({ pan, scale: scaleToUse });
         this.calculateUsersOnScreen();
       };
       centerNow();
@@ -144,16 +173,19 @@ export const useLocalStore = defineStore('local', {
     },
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
-      const videoTrack = tracks.find((t) => t.getType?.() === 'video');
+      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && !isDesktopShareTrack(t));
+      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && isDesktopShareTrack(t));
       if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
-        const isDesktop = videoTrack.videoType === 'desktop';
-        if (this.cameraOff && !isDesktop) {
+        if (this.cameraOff) {
           disposeJitsiTrack(videoTrack);
         } else {
           this.video = markRaw(videoTrack);
-          this.videoType = isDesktop ? 'desktop' : 'camera';
+          this.videoType = 'camera';
         }
+      }
+      if (desktopTrack) {
+        this.screenshare = markRaw(desktopTrack);
       }
     },
     setOnStage(v: boolean) {
@@ -174,30 +206,40 @@ export const useLocalStore = defineStore('local', {
       const conference = engine.getConference();
       const users = useConferenceStore().users;
       const visibleUserIds: string[] = [];
-      const stageIds: string[] = [];
-
-      const onStageProp = (v: unknown) => v === true || v === 'true';
+      const features = useSessionFeaturesStore();
+      if (features.isLobbyBlocked) {
+        this.visibleUsers = [];
+        this.usersOnStage = [];
+        if (conferenceOptions.openBridgeChannel) {
+          const constraints = buildReceiverConstraints({
+            localId: this.id,
+            remoteUserIds: Object.keys(users).filter((id) => id && id !== this.id),
+            visibleUserIds: [],
+            stageIds: [],
+          });
+          if (constraints) engine.setReceiverConstraints(constraints);
+        }
+        return;
+      }
+      const stageOccupantId = features.stageOccupantId;
 
       document.querySelectorAll('.userContainer').forEach((el) => {
         const htmlEl = el as HTMLElement;
         const uid = htmlEl.id;
         if (!uid) return;
-        const user = users[uid];
-        if (user && onStageProp(user.properties?.onStage)) {
-          stageIds.push(uid);
-        }
         const rect = htmlEl.getBoundingClientRect();
         if (isOnScreen({ x: rect.x, y: rect.y }, rect.width, rect.height)) {
           visibleUserIds.push(uid);
         }
       });
 
-      if (this.onStage && this.id && !stageIds.includes(this.id)) {
-        stageIds.push(this.id);
-      }
-
+      const activeSharers = Object.entries(users)
+        .filter(([uid, u]) => Boolean(u.screenshare) && isAdmittedParticipant(features, uid))
+        .map(([uid]) => uid);
       this.visibleUsers = [...new Set(visibleUserIds)];
-      this.usersOnStage = [...new Set(stageIds)];
+      this.usersOnStage = [
+        ...new Set([...(stageOccupantId ? [stageOccupantId] : []), ...activeSharers]),
+      ];
 
       mediaDebug('localStore', 'calculateUsersOnScreen', {
         visibleUserIds: this.visibleUsers,
@@ -232,11 +274,17 @@ export const useLocalStore = defineStore('local', {
       await this.disableMic();
     },
     async enableMic() {
+      const features = useSessionFeaturesStore();
+      if (features.isLocalMicLocked) {
+        features.setStageMessage('Your microphone is locked by a moderator.');
+        return;
+      }
       const engine = getMediaEngineInstance();
       // A live track already exists (e.g. created at join) — just unmute it.
       if (this.audio) {
         if (this.audio.isMuted()) await this.audio.unmute();
         this.mute = false;
+        this.audioError = false;
         engine.refreshRemoteAudio?.();
         return;
       }
@@ -248,7 +296,10 @@ export const useLocalStore = defineStore('local', {
         if (engine.isJoined()) {
           try {
             // Drop any stale local audio senders before publishing the fresh one.
-            await releaseLocalMediaTracks(getConferenceLocalAudioTracks(conf), conf);
+            await releaseLocalMediaTracks(
+              getConferenceLocalAudioTracks(conf, this.screenshareAudio),
+              conf,
+            );
             await engine.addLocalTrack(created);
           } catch {
             disposeJitsiTrack(created);
@@ -258,7 +309,9 @@ export const useLocalStore = defineStore('local', {
         if (created.isMuted()) await created.unmute();
         this.audio = markRaw(created);
         this.mute = false;
+        this.audioError = false;
       } catch {
+        this.audioError = true;
         /* user denied or device unavailable */
       }
       engine.refreshRemoteAudio?.();
@@ -267,8 +320,6 @@ export const useLocalStore = defineStore('local', {
       const engine = getMediaEngineInstance();
       const conf = engine.getConference();
       const track = this.audio;
-      // Signal mute to peers immediately so remote Web Audio graphs drop before
-      // removeTrack/dispose completes asynchronously.
       if (track && !track.isMuted?.()) {
         try {
           await track.mute();
@@ -276,13 +327,16 @@ export const useLocalStore = defineStore('local', {
           /* track may already be gone */
         }
       }
-      // Flip UI state first, then fully release the device so the mic indicator
-      // turns off — we re-acquire a fresh track on the next unmute.
       this.mute = true;
-      this.audio = undefined;
       this.speaking = false;
+      this.audioError = false;
+      // Release the device so the OS mic indicator turns off (soft-mute leaves capture open).
+      this.audio = undefined;
       await nextTick();
-      await releaseLocalMediaTracks(uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]), conf);
+      await releaseLocalMediaTracks(
+        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf, this.screenshareAudio)]),
+        conf,
+      );
       unlockMediaPlaybackNow(engine);
       engine.refreshRemoteAudio?.();
     },
@@ -294,10 +348,16 @@ export const useLocalStore = defineStore('local', {
       await this.disableCamera();
     },
     async enableCamera() {
+      const features = useSessionFeaturesStore();
+      if (features.isLocalCameraLocked) {
+        features.setStageMessage('Your camera is locked by a moderator.');
+        return;
+      }
       const engine = getMediaEngineInstance();
       if (this.video && this.videoType === 'camera') {
         if (this.video.isMuted()) await this.video.unmute();
         this.cameraOff = false;
+        this.videoError = false;
         return;
       }
       try {
@@ -318,7 +378,9 @@ export const useLocalStore = defineStore('local', {
         this.video = markRaw(created);
         this.videoType = 'camera';
         this.cameraOff = false;
+        this.videoError = false;
       } catch {
+        this.videoError = true;
         /* user denied or device unavailable */
       }
     },
@@ -332,6 +394,7 @@ export const useLocalStore = defineStore('local', {
       this.cameraOff = true;
       this.video = undefined;
       this.videoType = 'camera';
+      this.videoError = false;
       await nextTick();
       await waitForMediaElementDetach();
       await releaseLocalMediaTracks(tracksToRelease, conf);
@@ -339,13 +402,17 @@ export const useLocalStore = defineStore('local', {
     },
     async stopAllLocalMedia() {
       const engine = getMediaEngineInstance();
-      await releaseLocalMediaTracks([this.audio, this.video], engine.getConference());
+      await releaseLocalMediaTracks([this.audio, this.video, this.screenshare, this.screenshareAudio], engine.getConference());
       this.audio = undefined;
       this.video = undefined;
+      this.screenshare = undefined;
+      this.screenshareAudio = undefined;
       this.videoType = 'camera';
       this.speaking = false;
       this.cameraOff = true;
       this.mute = true;
+      this.audioError = false;
+      this.videoError = false;
     },
   },
 });

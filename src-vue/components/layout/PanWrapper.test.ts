@@ -7,6 +7,14 @@ import PanWrapper from './PanWrapper.vue';
 describe('PanWrapper', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
+  it('renders a viewport background layer when wallpaper is set', async () => {
+    const { useSessionFeaturesStore } = await import('@/stores/sessionFeaturesStore');
+    useSessionFeaturesStore().gridBackgroundUrl = 'data:image/jpeg;base64,wall';
+    const { wrapper } = await mountWithApp(PanWrapper, { slots: { default: '<div />' } });
+    expect(wrapper.find('.viewportBackground').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('handles pointercancel on pan root', async () => {
     const { wrapper } = await mountWithApp(PanWrapper, { slots: { default: '<div />' } });
     await wrapper.find('.panRoot').trigger('pointercancel');

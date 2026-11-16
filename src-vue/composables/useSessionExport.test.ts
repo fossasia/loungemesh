@@ -12,9 +12,12 @@ vi.mock('@/utils/sessionExport', () => ({
   renderWhiteboardToCanvas: vi.fn(() => ({}) as HTMLCanvasElement),
   canvasToPngBlob,
   downloadBlob,
+  markdownToRtf: vi.fn(() => 'RTF'),
+  safeSessionSlug: vi.fn(() => 'slug'),
 }));
 
 import { useSessionExport } from './useSessionExport';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 describe('useSessionExport', () => {
   beforeEach(() => {
@@ -28,6 +31,11 @@ describe('useSessionExport', () => {
     expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'file.ext');
   });
 
+  it('exports notes as an RTF download', () => {
+    useSessionExport(() => 'room').exportNotesRtf();
+    expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'file.ext');
+  });
+
   it('exports the whiteboard when a PNG blob is produced', async () => {
     canvasToPngBlob.mockResolvedValue(new Blob(['p']));
     await useSessionExport(() => 'room').exportWhiteboard();
@@ -38,6 +46,14 @@ describe('useSessionExport', () => {
     canvasToPngBlob.mockResolvedValue(null);
     await useSessionExport(() => 'room').exportWhiteboard();
     expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it('exports whiteboard snapshots when snapshots exist', async () => {
+    const features = useSessionFeaturesStore();
+    features.whiteboardSnapshots = [[{ x: 0, y: 0, isStart: true, color: '#000', size: 2 }]];
+    canvasToPngBlob.mockResolvedValue(new Blob(['snapshot']));
+    await useSessionExport(() => 'room').exportWhiteboard();
+    expect(downloadBlob).toHaveBeenCalledTimes(2);
   });
 
   it('exports a recording blob', () => {

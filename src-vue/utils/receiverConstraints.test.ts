@@ -14,15 +14,28 @@ describe('buildReceiverConstraints', () => {
     ).toBeNull();
   });
 
-  it('subscribes to all remotes when none are visible yet', () => {
+  it('returns empty selectedSources and zero lastN when none are visible yet', () => {
     const constraints = buildReceiverConstraints({
       localId: 'me',
       remoteUserIds: ['a', 'b'],
       visibleUserIds: [],
       stageIds: [],
     });
-    expect(constraints?.selectedSources).toEqual(expect.arrayContaining(['a-v0', 'b-v0']));
-    expect(constraints?.lastN).toBeGreaterThanOrEqual(1);
+    expect(constraints?.selectedSources).toEqual([]);
+    expect(constraints?.lastN).toBe(0);
+  });
+
+  it('only subscribes to visible and on-stage users, excluding off-screen remotes', () => {
+    const constraints = buildReceiverConstraints({
+      localId: 'me',
+      remoteUserIds: ['a', 'b', 'c', 'd', 'e'],
+      visibleUserIds: ['a'],
+      stageIds: ['b'],
+    });
+    expect(constraints?.selectedSources).toEqual(['a-v0', 'a-v1', 'b-v0', 'b-v1']);
+    expect(constraints?.constraints['c-v0']).toBeUndefined();
+    expect(constraints?.constraints['c-v1']).toBeUndefined();
+    expect(constraints?.constraints['d-v0']).toBeUndefined();
   });
 
   it('uses source IDs for selected and on-stage constraints', () => {
@@ -32,8 +45,8 @@ describe('buildReceiverConstraints', () => {
       visibleUserIds: ['a'],
       stageIds: ['b'],
     });
-    expect(constraints?.selectedSources).toEqual(expect.arrayContaining(['a-v0', 'b-v0']));
-    expect(constraints?.onStageSources).toEqual(['b-v0']);
+    expect(constraints?.selectedSources).toEqual(expect.arrayContaining(['a-v0', 'a-v1', 'b-v0', 'b-v1']));
+    expect(constraints?.onStageSources).toEqual(['b-v0', 'b-v1']);
   });
 
   it('requests every selected source in the per-source constraints map', () => {
@@ -46,17 +59,19 @@ describe('buildReceiverConstraints', () => {
     // Empty per-source constraints leave modern JVB forwarding nothing, so every
     // selected source must appear, with on-stage requested at a higher resolution.
     expect(constraints?.constraints['a-v0']).toEqual({ maxHeight: 360 });
+    expect(constraints?.constraints['a-v1']).toEqual({ maxHeight: 720 });
     expect(constraints?.constraints['b-v0']).toEqual({ maxHeight: 720 });
+    expect(constraints?.constraints['b-v1']).toEqual({ maxHeight: 720 });
   });
 
-  it('never sets lastN to zero when remotes exist', () => {
+  it('sets lastN to zero when no remotes are on screen or stage', () => {
     const constraints = buildReceiverConstraints({
       localId: 'me',
       remoteUserIds: ['peer'],
       visibleUserIds: [],
       stageIds: [],
     });
-    expect(constraints?.lastN).toBe(1);
+    expect(constraints?.lastN).toBe(0);
   });
 
   describe('channelLastN fallback', () => {
@@ -74,7 +89,7 @@ describe('buildReceiverConstraints', () => {
         visibleUserIds: ids,
         stageIds: [],
       });
-      expect(constraints?.lastN).toBe(20);
+      expect(constraints?.lastN).toBe(40);
     });
   });
 });

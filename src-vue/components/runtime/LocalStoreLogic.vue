@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue';
+import { onMounted, onUnmounted, toRaw, watch } from 'vue';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { ensureLocalTracks } from '@/composables/ensureLocalTracks';
 import { throttle } from '@/utils/throttle';
 import { getVolumeByDistance } from '@/utils/vector';
@@ -13,11 +14,13 @@ import { watchTrackSpeaking } from '@/utils/speakingMeter';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 
 const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
 const connectionStore = useConnectionStore();
 const localStore = useLocalStore();
+const features = useSessionFeaturesStore();
 
 const throttledSendPos = throttle((pos: string) => {
   engine.sendCommand('pos', pos);
@@ -46,7 +49,7 @@ function applyVolumes(myPos: { x: number; y: number }) {
   for (const key of Object.keys(conferenceStore.users)) {
     const u = conferenceStore.users[key];
     const proximity = getVolumeByDistance(myPos, u.pos);
-    const gain = playbackGainForUser(u, proximity);
+    const gain = playbackGainForUser(u, proximity, key === features.stageOccupantId);
     if (u.volume !== proximity) {
       conferenceStore.patchUser(key, { volume: proximity }, false);
     }
@@ -77,6 +80,7 @@ function initProximityWorker() {
           conferenceStore.users,
           (userId, patch) => conferenceStore.patchUser(userId, patch, false),
           setParticipantVolume,
+          id === features.stageOccupantId
         );
       }
       localStore.calculateUsersOnScreen();
@@ -97,15 +101,71 @@ async function requestMedia() {
 
 let publishingLocalTracks = false;
 
+async function unpublishLocalTracks() {
+  const conf = engine.getConference();
+  const published = conf?.getLocalTracks?.() ?? [];
+  for (const publishedTrack of published) {
+    if (!engine.removeLocalTrack) continue;
+    try {
+      await engine.removeLocalTrack(publishedTrack);
+    } catch (err) {
+      mediaDebug('LocalStoreLogic', 'removeLocalTrack:failed', { error: err });
+    }
+  }
+}
+
 async function addLocalTracksToConference() {
+  if (features.isLobbyBlocked) {
+    await unpublishLocalTracks();
+    return;
+  }
   const conf = engine.getConference();
   if (!conferenceStore.isJoined || !conf || publishingLocalTracks) return;
   publishingLocalTracks = true;
   try {
     const alreadyPublished = conf.getLocalTracks?.() ?? [];
-    for (const track of [localStore.audio, localStore.video]) {
+    const currentTracks = [
+      localStore.audio,
+      localStore.video,
+      localStore.screenshare,
+      localStore.screenshareAudio,
+    ].filter(Boolean) as any[];
+
+    // Remove any published tracks that are no longer in our store
+    for (const published of alreadyPublished) {
+      const stillActive = currentTracks.some((t) => toRaw(t) === toRaw(published));
+      if (!stillActive) {
+        try {
+          /* v8 ignore start */
+          if (engine.removeLocalTrack) {
+            await engine.removeLocalTrack(published);
+          }
+          /* v8 ignore stop */
+        /* v8 ignore start */
+        } catch (err) {
+          mediaDebug('LocalStoreLogic', 'removeLocalTrack:failed', { error: err });
+        }
+        /* v8 ignore stop */
+      }
+    }
+
+    for (const track of [localStore.audio, localStore.video, localStore.screenshare]) {
       if (!track) continue;
-      if (alreadyPublished.some((existing) => existing === track || existing.getType() === track.getType())) {
+      if (
+        alreadyPublished.some((existing) => {
+          if (toRaw(existing) === toRaw(track)) return true;
+          if (existing.getType() === track.getType()) {
+            if (track.getType() === 'video') {
+              return isDesktopShareTrack(existing) === isDesktopShareTrack(track);
+            }
+            if (localStore.screenshareAudio && toRaw(existing) === toRaw(localStore.screenshareAudio)) {
+              return false;
+            }
+            return true;
+          }
+          return false;
+        })
+      ) {
         continue;
       }
       try {
@@ -161,6 +221,13 @@ watch(
 );
 
 watch(
+  () => features.isLobbyBlocked,
+  () => {
+    void addLocalTracksToConference();
+  },
+);
+
+watch(
   () => conferenceStore.isJoined,
   async (joined) => {
     if (!joined) return;
@@ -172,7 +239,7 @@ watch(
 );
 
 watch(
-  () => [conferenceStore.isJoined, localStore.audio, localStore.video] as const,
+  () => [conferenceStore.isJoined, localStore.audio, localStore.video, localStore.screenshare] as const,
   () => {
     void addLocalTracksToConference();
   },
