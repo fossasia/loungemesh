@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
-import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useSessionFeaturesStore, type PollRequest } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import {
   applyVote,
@@ -50,8 +50,67 @@ export function useSessionPollControls() {
     playUiSound('success');
   }
 
+  function requestPoll() {
+    if (!canCreatePoll(pollQuestion.value, pollOptionDrafts.value)) return;
+    const opts = pollOptionDrafts.value
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const id = `pr${Date.now()}`;
+    const req: PollRequest = {
+      id,
+      question: pollQuestion.value.trim(),
+      options: opts,
+      requesterId: pollResultsSenderId(local.id, engine.getLocalUserId()),
+      requesterName: conference.displayName || 'Participant',
+      createdAt: Date.now(),
+    };
+    features.addPollRequest(req);
+    features.myPendingPollRequestId = id;
+    features.pollRequestNotice = '';
+    engine.sendCommand('poll_req', JSON.stringify({ action: 'create', request: req }));
+    playUiSound('success');
+    pollQuestion.value = '';
+    pollOptionDrafts.value = ['Yes', 'No'];
+  }
+
+  function cancelPollRequest(requestId?: string) {
+    const id = requestId || features.myPendingPollRequestId;
+    if (!id) return;
+    features.removePollRequest(id);
+    engine.sendCommand('poll_req', JSON.stringify({ action: 'cancel', requestId: id }));
+    playUiSound('tap');
+  }
+
+  function approvePollRequest(request: PollRequest) {
+    if (!features.canManagePoll) return;
+    const opts = request.options.map((label, i) => ({
+      id: `o${i}`,
+      label,
+      votes: 0,
+      voters: [] as string[],
+    }));
+    const poll = {
+      id: `p${Date.now()}`,
+      question: request.question,
+      options: opts,
+      open: true,
+    };
+    features.removePollRequest(request.id);
+    features.applyPoll(poll, true);
+    engine.sendCommand('poll', JSON.stringify(poll));
+    engine.sendCommand('poll_req', JSON.stringify({ action: 'approve', requestId: request.id }));
+    playUiSound('success');
+  }
+
+  function rejectPollRequest(requestId: string) {
+    if (!features.canManagePoll) return;
+    features.removePollRequest(requestId);
+    engine.sendCommand('poll_req', JSON.stringify({ action: 'reject', requestId }));
+    playUiSound('tap');
+  }
+
   function vote(optionId: string) {
-    if (!features.canUsePoll && !features.isHost) return;
+    if (!features.canUsePoll && !features.isHost && !features.isModerator && !features.eventyayMeet) return;
     if (!canVote(features.myPollVote, features.activePoll)) return;
     const voterId = pollResultsSenderId(local.id, engine.getLocalUserId());
     if (!voterId) return;
@@ -84,6 +143,10 @@ export function useSessionPollControls() {
     addPollOption,
     removePollOption,
     createPoll,
+    requestPoll,
+    cancelPollRequest,
+    approvePollRequest,
+    rejectPollRequest,
     vote,
     closePoll,
     togglePollPanel,

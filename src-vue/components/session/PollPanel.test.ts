@@ -141,7 +141,7 @@ describe('PollPanel', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
+    features.userGrants.guest = { notes: false, whiteboard: false, poll: false };
     const { wrapper } = await mountWithApp(PollPanel);
     expect(wrapper.text()).toContain('Ask the host for poll access');
 
@@ -205,6 +205,107 @@ describe('PollPanel', () => {
 
     const disabledRemove = wrapper.find('.iconBtn');
     expect(disabledRemove.attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('hides poll requests from attendees', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    features.setHost('host-1');
+    features.eventyayMeet = true;
+    features.capabilities = ['notes'];
+
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.text()).toContain('Waiting for the host or a moderator to start a poll.');
+    expect(wrapper.text()).not.toContain('Request a poll');
+    expect(wrapper.find('.requestSection').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('displays pending requests to moderators with approve and decline actions', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('mod-1');
+    features.isVerifiedModerator = true;
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+
+    const req = {
+      id: 'pr-123',
+      question: 'Next speaker?',
+      options: ['Sarah', 'David'],
+      requesterId: 'attendee-2',
+      requesterName: 'Attendee 2',
+      createdAt: 1000,
+    };
+    features.addPollRequest(req);
+
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.find('.pendingRequestsSection').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Next speaker?');
+    expect(wrapper.text()).toContain('Attendee 2 requested:');
+
+    // Approve
+    await wrapper.find('.approveBtn').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('poll', expect.any(String));
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"approve"'));
+    wrapper.unmount();
+
+    // Decline in fresh mount
+    features.activePoll = null;
+    features.addPollRequest(req);
+    const { wrapper: wrapper2 } = await mountWithApp(PollPanel);
+    await wrapper2.find('.declineBtn').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"reject"'));
+    wrapper2.unmount();
+  });
+
+  it('lets an attendee cancel a poll request that is already waiting', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    features.setHost('host-1');
+    features.addPollRequest({
+      id: 'mine',
+      question: 'Break time?',
+      options: ['10 mins', '15 mins'],
+      requesterId: 'attendee-1',
+      requesterName: 'Attendee',
+      createdAt: 1,
+    });
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.text()).toContain('Poll Request Submitted');
+    await wrapper.find('.secondaryBtn').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"cancel"'));
+    wrapper.unmount();
+  });
+
+  it('lets an attendee wait for a poll without requesting approval', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    features.setHost('host-1');
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.text()).toContain('Waiting for the host or a moderator to start a poll.');
+    expect(wrapper.find('.requestSection').exists()).toBe(false);
+    expect(wrapper.find('#poll-question').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows and dismisses decline notice banner', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    features.setHost('host-1');
+    features.setRoomDefault('poll', true);
+    features.pollRequestNotice = 'Your poll request was declined by a moderator.';
+
+    const { wrapper } = await mountWithApp(PollPanel);
+    expect(wrapper.text()).toContain('declined by a moderator');
+
+    await wrapper.find('.dismissBtn').trigger('click');
+    expect(features.pollRequestNotice).toBe('');
     wrapper.unmount();
   });
 });

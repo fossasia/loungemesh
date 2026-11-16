@@ -31,4 +31,11 @@ describe('router bare paths', () => {
     expect(router.currentRoute.value.name).toBe('join');
     expect(router.currentRoute.value.params.id).toBe(conferenceNameDefault);
   });
+
+  it('navigates to public meet route /m/:event/:room', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes });
+    await router.push('/m/my-event/my-room');
+    await router.isReady();
+    expect(router.currentRoute.value.name).toBe('public-meet');
+  });
 });

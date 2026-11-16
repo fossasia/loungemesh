@@ -22,7 +22,8 @@ export type SessionConnectionDeps = {
   conferenceStore: SessionConferenceState;
   engine: MediaService;
   conferenceOptions: Record<string, unknown>;
-  resetSessionForJoin?: () => void;
+  resetSessionForJoin?: (options?: { isReconnect?: boolean }) => void;
+  isReconnect?: boolean;
 };
 
 function isActiveInRoom(deps: SessionConnectionDeps, roomId: string): boolean {
@@ -74,8 +75,10 @@ export async function handleSessionConnectionWatch(
 
   deps.conferenceStore.error = undefined;
   deps.conferenceStore.setConferenceName(roomId);
-  deps.resetSessionForJoin?.();
-  await new Promise((r) => window.setTimeout(r, 800));
+  deps.resetSessionForJoin?.({ isReconnect: deps.isReconnect });
+  if (!deps.isReconnect) {
+    await new Promise((r) => window.setTimeout(r, 800));
+  }
   try {
     await deps.joinRoom(roomId, deps.conferenceStore.displayName, deps.conferenceOptions);
     const conf = deps.engine.getConference();

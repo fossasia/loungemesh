@@ -26,6 +26,30 @@ function getAllowedOrigins(): string[] {
     .filter(Boolean);
 }
 
+export function isBridgeOriginAllowed(origin: string, allowedOrigins: string[] = getAllowedOrigins()): boolean {
+  if (allowedOrigins.length === 0) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname;
+    // Allow local development on any port
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'host.docker.internal') {
+      return true;
+    }
+    // Allow official eventyay domains (eventyay.com, dev.eventyay.com, *.eventyay.com)
+    if (hostname === 'eventyay.com' || hostname.endsWith('.eventyay.com')) {
+      return true;
+    }
+    for (const pat of allowedOrigins) {
+      if (pat.includes('*')) {
+        const regex = new RegExp('^' + pat.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+        if (regex.test(origin)) return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 function isInIframe(): boolean {
   return window.parent !== window;
 }
@@ -71,7 +95,7 @@ export function useEventyayBridge() {
 
   async function handleMessage(e: MessageEvent): Promise<void> {
     const allowed = getAllowedOrigins();
-    if (allowed.length > 0 && !allowed.includes(e.origin)) return;
+    if (!isBridgeOriginAllowed(e.origin, allowed)) return;
     if (!e.data || e.data.source !== 'eventyay') return;
 
     if (e.data.type === 'loungemesh:new_token') {

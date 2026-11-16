@@ -76,7 +76,7 @@ function openPanel(name: 'notes' | 'whiteboard') {
     >
       <template #icon><AppIcon name="hand" /></template>
     </IconButton>
-    <div v-if="features.canUsePoll || features.isHost || features.isModerator" class="toolWrap">
+    <div v-if="features.canAccessPoll" class="toolWrap">
       <IconButton
         label="Poll"
         :active="features.panel === 'poll'"
@@ -94,7 +94,7 @@ function openPanel(name: 'notes' | 'whiteboard') {
       </div>
     </div>
     <IconButton
-      v-if="features.canUseNotes || features.isHost || features.isModerator"
+      v-if="features.canUseNotes"
       label="Shared notes"
       :active="features.panel === 'notes'"
       :activity-dot="features.hasUnreadNotes"
@@ -105,7 +105,7 @@ function openPanel(name: 'notes' | 'whiteboard') {
       <template #icon><AppIcon name="file-text" /></template>
     </IconButton>
     <IconButton
-      v-if="features.canUseWhiteboard || features.isHost || features.isModerator"
+      v-if="features.canUseWhiteboard"
       label="Whiteboard"
       :active="features.panel === 'whiteboard'"
       :activity-dot="features.hasUnreadWhiteboard"
@@ -156,9 +156,37 @@ function openPanel(name: 'notes' | 'whiteboard') {
 .pollPop {
   width: min(360px, calc(100vw - 32px));
   max-height: min(520px, 60vh);
+}
+@media (max-width: 768px) {
+  .sessionTools {
+    display: contents;
+  }
+  .toolWrap {
+    display: flex;
+    justify-content: center;
+    min-width: 0;
+  }
+  .pollPop,
+  .reactionsPop {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 112px;
+    width: auto;
+    transform: none;
+    max-height: min(70dvh, calc(100dvh - 140px));
+  }
+}
+.pollPop {
   overflow-x: visible;
   overflow-y: auto;
   padding: 14px;
+}
+@media (max-width: 768px) {
+  .pollPop,
+  .reactionsPop {
+    bottom: 112px;
+  }
 }
 .pollHeading {
   margin: 0 0 10px;

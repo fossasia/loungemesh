@@ -62,7 +62,7 @@ describe('useSessionPollControls', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
+    features.userGrants.guest = { poll: false };
     features.activePoll = {
       id: 'p1',
       question: 'Q',
@@ -138,5 +138,81 @@ describe('useSessionPollControls', () => {
     closePoll();
     expect(features.activePoll).toBeNull();
     expect(conference.messages).toHaveLength(0);
+  });
+
+  it('handles requestPoll and cancelPollRequest for participants', () => {
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    local.setMyID('attendee-1');
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { pollQuestion, pollOptionDrafts, requestPoll, cancelPollRequest } = useSessionPollControls();
+
+    // Invalid request
+    pollQuestion.value = '';
+    requestPoll();
+    expect(cmdSpy).not.toHaveBeenCalledWith('poll_req', expect.any(String));
+
+    // Valid request
+    pollQuestion.value = 'What game to play?';
+    pollOptionDrafts.value = ['Trivia', 'Pictionary'];
+    requestPoll();
+    expect(features.pendingPollRequests).toHaveLength(1);
+    expect(features.myPendingPollRequestId).toBeDefined();
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"create"'));
+    expect(pollQuestion.value).toBe('');
+
+    // Cancel without argument uses myPendingPollRequestId
+    cancelPollRequest();
+    expect(features.pendingPollRequests).toHaveLength(0);
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"cancel"'));
+
+    // Cancel with no id does nothing
+    cancelPollRequest();
+
+    // Valid request with blank displayName defaults to Participant
+    conference.displayName = '';
+    pollQuestion.value = 'Another question?';
+    pollOptionDrafts.value = ['A', 'B'];
+    requestPoll();
+    expect(features.pendingPollRequests[0].requesterName).toBe('Participant');
+  });
+
+  it('handles approvePollRequest and rejectPollRequest for moderators', () => {
+    const features = useSessionFeaturesStore();
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+    const { approvePollRequest, rejectPollRequest } = useSessionPollControls();
+
+    const req = {
+      id: 'pr-99',
+      question: 'Coffee or Tea?',
+      options: ['Coffee', 'Tea'],
+      requesterId: 'u1',
+      requesterName: 'Bob',
+      createdAt: 1000,
+    };
+    features.addPollRequest(req);
+
+    // Non-mod cannot approve or reject
+    features.isVerifiedHost = false;
+    features.isVerifiedModerator = false;
+    approvePollRequest(req);
+    expect(features.activePoll).toBeNull();
+    rejectPollRequest('pr-99');
+    expect(features.pendingPollRequests).toHaveLength(1);
+
+    // Moderator can approve
+    features.isVerifiedModerator = true;
+    approvePollRequest(req);
+    expect(features.activePoll?.question).toBe('Coffee or Tea?');
+    expect(features.pendingPollRequests).toHaveLength(0);
+    expect(cmdSpy).toHaveBeenCalledWith('poll', expect.any(String));
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"approve"'));
+
+    // Moderator can reject
+    features.addPollRequest(req);
+    rejectPollRequest('pr-99');
+    expect(features.pendingPollRequests).toHaveLength(0);
+    expect(cmdSpy).toHaveBeenCalledWith('poll_req', expect.stringContaining('"action":"reject"'));
   });
 });
