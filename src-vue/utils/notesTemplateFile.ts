@@ -32,5 +32,5 @@ export async function processNotesTemplateFile(file: File): Promise<string> {
 }
 
 export function notesTemplateRequirementsHint(): string {
-  return 'Markdown or plain text (.md, .txt). Applied once when the meeting starts if shared notes are still empty.';
+  return 'Markdown or plain text (.md, .txt). Replaces the shared notes for everyone in the room.';
 }

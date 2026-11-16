@@ -10,6 +10,7 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { makeTrack } from '@/test/makeTrack';
 import LocalStoreLogic from './LocalStoreLogic.vue';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { watchTrackSpeaking } from '@/utils/speakingMeter';
 
 vi.mock('@/utils/speakingMeter', () => ({
@@ -17,7 +18,10 @@ vi.mock('@/utils/speakingMeter', () => ({
 }));
 
 describe('LocalStoreLogic', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
+  });
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -258,6 +262,46 @@ describe('LocalStoreLogic', () => {
     wrapper.unmount();
   });
 
+  it('unpublishes local tracks while the person is waiting', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const conference = useConferenceStore();
+    local.setMyID('guest');
+    features.setHost('host');
+    features.lobbyEnabled = false;
+    conference.isJoined = true;
+    const published = makeTrack('audio');
+    local.audio = published;
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [published],
+    } as never);
+    const remove = vi.spyOn(engine, 'removeLocalTrack').mockResolvedValue(undefined);
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+    remove.mockRejectedValueOnce(new Error('fail'));
+    features.lobbyEnabled = true;
+    await flushPromises();
+    expect(remove).toHaveBeenCalledWith(published);
+    remove.mockRestore();
+    (engine as { removeLocalTrack?: (track: unknown) => Promise<void> }).removeLocalTrack = undefined;
+    features.lobbyEnabled = false;
+    await flushPromises();
+    features.lobbyEnabled = true;
+    await flushPromises();
+    vi.spyOn(engine, 'getConference').mockReturnValue({} as never);
+    features.lobbyEnabled = false;
+    await flushPromises();
+    features.lobbyEnabled = true;
+    await flushPromises();
+    vi.spyOn(engine, 'getConference').mockReturnValue(undefined as never);
+    features.lobbyEnabled = false;
+    await flushPromises();
+    features.lobbyEnabled = true;
+    await flushPromises();
+    wrapper.unmount();
+  });
+
   it('adds local tracks to conference when joined', async () => {
     const { conference } = await connectAndJoinTestConference();
     conference.isJoined = true;
@@ -475,6 +519,35 @@ describe('LocalStoreLogic', () => {
     expect(addSpy).toHaveBeenCalledWith(local.screenshare);
     expect(addSpy).not.toHaveBeenCalledWith(local.video);
 
+    addSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('publishes microphone audio without removing or colliding with screenshareAudio', async () => {
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const engine = getMediaEngineInstance();
+    conference.isJoined = true;
+    conference.conferenceObject = {} as never;
+
+    const screenAudio = makeTrack('audio');
+    const micAudio = makeTrack('audio');
+    local.screenshareAudio = screenAudio;
+    local.audio = micAudio;
+
+    vi.spyOn(engine, 'getConference').mockReturnValue({
+      getLocalTracks: () => [screenAudio],
+    } as never);
+    const removeSpy = vi.spyOn(engine, 'removeLocalTrack').mockResolvedValue(undefined);
+    const addSpy = vi.spyOn(engine, 'addLocalTrack').mockResolvedValue(undefined);
+
+    const { wrapper } = await mountWithApp(LocalStoreLogic);
+    await flushPromises();
+
+    expect(removeSpy).not.toHaveBeenCalledWith(screenAudio);
+    expect(addSpy).toHaveBeenCalledWith(micAudio);
+
+    removeSpy.mockRestore();
     addSpy.mockRestore();
     wrapper.unmount();
   });

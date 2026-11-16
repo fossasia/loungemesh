@@ -4,6 +4,20 @@ import { useLocalStore } from '@/stores/localStore';
 import { releaseLocalMediaTracks } from '@/utils/releaseLocalMedia';
 import { nextTick, markRaw } from 'vue';
 import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
+import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
+import type { JitsiTrack } from '@/types/jitsi';
+
+function stopAbandonedTracks(tracks: JitsiTrack[]) {
+  for (const track of tracks) {
+    try {
+      track.dispose?.();
+      track.getTrack?.()?.stop();
+    } catch {
+      /* The browser share indicator must not outlive a dropped capture. */
+    }
+  }
+}
 
 export async function stopLocalScreenshare(): Promise<void> {
   const local = useLocalStore();
@@ -17,6 +31,7 @@ export async function stopLocalScreenshare(): Promise<void> {
   await nextTick();
   await waitForMediaElementDetach();
   await releaseLocalMediaTracks([track, audioTrack].filter(Boolean) as any[], engine.getConference());
+  scheduleReceiverRefresh();
 }
 
 export async function startLocalScreenshare(engine: MediaService): Promise<void> {
@@ -24,18 +39,32 @@ export async function startLocalScreenshare(engine: MediaService): Promise<void>
   const conf = engine.getConference();
   if (!conf) return;
   const tracks = await engine.createLocalTracks(['desktop']);
-  const newTrack = tracks.find((t: any) => t.getType?.() === 'video') ?? tracks[0];
-  if (!newTrack || newTrack.videoType !== 'desktop') return;
+  const newTrack = tracks.find((t) => t.getType?.() === 'video');
+  if (newTrack) newTrack.videoType = 'desktop';
+  if (!newTrack || !isDesktopShareTrack(newTrack)) {
+    stopAbandonedTracks(tracks);
+    return;
+  }
 
-  await engine.addLocalTrack(newTrack);
+  try {
+    await engine.addLocalTrack(newTrack);
+  } catch (err) {
+    stopAbandonedTracks(tracks);
+    throw err;
+  }
   local.screenshare = markRaw(newTrack);
 
   const audioTrack = tracks.find((t: any) => t.getType?.() === 'audio');
   if (audioTrack) {
-    await engine.addLocalTrack(audioTrack);
-    local.screenshareAudio = markRaw(audioTrack);
-    local.screenshareAudioMuted = false;
+    try {
+      await engine.addLocalTrack(audioTrack);
+      local.screenshareAudio = markRaw(audioTrack);
+      local.screenshareAudioMuted = false;
+    } catch {
+      stopAbandonedTracks([audioTrack]);
+    }
   }
+  scheduleReceiverRefresh();
 }
 
 export async function toggleLocalScreenshare(engine: MediaService): Promise<void> {

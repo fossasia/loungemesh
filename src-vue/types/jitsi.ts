@@ -10,6 +10,9 @@ export interface JitsiTrack {
   mute(): Promise<void>;
   unmute(): Promise<void>;
   videoType?: 'camera' | 'desktop';
+  getVideoType?(): string;
+  getSourceName?(): string;
+  dispose?(): void;
   attach(element: HTMLElement): void;
   detach(element: HTMLElement): void;
   id: string;
@@ -46,6 +49,8 @@ export interface JitsiConference {
   getLocalVideoTrack?(): JitsiTrack | undefined;
   setDisplayName(name: string): void;
   sendTextMessage(text: string): void;
+  /** Broadcast a JSON MUC message (not presence). Optional on older stubs. */
+  sendMessage?(message: object, to?: string): void;
   sendCommand(name: string, payload: { value: string }): void;
   removeCommand(name: string): void;
   addCommandListener(name: string, handler: (payload: { value: string }, senderId: string) => void): void;
@@ -104,6 +109,14 @@ export interface JitsiMeetJS {
     devices: ('audio' | 'video' | 'desktop')[];
     firePermissionPromptIsShownEvent?: boolean;
   }): Promise<JitsiTrack[]>;
+  createLocalTracksFromMediaStreams?(
+    items: Array<{
+      stream: MediaStream;
+      mediaType: 'video' | 'audio';
+      videoType?: 'desktop' | 'camera';
+      sourceType?: string;
+    }>,
+  ): Promise<JitsiTrack[]>;
 }
 
 declare global {

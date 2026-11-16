@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/db.js';
 import { redisClient } from '../config/redis.js';
+import { cookieOptions } from '../config/deploy.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-jwt-secret-for-dev';
 
@@ -58,7 +59,7 @@ export async function parseUserSession(req: Request, res: Response, next: NextFu
     next();
   } catch (err) {
     // If JWT expires or is invalid, clear token cookie and proceed
-    res.clearCookie('token');
+    res.clearCookie('token', cookieOptions(0));
     next();
   }
 }
