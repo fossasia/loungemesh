@@ -3,14 +3,18 @@ import { computed } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { formatUserFacingError, shouldShowConferenceError } from '@/services/sessionErrorCodes';
+import { useReconnectStore } from '@/stores/reconnectStore';
 import Info from '@/components/common/Info.vue';
 
 const conf = useConferenceStore();
 const conn = useConnectionStore();
+const reconnect = useReconnectStore();
 
 const errors = computed(() => {
   const items: string[] = [];
-  if (conn.error?.trim()) items.push(formatUserFacingError(conn.error));
+  if (reconnect.phase === 'online' && conn.error?.trim()) {
+    items.push(formatUserFacingError(conn.error));
+  }
   if (shouldShowConferenceError(conf.error, conf.isJoined)) {
     items.push(formatUserFacingError(conf.error!));
   }

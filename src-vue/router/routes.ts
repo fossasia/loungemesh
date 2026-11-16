@@ -46,6 +46,13 @@ export const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
+    path: '/m/:event/:room',
+    name: 'public-meet',
+    /* v8 ignore next */
+    component: () => import('@/pages/PublicMeetPage.vue'),
+    props: true,
+  },
+  {
     path: '/kicked',
     name: 'kicked',
     /* v8 ignore next */

@@ -1,11 +1,13 @@
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
 import type { MediaService } from '@/services/MediaService';
+import type { JitsiTrack } from '@/types/jitsi';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useAuthStore } from '@/stores/authStore';
-import { handleSessionCommand } from '@/utils/sessionCommands';
+import { useReconnectStore } from '@/stores/reconnectStore';
+import { buildHelloCommand, handleSessionCommand } from '@/utils/sessionCommands';
 import { grantsPayloadForSync } from '@/utils/sessionAccess';
 import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 import { spreadInitialUserPosition } from '@/constants/pan';
@@ -17,6 +19,9 @@ import { normalizeSessionError } from '@/services/sessionErrorCodes';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
+import { broadcastYjsState, notesDocumentHasContent } from '@/utils/notesYjsSync';
+import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import { isOnStage } from '@/components/stage/isOnStage';
 import { defaultStageLayout } from '@/stores/sessionFeaturesStore';
@@ -24,24 +29,92 @@ import {
   clearStageIfParticipantLeft,
   stopLocalScreenshareIfNeeded,
 } from '@/utils/sessionStage';
+import { remoteAudioSlot } from '@/utils/remoteAudioSlot';
 
 /** Wire media engine events into Pinia stores (called once per app lifetime). */
 export function wireStoreSync(engine: MediaService): void {
   const conferenceStore = useConferenceStore();
 
+  let heartbeatTimer: number | undefined;
+
+  const heldRemoteTracks = new Map<string, JitsiTrack[]>();
+
+  function applyRemoteTrackToStore(id: string, track: JitsiTrack) {
+    const isDesktop = isDesktopShareTrack(track);
+    const features = useSessionFeaturesStore();
+    if (!isDesktop && !isAdmittedParticipant(features, id)) {
+      const held = heldRemoteTracks.get(id) ?? [];
+      held.push(track);
+      heldRemoteTracks.set(id, held);
+      conferenceStore.clearUserTrack(id, 'video');
+      engine.setParticipantPlaybackSuppressed?.(id, true);
+      return;
+    }
+    engine.setParticipantPlaybackSuppressed?.(id, false);
+    const kind: 'audio' | 'video' | 'screenshareAudio' =
+      track.getType() === 'audio' ? remoteAudioSlot(track) : 'video';
+
+    if (kind === 'video' && track.isMuted()) {
+      if (isDesktopShareTrack(track)) {
+        conferenceStore.clearUserTrack(id, 'screenshare');
+      } else {
+        conferenceStore.clearUserTrack(id, 'video');
+      }
+    } else {
+      conferenceStore.setUserTrack(id, kind, track);
+    }
+    if (kind === 'audio') {
+      if (track.isMuted()) {
+        engine.disconnectParticipantAudio?.(id);
+      } else {
+        const user = conferenceStore.users[id]!;
+        const proximity = user.volume ?? 1;
+        engine.setParticipantVolume(id, playbackGainForUser(user, proximity));
+      }
+    }
+    if (kind === 'video') emitMediaStateSnapshot('trackAdded');
+    scheduleReceiverRefresh();
+  }
+
+  useSessionFeaturesStore().$subscribe(() => {
+    const features = useSessionFeaturesStore();
+    for (const id of [...heldRemoteTracks.keys()]) {
+      if (!isAdmittedParticipant(features, id)) continue;
+      const tracks = heldRemoteTracks.get(id)!;
+      heldRemoteTracks.delete(id);
+      engine.setParticipantPlaybackSuppressed?.(id, false);
+      for (const track of tracks) applyRemoteTrackToStore(id, track);
+    }
+  });
+
   engine.on('connected', () => {
     useConnectionStore().$patch({ connected: true, error: undefined });
+    useReconnectStore().onConnectionRecovered();
   });
   engine.on('disconnected', () => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = undefined;
+    }
     useConnectionStore().$patch({ connected: false });
+    useReconnectStore().onConnectionLost('disconnected');
   });
   engine.on('connectionFailed', (detail) => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = undefined;
+    }
     mediaDebug('wiring', 'connectionFailed', { detail });
     useConnectionStore().$patch({
       connected: false,
       error: normalizeSessionError(detail, 'connection'),
       connection: undefined,
     });
+    useReconnectStore().onConnectionLost('connection_failed');
+  });
+  engine.on('bridgeChannelOpen', () => {
+    scheduleReceiverRefresh();
+    engine.refreshRemoteAudio?.();
   });
   engine.on('conferenceJoined', () => {
     unlockMediaPlaybackNow(engine);
@@ -63,15 +136,42 @@ export function wireStoreSync(engine: MediaService): void {
       if (auth.isAuthenticated && auth.user?.avatarUrl) {
         engine.setLocalParticipantProperty('avatarUrl', auth.user.avatarUrl);
       }
+      if (features.isVerifiedHost) {
+        engine.setLocalParticipantProperty('role', 'host');
+      } else if (features.isVerifiedModerator) {
+        engine.setLocalParticipantProperty('role', 'moderator');
+      }
       /* v8 ignore stop */
       if (!features.isFetchingConfig) {
         features.syncOrClaimHostOnLoaded(engine);
       }
+      // Room config often returns before the conference join finishes, so the
+      // fetch callback skips Yjs. Bind it once we are actually in the room.
+      features.setupYjsSync(engine);
       const others = Object.values(conferenceStore.users).map((u) => u.pos);
       local.setLocalPosition(spreadInitialUserPosition(others));
       local.publishLocalPosition();
       scheduleReceiverRefresh();
       emitMediaStateSnapshot('conferenceJoined');
+
+      engine.sendCommand('hello', buildHelloCommand(id));
+      features.resendSessionIdentity(engine);
+      engine.sendCommand('hello_req', JSON.stringify({ from: id }));
+
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = window.setInterval(() => {
+        if (!engine.isJoined()) return;
+        const myId = local.id || engine.getLocalUserId();
+        if (myId) {
+          engine.sendCommand('hello', buildHelloCommand(myId));
+        }
+        const conf = engine.getConference();
+        const liveIds = conf ? conf.getParticipants().map((p) => p.getId()) : [];
+        conferenceStore.pruneStaleUsers(45000, liveIds);
+        scheduleReceiverRefresh();
+        engine.refreshRemoteAudio?.();
+        features.resendSessionIdentity(engine);
+      }, 5000);
     }
   });
   engine.on('conferenceError', (detail) => {
@@ -91,25 +191,60 @@ export function wireStoreSync(engine: MediaService): void {
     );
     if ('handRaised' in props) {
       applyParticipantHandRaised(id, parseHandRaised(props.handRaised));
+      delete props.handRaised;
+    }
+    if (Object.keys(props).length > 0 && conferenceStore.users[id]) {
+      conferenceStore.patchUser(
+        id,
+        { properties: { ...conferenceStore.users[id].properties, ...props } },
+        false,
+      );
+    }
+    const local = useLocalStore();
+    if (local.id && local.id !== id) {
+      engine.sendCommand('hello', buildHelloCommand(local.id));
     }
     const features = useSessionFeaturesStore();
+    const email = features.controlEmail();
     if (features.isHost) {
-      const local = useLocalStore();
-      engine.sendCommand('host', JSON.stringify({ hostId: local.id }));
+      engine.sendCommand(
+        'host',
+        JSON.stringify({ hostId: local.id, ...(email ? { email } : {}) }),
+      );
+      const syncGrants = grantsPayloadForSync(features.roomDefaults, id, features.userGrants);
       engine.sendCommand(
         'access',
-        JSON.stringify(grantsPayloadForSync(features.roomDefaults, id, features.userGrants)),
+        JSON.stringify(email ? { ...syncGrants, email } : syncGrants),
       );
       if (features.sharedNotes) {
         broadcastSharedNotes(engine, features.sharedNotes);
       }
+      if (notesDocumentHasContent(features.ydoc)) {
+        broadcastYjsState(engine, features.ydoc);
+      }
+    }
+    if (features.isHost || features.isModerator) {
       broadcastHostRoomSettings(engine, features);
+      const lock = features.mediaLocks[id];
+      if (lock && (lock.mic || lock.camera)) {
+        engine.sendCommand(
+          'mod',
+          JSON.stringify({
+            action: 'lock_media',
+            id,
+            mic: !!lock.mic,
+            camera: !!lock.camera,
+            ...(email ? { email } : {}),
+          }),
+        );
+      }
     }
     scheduleReceiverRefresh();
   });
   engine.on('userLeft', (id) => {
     clearStageIfParticipantLeft(id);
     conferenceStore.removeUser(id);
+    useSessionFeaturesStore().rejectLobby(id);
   });
   engine.on('displayNameChanged', (id, displayName) => {
     conferenceStore.updateUserDisplayName(id, displayName);
@@ -122,40 +257,7 @@ export function wireStoreSync(engine: MediaService): void {
       return;
     }
     if (!conferenceStore.users[id]) conferenceStore.addUser(id);
-
-    let kind: 'audio' | 'video' | 'screenshareAudio' = 'video';
-    if (track.getType() === 'audio') {
-      const user = conferenceStore.users[id];
-      const hasAudio = !!user?.audio;
-      /* v8 ignore start */
-      const label = (typeof track.getTrack === 'function') ? (track.getTrack()?.label?.toLowerCase() || '') : '';
-      const isScreenAudio = hasAudio || label.includes('screen') || label.includes('desktop');
-      kind = isScreenAudio ? 'screenshareAudio' : 'audio';
-      /* v8 ignore stop */
-    } else {
-      kind = 'video';
-    }
-
-    if (kind === 'video' && track.isMuted()) {
-      if (track.videoType === 'desktop') {
-        conferenceStore.clearUserTrack(id, 'screenshare');
-      } else {
-        conferenceStore.clearUserTrack(id, 'video');
-      }
-    } else {
-      conferenceStore.setUserTrack(id, kind, track);
-    }
-    if (kind === 'audio') {
-      if (track.isMuted()) {
-        engine.disconnectParticipantAudio?.(id);
-      } else {
-        const user = conferenceStore.users[id]!;
-        const proximity = user.volume ?? 1;
-        engine.setParticipantVolume(id, playbackGainForUser(user, proximity));
-      }
-    }
-    if (kind === 'video') emitMediaStateSnapshot('trackAdded');
-    scheduleReceiverRefresh();
+    applyRemoteTrackToStore(id, track);
   });
   engine.on('trackMuteChanged', (track) => {
     const id = participantIdFromTrack(track);
@@ -165,7 +267,8 @@ export function wireStoreSync(engine: MediaService): void {
     const isAudio = track.getType() === 'audio';
     if (!isAudio) {
       if (track.isMuted()) {
-        if (track.videoType === 'desktop') {
+        const currentScreen = conferenceStore.users[id]?.screenshare;
+        if (isDesktopShareTrack(track) || Boolean(currentScreen && toRaw(currentScreen) === toRaw(track))) {
           conferenceStore.clearUserTrack(id, 'screenshare');
         } else {
           conferenceStore.clearUserTrack(id, 'video');
@@ -222,7 +325,8 @@ export function wireStoreSync(engine: MediaService): void {
         conferenceStore.clearUserTrack(id, 'audio');
       }
     } else {
-      if (track.videoType === 'desktop') {
+      const currentScreen = conferenceStore.users[id]?.screenshare;
+      if (isDesktopShareTrack(track) || Boolean(currentScreen && toRaw(currentScreen) === toRaw(track))) {
         conferenceStore.clearUserTrack(id, 'screenshare');
       } else {
         conferenceStore.clearUserTrack(id, 'video');

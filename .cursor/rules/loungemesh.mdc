@@ -1,0 +1,15 @@
+---
+description: LoungeMesh Architecture, Scaling, Security, and Testing Guidelines
+globs: **/*
+alwaysApply: true
+---
+
+# LoungeMesh Rules for Cursor
+
+- **Strict Adapter Boundary**: Vue components and Pinia stores must never import `lib-jitsi-meet` directly. Always interact via `MediaService.ts` / `useMediaEngine.ts`.
+- **Headless WebRTC**: No iframe embeds.
+- **Resource Scaling**: Never add hardcoded container memory limits (`mem_limit`). Rely on spatial viewport culling (`receiverConstraints.ts`, 0 streams off-screen), 360p camera avatar / 720p screensharing capture budgeting, and connection pooling.
+- **Security**: Never expose `joinPin` or raw internal database fields in API responses. Always sanitize via `sanitizeMeetingConfig`. Derive `meetingExists` directly from `data.role.hostId`.
+- **100% Coverage & Pre-PR Testing**: All code under `src-vue/` requires 100% statement, branch, and function coverage (`npm test`). E2E Playwright tests (`npm run build && npm run test:e2e`) and TypeScript compiler checks must pass before PR or commit.
+- **Documentation & Skills Updates**: Whenever introducing or updating user flows or features, update all READMEs (`README.md`, `server/README.md`) and corresponding domain skills in `.agents/skills/`.
+- **Domain Skills**: Consult specialized skills in `.agents/skills/` for architecture, scaling, security, eventyay integration, deployment, and testing.

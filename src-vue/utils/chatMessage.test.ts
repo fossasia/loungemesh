@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyChatEdit,
   canApplyChatEdit,
+  canDeleteChatMessage,
   canEditChatMessage,
   chatAuthorHue,
   chatAuthorStyle,
@@ -40,6 +41,11 @@ describe('chatMessage', () => {
     expect(canApplyChatEdit(messages, 'missing', 'u1')).toBe(false);
     expect(canApplyChatEdit(messages, 'sender-uuid', 'u1', 1)).toBe(true);
     expect(canApplyChatEdit(messages, 'sender-uuid', 'u2', 1)).toBe(false);
+
+    expect(canDeleteChatMessage(createChatMessage('u1', 'x', 1), 'u1', false)).toBe(true);
+    expect(canDeleteChatMessage(createChatMessage('u1', 'x', 1), 'u2', false)).toBe(false);
+    expect(canDeleteChatMessage(createChatMessage('u1', 'x', 1), 'u2', true)).toBe(true);
+    expect(canDeleteChatMessage(createChatMessage('u1', 'x', 1), '', true)).toBe(false);
   });
 
   it('handles idx < 0 branch in applyChatEdit', () => {

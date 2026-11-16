@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import { whiteboardChrome } from '@/constants/pan';
 import { useWhiteboard } from '@/composables/useWhiteboard';
 import { useWhiteboardLayout } from '@/composables/useWhiteboardLayout';
@@ -13,6 +14,10 @@ defineProps<{
 }>();
 
 const features = useSessionFeaturesStore();
+const { engine } = useMediaEngine();
+const pendingWhiteboardChanges = computed(() =>
+  features.pendingModerationChanges.filter((c) => c.type === 'whiteboard'),
+);
 const shellRef = ref<HTMLElement | null>(null);
 const surfaceRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -79,6 +84,35 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
         >
           Clear
         </button>
+        <div
+          v-if="features.canModerate && pendingWhiteboardChanges.length > 0"
+          class="wbModQueue"
+          data-testid="wb-mod-queue"
+        >
+          <div
+            v-for="item in pendingWhiteboardChanges"
+            :key="item.id"
+            class="wbModRow"
+          >
+            <span class="wbModText">Stroke from {{ item.authorName }} (15s auto-approve)</span>
+            <div class="wbModActions">
+              <button
+                type="button"
+                class="btnAccept"
+                @click="features.approveModerationChange(item.id, engine)"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                class="btnReject"
+                @click="features.rejectModerationChange(item.id, engine)"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        </div>
         <canvas
           ref="canvasRef"
           class="wbCanvas"
@@ -111,6 +145,14 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
   z-index: 4500;
   box-sizing: border-box;
   pointer-events: none;
+}
+@media (max-width: 768px) {
+  .wbShell {
+    top: 56px !important;
+    right: 8px !important;
+    bottom: 112px !important;
+    left: 8px !important;
+  }
 }
 .wbOverlay {
   display: flex;
@@ -215,5 +257,62 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
 }
 .wbResize:hover::after {
   opacity: 1;
+}
+.wbModQueue {
+  position: absolute;
+  top: 12px;
+  left: 60px;
+  right: 80px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+.wbModRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+.wbModText {
+  font-size: var(--fs-small, 12px);
+  color: var(--color-text-default);
+  font-weight: var(--fw-medium, 500);
+}
+.wbModActions {
+  display: flex;
+  gap: 6px;
+}
+.btnAccept {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnAccept:hover {
+  background: #059669;
+}
+.btnReject {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnReject:hover {
+  background: #dc2626;
 }
 </style>

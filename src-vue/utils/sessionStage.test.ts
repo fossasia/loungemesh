@@ -38,8 +38,9 @@ describe('sessionStage', () => {
     local.setMyID('u1');
     expect(canPromoteToStage(false, true, '', 'u2')).toEqual({
       ok: false,
-      message: 'Only the host can promote to stage.',
+      message: 'Only hosts or moderators can promote to stage.',
     });
+    expect(canPromoteToStage(false, true, '', 'u2', true)).toEqual({ ok: true });
     expect(canPromoteToStage(true, false, '', 'u2')).toEqual({
       ok: false,
       message: 'Stage promotion is disabled.',
@@ -59,6 +60,7 @@ describe('sessionStage', () => {
 
     // Non-host demoting another user
     expect(canDemoteFromStage(false, 'u1', 'u2')).toBe(false);
+    expect(canDemoteFromStage(false, 'u2', 'u2', true)).toBe(true);
 
     // Host canceling invitation for invited guest
     const features = useSessionFeaturesStore();
@@ -87,6 +89,7 @@ describe('sessionStage', () => {
     const engine = getMediaEngineInstance();
     local.setMyID('host');
     features.setHost('host');
+    features.hostEmail = 'host@example.com';
     features.stagePromotionEnabled = true;
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
 
@@ -94,7 +97,9 @@ describe('sessionStage', () => {
     expect(promote).toEqual({ ok: true });
     expect(features.invitedStageUserId).toBe('guest');
     expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"action":"invite"'));
+    expect(cmdSpy).toHaveBeenCalledWith('stage', expect.stringContaining('"email":"host@example.com"'));
 
+    features.hostEmail = '';
     applyStagePromote('guest');
     expect(features.stageOccupantId).toBe('guest');
 

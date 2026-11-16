@@ -139,4 +139,37 @@ describe('RemoteUser', () => {
 
     wrapper.unmount();
   });
+
+  it('renders host role badge on nametag when user is host', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u-host', { _displayName: 'Host User' } as never);
+    conference.users['u-host'].pos = { x: 0, y: 0 };
+    features.hostId = 'u-host';
+
+    const { wrapper } = await mountWithApp(RemoteUser, { props: { id: 'u-host' } });
+    expect(wrapper.find('.hostIcon').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('renders moderator role badge when granted or defined in properties', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    conference.addUser('u-mod-grant', { _displayName: 'Mod Grant' } as never);
+    conference.users['u-mod-grant'].pos = { x: 0, y: 0 };
+    features.userGrants['u-mod-grant'] = { moderator: true };
+
+    const { wrapper: w1 } = await mountWithApp(RemoteUser, { props: { id: 'u-mod-grant' } });
+    expect(w1.find('.modIcon').exists()).toBe(true);
+    w1.unmount();
+
+    conference.addUser('u-mod-prop', { _displayName: 'Mod Prop' } as never);
+    conference.users['u-mod-prop'].pos = { x: 0, y: 0 };
+    conference.users['u-mod-prop'].properties = { role: 'moderator' };
+
+    const { wrapper: w2 } = await mountWithApp(RemoteUser, { props: { id: 'u-mod-prop' } });
+    expect(w2.find('.modIcon').exists()).toBe(true);
+    w2.unmount();
+  });
 });
+

@@ -20,6 +20,8 @@ export default defineConfig({
         text: 'Guide',
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
+          { text: 'Features & User flows', link: '/guide/features' },
+          { text: 'Scaling & Performance', link: '/guide/scaling' },
           { text: 'Deployment', link: '/guide/deployment' },
           { text: 'AWS free-tier deploy', link: '/guide/aws-deployment' },
           { text: 'Eventyay integration', link: '/guide/eventyay-integration' },

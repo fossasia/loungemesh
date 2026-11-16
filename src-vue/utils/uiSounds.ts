@@ -14,7 +14,8 @@ export type UiSoundId =
   | 'leave'
   | 'success'
   | 'chatMessage'
-  | 'stageInvite';
+  | 'stageInvite'
+  | 'lobbyKnock';
 
 let audioContext: AudioContext | undefined;
 
@@ -155,6 +156,12 @@ export function playUiSound(id: UiSoundId): void {
         { freq: 880, duration: 0.15, volume: 0.15, type: 'square' },
         { freq: 880, at: 0.2, duration: 0.15, volume: 0.15, type: 'square' },
         { freq: 1200, at: 0.4, duration: 0.3, volume: 0.20, type: 'square' },
+      ]);
+      break;
+    case 'lobbyKnock':
+      playSequence([
+        { freq: 587, duration: 0.08, volume: 0.07, type: 'triangle' },
+        { freq: 880, at: 0.09, duration: 0.12, volume: 0.075, type: 'triangle' },
       ]);
       break;
   }
