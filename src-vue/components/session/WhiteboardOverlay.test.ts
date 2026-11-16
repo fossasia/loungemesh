@@ -169,7 +169,7 @@ describe('WhiteboardOverlay', () => {
     const local = useLocalStore();
     local.setMyID('guest');
     features.setHost('host');
-    features.roomDefaults = { notes: false, whiteboard: false, poll: false };
+    features.userGrants.guest = { notes: false, whiteboard: false, poll: false };
     features.panel = 'whiteboard';
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
     const { wrapper } = await mountWithApp(WhiteboardOverlay, {
@@ -268,6 +268,53 @@ describe('WhiteboardOverlay', () => {
       new PointerEvent('pointerdown', { clientX: 1, clientY: 1, pointerId: 4, bubbles: true }),
     );
     vi.mocked(whiteboardCanvas.clientToCanvasPoint).mockRestore();
+    wrapper.unmount();
+  });
+
+  it('displays pending whiteboard changes queue and allows moderator to accept or reject', async () => {
+    const features = useSessionFeaturesStore();
+    features.panel = 'whiteboard';
+    features.pendingModerationChanges = [
+      {
+        id: 'wb-mod-1',
+        type: 'whiteboard',
+        authorId: 'guest-1',
+        authorName: 'Guest',
+        payload: { id: 's-1', color: '#000', width: 2, points: [] },
+        timestamp: Date.now(),
+      },
+    ];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockCanvas() as never);
+    const { wrapper } = await mountWithApp(WhiteboardOverlay, {
+      props: { onClose: () => {} },
+    });
+    await flushPromises();
+
+    const queue = wrapper.find('[data-testid="wb-mod-queue"]');
+    expect(queue.exists()).toBe(true);
+    expect(queue.text()).toContain('Guest');
+
+    const acceptBtn = queue.find('.btnAccept');
+    await acceptBtn.trigger('click');
+    expect(features.pendingModerationChanges).toHaveLength(0);
+
+    // Now test reject
+    features.pendingModerationChanges = [
+      {
+        id: 'wb-mod-2',
+        type: 'whiteboard',
+        authorId: 'guest-2',
+        authorName: 'Guest 2',
+        payload: { id: 's-2', color: '#000', width: 2, points: [] },
+        timestamp: Date.now(),
+      },
+    ];
+    await flushPromises();
+    const queue2 = wrapper.find('[data-testid="wb-mod-queue"]');
+    const rejectBtn = queue2.find('.btnReject');
+    await rejectBtn.trigger('click');
+    expect(features.pendingModerationChanges).toHaveLength(0);
+
     wrapper.unmount();
   });
 });

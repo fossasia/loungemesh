@@ -1,6 +1,6 @@
 # LoungeMesh Backend API Server
 
-The LoungeMesh backend is built with Node.js, TypeScript, Express, Prisma ORM, PostgreSQL database, and Redis cache. It provides user management, authentication, scheduled call management, Google Calendar syncing, rate-limiting, and persistent state management for whiteboard drawing, session notes, active polls, and room permission settings.
+The LoungeMesh backend is built with Node.js, TypeScript, Express, Prisma ORM, PostgreSQL database, and Redis cache. It provides user management, authentication, scheduled call management, Google Calendar syncing, rate-limiting, and persistent state management for whiteboard drawing, session notes, active polls, and room permission settings. Live updates between people in the room are delivered by the browser over Jitsi (JSON messages for notes, whiteboard, chat, reactions, and polls). This API stores the durable copy that a joining participant loads.
 
 ---
 
@@ -102,3 +102,63 @@ View, search, edit, and inspect table rows dynamically using the web GUI:
 DATABASE_URL="postgresql://loungemesh:loungemesh@127.0.0.1:5432/loungemesh?schema=public" npm --prefix server run prisma:studio
 ```
 Opens [http://localhost:5555](http://localhost:5555).
+
+---
+
+## Database Connection Pooling & Scaling
+
+For high-concurrency production deployments, append connection pool options to `DATABASE_URL`:
+```env
+DATABASE_URL="postgresql://<db_user>:<db_password>@postgres:5432/loungemesh?schema=public&connection_limit=20&pool_timeout=15"
+```
+- `connection_limit=20`: Caps simultaneous PostgreSQL connections per `PrismaClient` instance to prevent thread exhaustion on low-memory servers (2 GB RAM). Note that this limit applies per application process/replica; if running multiple backend instances, size this value against the total PostgreSQL connection budget (`max_connections`).
+- `pool_timeout=15`: Aborts queries waiting over 15 seconds for an available pool slot.
+
+---
+
+## API Endpoints Reference
+
+### Room State & Initialization
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/meetings/state/:roomName/init` | **Single-roundtrip bundle**: Returns `{ role, config, whiteboard, notes, access, poll, background }` in one request. Config is strictly sanitized to prevent leaking `joinPin`. |
+
+### Meeting Lifecycle
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/meetings` | Create a new scheduled or ad-hoc room. Caches sanitized config in Redis. |
+| `GET` | `/api/meetings/upcoming` | Fetch upcoming scheduled meetings for authenticated user. |
+| `GET` | `/api/meetings/role/:roomName` | Resolve caller's role (`host`, `moderator`, `attendee`). |
+| `GET` | `/api/meetings/config/:roomName` | Fetch sanitized room settings (`lobbyEnabled`, `lobbyForm` of `name` or `details`, `stagePromotionEnabled`, `allowParticipantRecording`, `notesTemplate`). |
+| `PUT` | `/api/meetings/config/:roomName` | Update room settings (host/moderator only). |
+
+### Real-Time Session Features (Redis-Backed)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/meetings/state/:roomName/whiteboard` | Read collaborative whiteboard state. |
+| `POST` | `/api/meetings/state/:roomName/whiteboard/stroke` | Add a collaborative whiteboard stroke. |
+| `POST` | `/api/meetings/state/:roomName/whiteboard/clear` | Clear collaborative whiteboard state. |
+| `GET` / `POST` | `/api/meetings/state/:roomName/notes` | Read or update synchronized shared notes. |
+| `GET` / `POST` / `DELETE` | `/api/meetings/state/:roomName/poll` | Fetch, update, or clear active poll state. |
+| `GET` | `/api/meetings/state/:roomName/access` | Read room feature toggles and capability grants. |
+| `POST` | `/api/meetings/state/:roomName/access/defaults` | Update room feature toggles. |
+| `POST` | `/api/meetings/state/:roomName/access/grants` | Update per-user capability grants. |
+| `POST` | `/api/meetings/state/:roomName/invite` | Invite attendee email(s) to a live or scheduled meeting (host/moderator only); persists `guestEmails` in PostgreSQL & Redis, updates Google Calendar or sends SMTP invitation emails, and bypasses lobby for invited accounts. |
+| `GET` / `POST` / `DELETE` | `/api/meetings/state/:roomName/background` | Get, set, or clear room floorplan background URL (authorized for hosts and `moderate` capability; Express accepts up to `2mb` JSON payloads behind Nginx `5m` body size limit). |
+| `POST` | `/api/meetings/log/:roomName` | Record an audit log event in `SessionLog`. |
+
+---
+
+## Pre-Commit & Pre-PR Quality Gates
+
+Whenever modifying backend controllers, services, database schemas, or API endpoints:
+1. **TypeScript Build**: Run `npm --prefix server run build` to verify zero compiler errors.
+2. **Vitest Coverage & E2E Verification**: Frontend and full-stack integration must pass `npm test` (with 100% statement, branch, function, and line coverage) and `npm run test:e2e`.
+3. **Documentation & Skills Updates**:
+   - Update `server/README.md` (endpoint tables and configuration).
+   - Update root `README.md` and `docs-site/` guides if endpoints or user flows change.
+   - Update `.agents/skills/` (specifically `loungemesh-architecture`, `loungemesh-security`, and `loungemesh-features-and-testing`) to keep AI models synchronized with any modified user flows and API contracts.
+

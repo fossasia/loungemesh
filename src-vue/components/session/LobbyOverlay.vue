@@ -6,6 +6,7 @@ import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 const features = useSessionFeaturesStore();
 const conference = useConferenceStore();
@@ -15,7 +16,7 @@ const { engine, leaveRoom, disconnect } = useMediaEngine();
 const router = useRouter();
 
 // Waiting form fields
-const guestName = ref(conference.displayName || '');
+const guestName = ref('');
 const guestEmail = ref('');
 const guestReason = ref('');
 const errorMsg = ref('');
@@ -31,6 +32,10 @@ const authLoading = ref(false);
 function requestJoin() {
   if (!guestName.value.trim()) {
     errorMsg.value = 'Please enter your name.';
+    return;
+  }
+  if (features.lobbyForm === 'details' && !guestEmail.value.trim()) {
+    errorMsg.value = 'Please enter your email.';
     return;
   }
   errorMsg.value = '';
@@ -71,17 +76,24 @@ async function handleAuthSubmit() {
 }
 
 async function exitLobby() {
+  if (local.id) {
+    engine.sendCommand('lobby', JSON.stringify({ action: 'cancel', id: local.id }));
+  }
   features.resetForLeave();
   await local.stopAllLocalMedia();
   leaveRoom();
   conference.leaveConference();
   disconnect();
-  router.push('/');
+  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+    window.parent.postMessage({ source: 'loungemesh', action: 'leave', event: 'hangup', type: 'hangup' }, '*');
+  } else {
+    router.push('/');
+  }
 }
 </script>
 
 <template>
-  <div v-if="features.isLobbyBlocked" class="lobby">
+  <div v-if="features.configLoaded && features.isLobbyBlocked" class="lobby">
     <div class="card">
       <!-- Rejection View -->
       <template v-if="features.lobbyRejected">
@@ -99,7 +111,14 @@ async function exitLobby() {
 
       <!-- Waiting Approval View -->
       <template v-else-if="features.localLobbyPending">
-        <div class="spinner"></div>
+        <div class="gmeetRadar" aria-hidden="true">
+          <div class="radarRing ring1"></div>
+          <div class="radarRing ring2"></div>
+          <div class="radarRing ring3"></div>
+          <div class="radarCore">
+            <AppIcon name="user" :size="28" />
+          </div>
+        </div>
         <h2 class="title">Asking to join...</h2>
         <p class="sub">
           Lobby mode is on. Please wait. The host will admit you shortly.
@@ -108,6 +127,31 @@ async function exitLobby() {
           <span class="previewLabel">Requesting as:</span>
           <span class="previewValue">{{ guestName }}</span>
         </div>
+
+        <!-- Live device preview toggles while waiting in lobby -->
+        <div class="deviceToggles">
+          <button
+            type="button"
+            class="deviceBtn"
+            :class="{ active: !local.mute, warning: local.mute }"
+            @click="local.toggleMute()"
+            :title="local.mute ? 'Unmute microphone' : 'Mute microphone'"
+          >
+            <AppIcon :name="local.mute ? 'mic-off' : 'mic'" :size="16" />
+            <span>{{ local.mute ? 'Mic Off' : 'Mic On' }}</span>
+          </button>
+          <button
+            type="button"
+            class="deviceBtn"
+            :class="{ active: !local.cameraOff, warning: local.cameraOff }"
+            @click="local.toggleCamera()"
+            :title="local.cameraOff ? 'Turn on camera' : 'Turn off camera'"
+          >
+            <AppIcon :name="local.cameraOff ? 'video-off' : 'video'" :size="16" />
+            <span>{{ local.cameraOff ? 'Camera Off' : 'Camera On' }}</span>
+          </button>
+        </div>
+
         <button type="button" class="btnCancel" @click="exitLobby">
           Cancel Request
         </button>
@@ -116,30 +160,17 @@ async function exitLobby() {
       <!-- Form View -->
       <template v-else>
         <!-- Card Tabs -->
-        <div class="tabs">
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: activeTab === 'guest' }"
-            @click="activeTab = 'guest'"
-          >
-            Guest Join
+        <div class="authLinks">
+          <button type="button" class="authSwitch" @click="activeTab = activeTab === 'guest' ? 'login' : 'guest'">
+            {{ activeTab === 'guest' ? 'Have an invited email? Sign in' : 'Ask to join instead' }}
           </button>
           <button
+            v-if="activeTab !== 'guest'"
             type="button"
-            class="tab"
-            :class="{ active: activeTab === 'login' }"
-            @click="activeTab = 'login'"
+            class="authSwitch"
+            @click="activeTab = activeTab === 'login' ? 'signup' : 'login'"
           >
-            Sign In
-          </button>
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: activeTab === 'signup' }"
-            @click="activeTab = 'signup'"
-          >
-            Register
+            {{ activeTab === 'login' ? 'Create an account' : 'Sign in instead' }}
           </button>
         </div>
 
@@ -147,37 +178,41 @@ async function exitLobby() {
         <form v-if="activeTab === 'guest'" class="form" @submit.prevent="requestJoin">
           <p v-if="errorMsg" class="errorAlert" role="alert">{{ errorMsg }}</p>
           <h2 class="title">Request Entry</h2>
-          <p class="sub">Enter your details to request access to the meeting room.</p>
+          <p class="sub">
+            {{ features.lobbyForm === 'details'
+              ? 'Enter your name and email. The host will admit you.'
+              : 'Enter your name. The host will admit you.' }}
+          </p>
           
           <div class="inputGroup">
-            <label for="lobbyGuestName">Your Name *</label>
+            <label for="lobbyGuestName">Name <span class="requiredMark">Required</span></label>
             <input
               id="lobbyGuestName"
               v-model="guestName"
               type="text"
-              placeholder="e.g. John Doe"
+              autocomplete="off"
               required
             />
           </div>
 
-          <div class="inputGroup">
-            <label for="lobbyGuestEmail">Email Address *</label>
+          <div v-if="features.lobbyForm === 'details'" class="inputGroup">
+            <label for="lobbyGuestEmail">Email <span class="requiredMark">Required</span></label>
             <input
               id="lobbyGuestEmail"
               v-model="guestEmail"
               type="email"
-              placeholder="e.g. john@example.com"
+              autocomplete="off"
               required
             />
           </div>
 
-          <div class="inputGroup">
-            <label for="lobbyGuestReason">Message to Host (optional)</label>
+          <div v-if="features.lobbyForm === 'details'" class="inputGroup">
+            <label for="lobbyGuestReason">Message to the host</label>
             <input
               id="lobbyGuestReason"
               v-model="guestReason"
               type="text"
-              placeholder="e.g. Asking to join presentation"
+              autocomplete="off"
             />
           </div>
 
@@ -193,7 +228,7 @@ async function exitLobby() {
           <h2 class="title">
             {{ activeTab === 'login' ? 'Sign In to Account' : 'Create an Account' }}
           </h2>
-          <p class="sub">Registered accounts bypass the waiting lobby automatically.</p>
+          <p class="sub">Sign in with the email that was invited. Any other account still waits for the host.</p>
 
           <div v-if="activeTab === 'signup'" class="inputGroup">
             <label for="lobbyAuthName">Display Name</label>
@@ -248,11 +283,11 @@ async function exitLobby() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 50%, rgba(240, 244, 255, 0.95) 0%, rgba(228, 234, 255, 0.98) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--color-bg-page);
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
   pointer-events: auto;
-  animation: overlayFadeIn 0.3s ease-out;
 }
 
 @keyframes overlayFadeIn {
@@ -263,16 +298,52 @@ async function exitLobby() {
 .card {
   width: 100%;
   max-width: 440px;
-  padding: 32px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(79, 110, 247, 0.15);
-  border-radius: 24px;
-  box-shadow: 0 30px 60px -15px rgba(30, 34, 64, 0.15), 0 10px 20px -5px rgba(30, 34, 64, 0.05);
+  padding: 40px 32px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-round);
+  color: var(--color-mono10);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  text-align: center;
   box-sizing: border-box;
-  animation: cardEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.authLinks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.authSwitch {
+  border: none;
+  background: transparent;
+  color: var(--color-blue100);
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  cursor: pointer;
+  padding: 4px;
+}
+
+@media (max-width: 640px) {
+  .lobby {
+    padding: 16px;
+    align-items: flex-start;
+  }
+  .card {
+    padding: 28px 18px;
+  }
+  .buttonRow {
+    flex-direction: column;
+  }
+  .buttonRow button {
+    width: 100%;
+  }
+  .inputGroup input {
+    font-size: 16px;
+  }
 }
 
 @keyframes cardEnter {
@@ -293,9 +364,9 @@ async function exitLobby() {
 }
 
 .errorIcon {
-  background: #fff5f5;
-  border: 2px solid #ffc9c9;
-  color: #fa5252;
+  background: var(--color-bg-card);
+  border: 2px solid var(--color-red100);
+  color: var(--color-red100);
 }
 
 .spinner {
@@ -400,9 +471,9 @@ async function exitLobby() {
 }
 
 .errorAlert {
-  background: #fff5f5;
-  border: 1px solid #ffc9c9;
-  color: #fa5252;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-red100);
+  color: var(--color-red100);
   padding: 12px;
   border-radius: 10px;
   font-size: var(--fs-small, 14px);
@@ -423,7 +494,14 @@ async function exitLobby() {
 .inputGroup label {
   font-size: var(--fs-small, 13px);
   font-weight: 600;
-  color: #1e2240;
+  color: var(--color-mono10);
+}
+
+.requiredMark {
+  color: var(--color-red100);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 6px;
 }
 
 .inputGroup input {
@@ -496,7 +574,7 @@ async function exitLobby() {
 
 .btnExit {
   width: 100%;
-  background: #fa5252;
+  background: var(--color-red100);
   color: #fff;
   border: none;
   padding: 12px;
@@ -509,6 +587,96 @@ async function exitLobby() {
 }
 
 .btnExit:hover {
-  background: #e03131;
+  background: var(--btn-warning-bg-hover);
+}
+
+/* Google Meet style Waiting Lobby Radar & Device Controls */
+.gmeetRadar {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radarCore {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+  z-index: 2;
+}
+
+.radarRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(79, 110, 247, 0.4);
+  animation: radarPulse 2.4s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.radarRing.ring2 {
+  animation-delay: 0.8s;
+}
+
+.radarRing.ring3 {
+  animation-delay: 1.6s;
+}
+
+@keyframes radarPulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.deviceToggles {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 16px 0 20px;
+}
+
+.deviceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-default);
+  transition: all 0.2s ease;
+}
+
+.deviceBtn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.deviceBtn.warning {
+  border-color: var(--color-red100);
+  background: var(--color-bg-card);
+  color: var(--color-red100);
+}
+
+.deviceBtn.active {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
 }
 </style>

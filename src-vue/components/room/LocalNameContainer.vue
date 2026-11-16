@@ -6,12 +6,14 @@ defineProps<{
 }>();
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import NameTag from './overlays/NameTag.vue';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
+const features = useSessionFeaturesStore();
 const { engine } = useMediaEngine();
 const active = ref(false);
 const draft = ref(conference.displayName);
@@ -71,7 +73,7 @@ function onKeydown(e: KeyboardEvent) {
     @blur="commit"
     @keydown="onKeydown"
   />
-  <NameTag v-else class="nameRow">
+  <NameTag v-else class="nameRow" :role="features.userRole">
     <span class="nameText">{{ conference.displayName }}</span>
     <button
       type="button"

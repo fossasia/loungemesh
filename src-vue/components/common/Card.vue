@@ -29,24 +29,27 @@ defineProps<{
 .box {
   position: fixed;
   z-index: 10001;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 12px);
   background: rgba(255, 255, 255, 1);
-  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--line-light, #e2e8f0);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.06);
   display: flex;
   flex-direction: column;
+  text-align: left;
 }
 .header {
-  padding: 12px 12px 8px;
+  padding: 14px 16px 10px;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  border-bottom: 1px solid var(--line-light, #eef2f6);
 }
 .titleRow {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
 }
 .content {
@@ -54,20 +57,27 @@ defineProps<{
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 12px 12px;
+  padding: 12px 16px 16px;
 }
 .title {
-  font-weight: var(--fw-medium);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--color-text-default);
 }
 .close {
   border: none;
   background: transparent;
-  padding: 8px;
-  width: 40px;
-  height: 40px;
-  transform: translate(0, -8px);
-  border-radius: 50px;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: var(--color-mono30, #475569);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 .close:hover {
   background-color: var(--btn-default-bg-hover);

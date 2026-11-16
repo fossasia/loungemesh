@@ -11,6 +11,8 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useMediaEngine } from '@/composables/useMediaEngine';
 import { useAuthStore } from '@/stores/authStore';
+import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useReconnectStore } from '@/stores/reconnectStore';
 import { SESSION_ERROR_CODES } from '@/services/sessionErrorCodes';
 import JitsiConnection from './JitsiConnection.vue';
 
@@ -331,6 +333,39 @@ describe('JitsiConnection', () => {
     await flushPromises();
     const conference = useConferenceStore();
     expect(conference.displayName).toBe("John Doe's Sphere");
+    wrapper.unmount();
+  });
+
+  it('registers reconnect retry action, allows execution, and cleans up on unmount', async () => {
+    const { wrapper, pinia } = await mountWithApp(JitsiConnection, {
+      route: '/session/room-retry',
+      global: { stubs: { JitsiConnection: false, LocalStoreLogic: true } },
+    });
+    await flushPromises();
+    const reconnect = useReconnectStore(pinia);
+    expect(reconnect.isIntentionalLeave).toBe(false);
+    expect(typeof (reconnect as any)._retryAction).toBe('function');
+    await (reconnect as any)._retryAction?.();
+    wrapper.unmount();
+    expect(reconnect.isIntentionalLeave).toBe(true);
+    expect((reconnect as any)._retryAction).toBeUndefined();
+  });
+
+  it('suppresses remote playback while the local person is in the lobby', async () => {
+    const engine = getMediaEngineInstance();
+    const spy = vi.spyOn(engine, 'setRemotePlaybackSuppressed');
+    const { wrapper } = await mountConnection();
+    await flushPromises();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('guest');
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    await nextTick();
+    expect(spy).toHaveBeenCalledWith(true);
+    features.lobbyEnabled = false;
+    await nextTick();
+    expect(spy).toHaveBeenCalledWith(false);
     wrapper.unmount();
   });
 });

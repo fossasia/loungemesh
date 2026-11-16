@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
-import { markRaw, nextTick } from 'vue';
+import { markRaw, nextTick, toRaw } from 'vue';
 import type { JitsiTrack } from '@/types/jitsi';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
+import { isAdmittedParticipant } from '@/utils/lobbyAdmission';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import {
   clampPan,
@@ -34,6 +36,7 @@ import {
 import { waitForMediaElementDetach } from '@/utils/clearMediaElement';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
+import { getOrCreateSessionUserKey } from '@/utils/userKey';
 import { useConferenceStore } from './conferenceStore';
 import { useSessionFeaturesStore } from './sessionFeaturesStore';
 
@@ -49,11 +52,19 @@ function getConferenceLocalTracksOfKind(
 }
 
 function getConferenceLocalVideoTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
-  return getConferenceLocalTracksOfKind(conference, 'video');
+  return getConferenceLocalTracksOfKind(conference, 'video').filter(
+    (track) => !isDesktopShareTrack(track),
+  );
 }
 
-function getConferenceLocalAudioTracks(conference: { getLocalTracks?: () => JitsiTrack[] } | undefined) {
-  return getConferenceLocalTracksOfKind(conference, 'audio');
+function getConferenceLocalAudioTracks(
+  conference: { getLocalTracks?: () => JitsiTrack[] } | undefined,
+  screenshareAudio?: JitsiTrack,
+) {
+  const screenRaw = screenshareAudio ? toRaw(screenshareAudio) : undefined;
+  return getConferenceLocalTracksOfKind(conference, 'audio').filter(
+    (track) => !screenRaw || toRaw(track) !== screenRaw,
+  );
 }
 
 export type Vector2 = { x: number; y: number };
@@ -83,6 +94,7 @@ export type LocalState = {
   audioError: boolean;
   videoError: boolean;
   privateNotes: string;
+  userKey: string;
 };
 
 export const useLocalStore = defineStore('local', {
@@ -90,6 +102,7 @@ export const useLocalStore = defineStore('local', {
     const { pos, pan, scale, roomBounds } = initialLocalViewport();
     return {
     id: '',
+    userKey: getOrCreateSessionUserKey(),
     mute: false,
     cameraOff: false,
     speaking: false,
@@ -137,14 +150,15 @@ export const useLocalStore = defineStore('local', {
       this.scale = scale;
       this.pan = clampPan(payload.pan, scale, this.roomBounds);
     },
-    resetViewportForRoom() {
+    resetViewportForRoom(targetScale?: number) {
       const conference = useConferenceStore();
       const existing = Object.values(conference.users).map((u) => u.pos);
       this.setLocalPosition(spreadInitialUserPosition(existing));
+      const scaleToUse = targetScale !== undefined ? clampScale(targetScale) : defaultScale;
       const centerNow = () => {
         if (typeof window === 'undefined' || window.innerWidth < 200 || window.innerHeight < 200) return;
-        const pan = initialPanCenterOnUser(this.pos, defaultScale);
-        this.setPanZoom({ pan, scale: defaultScale });
+        const pan = initialPanCenterOnUser(this.pos, scaleToUse);
+        this.setPanZoom({ pan, scale: scaleToUse });
         this.calculateUsersOnScreen();
       };
       centerNow();
@@ -159,8 +173,8 @@ export const useLocalStore = defineStore('local', {
     },
     setLocalTracks(tracks: JitsiTrack[]) {
       const audioTrack = tracks.find((t) => t.getType?.() === 'audio');
-      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType !== 'desktop');
-      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && t.videoType === 'desktop');
+      const videoTrack = tracks.find((t) => t.getType?.() === 'video' && !isDesktopShareTrack(t));
+      const desktopTrack = tracks.find((t) => t.getType?.() === 'video' && isDesktopShareTrack(t));
       if (audioTrack) this.audio = markRaw(audioTrack);
       if (videoTrack) {
         if (this.cameraOff) {
@@ -193,6 +207,20 @@ export const useLocalStore = defineStore('local', {
       const users = useConferenceStore().users;
       const visibleUserIds: string[] = [];
       const features = useSessionFeaturesStore();
+      if (features.isLobbyBlocked) {
+        this.visibleUsers = [];
+        this.usersOnStage = [];
+        if (conferenceOptions.openBridgeChannel) {
+          const constraints = buildReceiverConstraints({
+            localId: this.id,
+            remoteUserIds: Object.keys(users).filter((id) => id && id !== this.id),
+            visibleUserIds: [],
+            stageIds: [],
+          });
+          if (constraints) engine.setReceiverConstraints(constraints);
+        }
+        return;
+      }
       const stageOccupantId = features.stageOccupantId;
 
       document.querySelectorAll('.userContainer').forEach((el) => {
@@ -205,8 +233,13 @@ export const useLocalStore = defineStore('local', {
         }
       });
 
+      const activeSharers = Object.entries(users)
+        .filter(([uid, u]) => Boolean(u.screenshare) && isAdmittedParticipant(features, uid))
+        .map(([uid]) => uid);
       this.visibleUsers = [...new Set(visibleUserIds)];
-      this.usersOnStage = stageOccupantId ? [stageOccupantId] : [];
+      this.usersOnStage = [
+        ...new Set([...(stageOccupantId ? [stageOccupantId] : []), ...activeSharers]),
+      ];
 
       mediaDebug('localStore', 'calculateUsersOnScreen', {
         visibleUserIds: this.visibleUsers,
@@ -241,6 +274,11 @@ export const useLocalStore = defineStore('local', {
       await this.disableMic();
     },
     async enableMic() {
+      const features = useSessionFeaturesStore();
+      if (features.isLocalMicLocked) {
+        features.setStageMessage('Your microphone is locked by a moderator.');
+        return;
+      }
       const engine = getMediaEngineInstance();
       // A live track already exists (e.g. created at join) — just unmute it.
       if (this.audio) {
@@ -258,7 +296,10 @@ export const useLocalStore = defineStore('local', {
         if (engine.isJoined()) {
           try {
             // Drop any stale local audio senders before publishing the fresh one.
-            await releaseLocalMediaTracks(getConferenceLocalAudioTracks(conf), conf);
+            await releaseLocalMediaTracks(
+              getConferenceLocalAudioTracks(conf, this.screenshareAudio),
+              conf,
+            );
             await engine.addLocalTrack(created);
           } catch {
             disposeJitsiTrack(created);
@@ -293,7 +334,7 @@ export const useLocalStore = defineStore('local', {
       this.audio = undefined;
       await nextTick();
       await releaseLocalMediaTracks(
-        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf)]),
+        uniqueTracks([track, ...getConferenceLocalAudioTracks(conf, this.screenshareAudio)]),
         conf,
       );
       unlockMediaPlaybackNow(engine);
@@ -307,6 +348,11 @@ export const useLocalStore = defineStore('local', {
       await this.disableCamera();
     },
     async enableCamera() {
+      const features = useSessionFeaturesStore();
+      if (features.isLocalCameraLocked) {
+        features.setStageMessage('Your camera is locked by a moderator.');
+        return;
+      }
       const engine = getMediaEngineInstance();
       if (this.video && this.videoType === 'camera') {
         if (this.video.isMuted()) await this.video.unmute();
