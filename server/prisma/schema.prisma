@@ -37,12 +37,20 @@ model Meeting {
   updatedAt     DateTime       @updatedAt
   configs       MeetingConfig?
   sessionLogs   SessionLog[]
+  // Eventyay integration fields
+  eventyayEventSlug String?
+  eventyayRoomId    String?
+  maxParticipants   Int          @default(50)
+  guestLinkEnabled  Boolean      @default(false)
+  joinPin           String?
 }
 
 model MeetingConfig {
   meetingId                 String  @id
   meeting                   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  lobbyEnabled              Boolean @default(false)
+  joinPin                   String?
+  lobbyEnabled              Boolean @default(true)
+  lobbyForm                 String  @default("name")
   stagePromotionEnabled     Boolean @default(true)
   allowParticipantRecording Boolean @default(false)
   notesTemplate             String?
@@ -51,6 +59,41 @@ model MeetingConfig {
   roomDefaults              String?
   userGrants                String?
   gridBackgroundUrl         String?
+}
+
+model OAuthClient {
+  id               String   @id @default(uuid())
+  clientId         String   @unique
+  clientSecretHash String
+  name             String
+  redirectUris     String[]
+  createdAt        DateTime @default(now())
+}
+
+model OAuthCode {
+  code          String   @id // sha256 of the issued code
+  clientId      String
+  userId        String
+  codeChallenge String
+  redirectUri   String
+  expiresAt     DateTime
+  used          Boolean  @default(false)
+}
+
+model OAuthToken {
+  id          String    @id @default(uuid())
+  userId      String
+  clientId    String
+  accessHash  String    @unique
+  refreshHash String?   @unique
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+}
+
+model EventyayGrantUse {
+  jti       String   @id
+  usedAt    DateTime @default(now())
+  expiresAt DateTime
 }
 
 model SessionLog {

@@ -14,6 +14,7 @@ import { watchTrackSpeaking } from '@/utils/speakingMeter';
 import { scheduleReceiverRefresh } from '@/utils/scheduleReceiverRefresh';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 
 const { engine, createLocalTracks, setParticipantVolume } = useMediaEngine();
 const conferenceStore = useConferenceStore();
@@ -100,13 +101,35 @@ async function requestMedia() {
 
 let publishingLocalTracks = false;
 
+async function unpublishLocalTracks() {
+  const conf = engine.getConference();
+  const published = conf?.getLocalTracks?.() ?? [];
+  for (const publishedTrack of published) {
+    if (!engine.removeLocalTrack) continue;
+    try {
+      await engine.removeLocalTrack(publishedTrack);
+    } catch (err) {
+      mediaDebug('LocalStoreLogic', 'removeLocalTrack:failed', { error: err });
+    }
+  }
+}
+
 async function addLocalTracksToConference() {
+  if (features.isLobbyBlocked) {
+    await unpublishLocalTracks();
+    return;
+  }
   const conf = engine.getConference();
   if (!conferenceStore.isJoined || !conf || publishingLocalTracks) return;
   publishingLocalTracks = true;
   try {
     const alreadyPublished = conf.getLocalTracks?.() ?? [];
-    const currentTracks = [localStore.audio, localStore.video, localStore.screenshare].filter(Boolean) as any[];
+    const currentTracks = [
+      localStore.audio,
+      localStore.video,
+      localStore.screenshare,
+      localStore.screenshareAudio,
+    ].filter(Boolean) as any[];
 
     // Remove any published tracks that are no longer in our store
     for (const published of alreadyPublished) {
@@ -133,7 +156,10 @@ async function addLocalTracksToConference() {
           if (toRaw(existing) === toRaw(track)) return true;
           if (existing.getType() === track.getType()) {
             if (track.getType() === 'video') {
-              return existing.videoType === track.videoType;
+              return isDesktopShareTrack(existing) === isDesktopShareTrack(track);
+            }
+            if (localStore.screenshareAudio && toRaw(existing) === toRaw(localStore.screenshareAudio)) {
+              return false;
             }
             return true;
           }
@@ -192,6 +218,13 @@ watch(
     if (id) localStore.setMyID(id);
   },
   { immediate: true },
+);
+
+watch(
+  () => features.isLobbyBlocked,
+  () => {
+    void addLocalTracksToConference();
+  },
 );
 
 watch(

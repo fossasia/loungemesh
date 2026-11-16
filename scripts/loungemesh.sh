@@ -323,6 +323,48 @@ patch_jitsi_nginx() {
   fi
 }
 
+wait_for_prosody_config() {
+  local prosody_conf="docker/jitsi-config/prosody/config/prosody.cfg.lua"
+  local jitsi_conf="docker/jitsi-config/prosody/config/conf.d/jitsi-meet.cfg.lua"
+  echo "==> Waiting for Prosody configuration to generate..."
+  for _ in $(seq 1 45); do
+    if [[ -f "$prosody_conf" && -f "$jitsi_conf" ]]; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "WARN: Prosody configuration was not generated in time — prosody patch skipped" >&2
+  return 1
+}
+
+patch_prosody_limits() {
+  local prosody_conf="docker/jitsi-config/prosody/config/prosody.cfg.lua"
+  local jitsi_conf="docker/jitsi-config/prosody/config/conf.d/jitsi-meet.cfg.lua"
+  [[ -f "$prosody_conf" && -f "$jitsi_conf" ]] || return 0
+  echo "==> Patching Prosody rate limits and stanza buffer"
+  $SUDO node -e '
+    const fs = require("fs");
+    const pPath = process.argv[1];
+    if (fs.existsSync(pPath)) {
+      let content = fs.readFileSync(pPath, "utf8");
+      if (content.includes("rate = \"10kb/s\";")) {
+        fs.writeFileSync(pPath, content.replace(/rate\s*=\s*"10kb\/s";/, "rate = \"128kb/s\";"));
+      }
+    }
+    const jPath = process.argv[2];
+    if (fs.existsSync(jPath)) {
+      let content = fs.readFileSync(jPath, "utf8");
+      if (content.includes("smacks_max_unacked_stanzas = 5;")) {
+        fs.writeFileSync(jPath, content.replace("smacks_max_unacked_stanzas = 5;", "smacks_max_unacked_stanzas = 25;"));
+      }
+    }
+  ' "$prosody_conf" "$jitsi_conf"
+  if docker compose ps --status running prosody 2>/dev/null | grep -q prosody; then
+    docker compose exec -T prosody prosodyctl reload 2>/dev/null || \
+      docker compose restart prosody
+  fi
+}
+
 check_ws() {
   local target="$1"; local origin="${2:-}"; local extra=()
   [[ -n "$origin" ]] && extra+=(-H "Origin: $origin")
@@ -539,12 +581,13 @@ cmd_deploy() {
   regenerate_jvb_if_needed "$mode"
   regenerate_web_if_needed
   ensure_jitsi_dirs
+  patch_prosody_limits
 
   echo "==> Pulling latest Jitsi images"
   docker compose pull
 
-  echo "==> Building LoungeMesh SPA (VITE_* vars are baked into the image)"
-  docker compose build --pull --no-cache loungemesh
+  echo "==> Building LoungeMesh SPA and backend server (VITE_* vars baked into SPA image)"
+  docker compose build --pull --no-cache loungemesh server
 
   # --force-recreate with NO service list restarts EVERY container so each one
   # picks up the fresh .env values and the rebuilt image. Docker Compose resolves
@@ -557,6 +600,8 @@ cmd_deploy() {
   # Wait for that file, then patch WebSocket headers (gzip off, Connection: upgrade).
   wait_for_jitsi_nginx || true
   patch_jitsi_nginx
+  wait_for_prosody_config || true
+  patch_prosody_limits
 
   echo "==> Waiting for all services to fully initialise..."
   sleep 20

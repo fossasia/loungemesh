@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useSessionFeaturesStore, type PollRequest } from '@/stores/sessionFeaturesStore';
 import { useSessionPollControls } from '@/composables/useSessionPollControls';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import {
@@ -17,25 +17,32 @@ const {
   addPollOption,
   removePollOption,
   createPoll,
+  cancelPollRequest,
+  approvePollRequest,
+  rejectPollRequest,
   vote,
   closePoll,
 } = useSessionPollControls();
 
+const isModeratorOrHost = computed(() => features.isHost || features.isModerator);
 const activePoll = computed(() => features.activePoll);
 const totalVotes = computed(() => pollTotalVotes(activePoll.value));
 const votingOpen = computed(() => canVote(features.myPollVote, activePoll.value));
 const votedOptionId = computed(() => features.myPollVote);
-const showCreateForm = computed(() => features.isHost && !activePoll.value);
+const showCreateForm = computed(() => isModeratorOrHost.value && !activePoll.value);
 const showVoteUi = computed(
-  () => !!activePoll.value && (features.canUsePoll || features.isHost),
+  () => !!activePoll.value && (features.canUsePoll || features.isHost || features.isModerator || features.eventyayMeet),
 );
 const showReadOnlyPoll = computed(
-  () => !!activePoll.value && !features.canUsePoll && !features.isHost,
+  () => !!activePoll.value && !showVoteUi.value,
 );
 const showWaiting = computed(
-  () => !activePoll.value && features.canUsePoll && !features.isHost,
+  () => !activePoll.value && !isModeratorOrHost.value && (features.canUsePoll || features.eventyayMeet),
 );
-const showNoAccess = computed(() => !activePoll.value && !features.canUsePoll && !features.isHost);
+const showNoAccess = computed(() => !activePoll.value && !isModeratorOrHost.value && !showWaiting.value);
+const pendingRequests = computed(() => features.pendingPollRequests);
+const myPendingRequest = computed(() => features.myPendingPollRequest);
+const pollNotice = computed(() => features.pollRequestNotice);
 
 function optionPercent(votes: number): number {
   return pollOptionPercent(votes, totalVotes.value);
@@ -45,7 +52,50 @@ function optionPercent(votes: number): number {
 <template>
   <div class="pollPanel">
     <template v-if="showCreateForm">
-      <p class="lead">Ask the room a question and collect votes in real time.</p>
+      <div v-if="pendingRequests.length > 0" class="pendingRequestsSection">
+        <div class="pendingRequestsHeader">
+          <span class="fieldLabel">Poll Requests ({{ pendingRequests.length }})</span>
+          <span class="pendingRequestsTag">Needs Approval</span>
+        </div>
+        <div class="pendingRequestsList" role="list">
+          <div
+            v-for="req in pendingRequests"
+            :key="req.id"
+            class="pendingRequestItem"
+            role="listitem"
+          >
+            <div class="reqMeta">
+              <span class="reqAuthor">{{ req.requesterName }} requested:</span>
+            </div>
+            <p class="reqQuestion">{{ req.question }}</p>
+            <div class="reqOptionsPreview">
+              <span v-for="(opt, idx) in req.options" :key="idx" class="optChip">{{ opt }}</span>
+            </div>
+            <div class="reqActions">
+              <button
+                type="button"
+                class="approveBtn"
+                :aria-label="`Approve poll: ${req.question}`"
+                @click="approvePollRequest(req)"
+              >
+                <AppIcon name="check" :size="14" />
+                Approve &amp; Launch
+              </button>
+              <button
+                type="button"
+                class="declineBtn"
+                :aria-label="`Decline poll: ${req.question}`"
+                @click="rejectPollRequest(req.id)"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h4 v-if="pendingRequests.length > 0" class="subHeading">Or create a new poll</h4>
+      <p v-else class="lead">Ask the room a question and collect votes in real time.</p>
 
       <div class="pollQuestionGroup">
         <label class="fieldLabel questionLabel" for="poll-question">Question</label>
@@ -166,16 +216,49 @@ function optionPercent(votes: number): number {
           </template>
         </div>
 
-        <button v-if="features.isHost && showVoteUi" type="button" class="secondaryBtn" @click="closePoll">
+        <button v-if="isModeratorOrHost && showVoteUi" type="button" class="secondaryBtn" @click="closePoll">
           End poll &amp; share results
         </button>
       </div>
     </template>
 
-    <div v-else-if="showWaiting" class="emptyState">
-      <AppIcon name="bar-chart" :size="36" class="emptyIcon" />
-      <p class="emptyTitle">No active poll</p>
-      <p class="hint">Waiting for the host to start a poll.</p>
+    <div v-else-if="showWaiting" class="waitingContainer">
+      <div v-if="myPendingRequest" class="pendingCard">
+        <div class="pendingBadge">
+          <AppIcon name="clock" :size="16" />
+          <span>Poll Request Submitted</span>
+        </div>
+        <p class="pendingHint">Waiting for a moderator to approve your poll.</p>
+        <div class="pendingDetails">
+          <h4 class="pendingQuestion">{{ myPendingRequest.question }}</h4>
+          <div class="pendingOptionsList">
+            <span v-for="(opt, i) in myPendingRequest.options" :key="i" class="pendingOptChip">
+              {{ opt }}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="secondaryBtn"
+          @click="cancelPollRequest(myPendingRequest.id)"
+        >
+          Cancel request
+        </button>
+      </div>
+
+      <template v-else>
+        <div v-if="pollNotice" class="noticeBanner">
+          <p class="noticeText">{{ pollNotice }}</p>
+          <button type="button" class="dismissBtn" @click="features.pollRequestNotice = ''">Dismiss</button>
+        </div>
+
+        <div class="emptyState">
+          <AppIcon name="bar-chart" :size="36" class="emptyIcon" />
+          <p class="emptyTitle">No active poll</p>
+          <p class="hint">Waiting for the host or a moderator to start a poll.</p>
+        </div>
+
+      </template>
     </div>
 
     <div v-else-if="showNoAccess" class="emptyState">
@@ -530,5 +613,211 @@ function optionPercent(votes: number): number {
   font-weight: var(--fw-medium);
   line-height: 1.25;
   color: var(--color-text-default);
+}
+
+.subHeading {
+  margin: 12px 0 6px;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-default);
+  text-align: left;
+}
+
+.waitingContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pendingRequestsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+}
+
+.pendingRequestsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pendingRequestsTag {
+  font-size: var(--fs-small);
+  color: var(--color-blue100);
+  background: rgba(79, 110, 247, 0.1);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: var(--fw-medium);
+}
+
+.pendingRequestsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pendingRequestItem {
+  padding: 10px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  text-align: left;
+}
+
+.reqMeta {
+  font-size: var(--fs-small);
+  color: var(--color-mono30);
+  margin-bottom: 4px;
+}
+
+.reqAuthor {
+  font-weight: var(--fw-medium);
+  color: var(--color-text-default);
+}
+
+.reqQuestion {
+  margin: 0 0 6px;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-default);
+}
+
+.reqOptionsPreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.optChip,
+.pendingOptChip {
+  font-size: var(--fs-small);
+  color: var(--color-mono20);
+  background: var(--color-mono95);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.reqActions {
+  display: flex;
+  gap: 8px;
+}
+
+.approveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  border: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.approveBtn:hover {
+  filter: brightness(1.05);
+}
+
+.declineBtn {
+  background: transparent;
+  color: var(--color-mono30);
+  border: 1px solid var(--line-light);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+
+.declineBtn:hover {
+  background: var(--btn-default-bg-hover);
+  color: var(--color-text-default);
+}
+
+.pendingCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+  text-align: left;
+}
+
+.pendingBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-blue100);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-small);
+}
+
+.pendingHint {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--color-mono30);
+}
+
+.pendingDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pendingQuestion {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-default);
+}
+
+.pendingOptionsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.noticeBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.noticeText {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: #b91c1c;
+}
+
+.dismissBtn {
+  background: transparent;
+  border: none;
+  font-size: var(--fs-small);
+  color: #b91c1c;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.requestSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

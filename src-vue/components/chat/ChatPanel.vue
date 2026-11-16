@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -7,6 +7,7 @@ import { useMediaEngine } from '@/composables/useMediaEngine';
 import { isChatReady } from '@/utils/chatConferenceReady';
 import { createChatMessage } from '@/utils/chatMessage';
 import {
+  canDeleteChatMessage,
   canEditChatMessage,
   chatAuthorStyle,
   formatEditedAt,
@@ -32,6 +33,7 @@ import {
   setChatNotificationSoundEnabled,
 } from '@/utils/chatNotificationSound';
 import { playUiSound } from '@/utils/uiSounds';
+import { bindKeyboardInset } from '@/utils/chatKeyboardInset';
 
 const conference = useConferenceStore();
 const local = useLocalStore();
@@ -52,6 +54,7 @@ const editDraft = ref('');
 const historyOpen = ref<Record<string, boolean>>({});
 const chatSoundOn = ref(isChatNotificationSoundEnabled());
 const emojiPickerOpen = ref(false);
+onUnmounted(bindKeyboardInset(document.documentElement));
 
 const localUserId = computed(() => local.id || engine.getLocalUserId() || '');
 
@@ -136,6 +139,25 @@ function saveEdit(messageId: string) {
   cancelEdit();
 }
 
+function deleteMessage(messageId: string, nr?: number) {
+  const message = conference.messages.find(
+    (m) => m.messageId === messageId || (nr !== undefined && m.nr === nr),
+  );
+  if (!message || !canDeleteChatMessage(message, localUserId.value, features.canModerate)) {
+    return;
+  }
+  conference.removeChatMessage(messageId, nr);
+  engine.sendCommand(
+    'chat',
+    JSON.stringify({
+      action: 'delete',
+      messageId,
+      nr: message.nr >= 0 ? message.nr : undefined,
+      senderId: localUserId.value,
+    }),
+  );
+}
+
 function onEditKeydown(e: KeyboardEvent, messageId: string) {
   if (e.key === 'Escape') {
     e.preventDefault();
@@ -214,12 +236,20 @@ watch(
     if (chatReady()) chatError.value = '';
   },
 );
+watch(
+  () => features.canUseChat,
+  (canChat) => {
+    if (!canChat && open.value) {
+      open.value = false;
+    }
+  },
+);
 
-defineExpose({ open });
+defineExpose({ open, deleteMessage });
 </script>
 
 <template>
-  <div class="wrap">
+  <div v-if="features.canUseChat" class="wrap">
     <MenuCard
       v-if="open"
       title="Chat"
@@ -318,6 +348,18 @@ defineExpose({ open });
                 Edit
               </button>
             </div>
+            <div
+              v-if="editingId !== message.messageId && canDeleteChatMessage(message, localUserId, features.canModerate)"
+              class="msgDeleteActions"
+            >
+              <button
+                type="button"
+                class="delBtn subtle"
+                @click="deleteMessage(message.messageId, message.nr)"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -337,17 +379,25 @@ defineExpose({ open });
           :aria-expanded="emojiPickerOpen"
           @click="emojiPickerOpen = !emojiPickerOpen"
         >
-          <AppIcon name="smile" :size="20" />
+          <AppIcon name="smile" :size="19" />
         </button>
         <textarea
           ref="inputEl"
           id="chatInput"
           class="ta"
-          rows="2"
+          rows="1"
           placeholder="Message…"
           @keydown="onKeydown"
         />
-        <button type="button" class="send" title="Send message" @click="sendMessage">Send</button>
+        <button
+          type="button"
+          class="send"
+          title="Send message"
+          aria-label="Send message"
+          @click="sendMessage"
+        >
+          <AppIcon name="send" :size="16" />
+        </button>
       </div>
     </MenuCard>
 
@@ -372,6 +422,27 @@ defineExpose({ open });
   display: flex;
   flex-direction: column;
   top: auto;
+}
+@media (max-width: 768px) {
+  .chatCard {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    top: auto !important;
+    bottom: calc(112px + var(--lm-keyboard-inset, 0px) + env(safe-area-inset-bottom, 0px)) !important;
+    height: min(62dvh, calc(100dvh - 180px)) !important;
+    max-height: calc(100dvh - 180px) !important;
+    display: flex !important;
+    flex-direction: column;
+  }
+  .messages {
+    flex: 1 1 auto;
+  }
+  .input {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-bg-card);
+  }
 }
 .messages {
   flex: 1;
@@ -438,6 +509,21 @@ defineExpose({ open });
 .msgActions {
   margin-top: 6px;
 }
+.msgDeleteActions {
+  margin-top: 4px;
+}
+.delBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--color-danger, #ef4444);
+  cursor: pointer;
+  line-height: 1.2;
+}
+.delBtn:hover {
+  text-decoration: underline;
+}
 .editBox {
   display: flex;
   flex-direction: column;
@@ -480,28 +566,29 @@ defineExpose({ open });
   box-sizing: border-box;
 }
 .emojiToggle {
-  flex-shrink: 0;
-  align-self: center;
-  margin-left: 4px;
   border: none;
   background: transparent;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   cursor: pointer;
-  color: var(--color-mono30);
-  border-radius: var(--radius-sm);
+  color: var(--color-mono40, #64748b);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+  transition: all 0.15s ease;
 }
 .emojiToggle:hover {
-  background: var(--btn-default-bg-hover);
-  color: var(--color-mono10);
+  background: var(--btn-default-bg-hover, #f1f5f9);
+  color: var(--color-blue100, #4f6ef7);
+  transform: scale(1.06);
 }
 .emojiToggle[aria-expanded='true'] {
-  color: var(--color-blue100);
-  background: var(--btn-default-bg-hover);
+  color: var(--color-blue100, #4f6ef7);
+  background: #e0e7ff;
 }
 .chatErr {
   margin: 0 0 8px;
@@ -511,11 +598,20 @@ defineExpose({ open });
 .input {
   display: flex;
   flex-direction: row;
-  align-items: stretch;
-  border-radius: 4px;
-  min-height: 52px;
-  background: #fff;
-  border: 1px solid rgba(220, 222, 225, 1);
+  align-items: flex-end;
+  border-radius: 20px;
+  min-height: 44px;
+  background: #ffffff;
+  border: 1.5px solid rgba(203, 213, 225, 0.85);
+  padding: 4px 6px 4px 8px;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(30, 34, 64, 0.04);
+  box-sizing: border-box;
+  transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.input:focus-within {
+  border-color: var(--color-blue100, #4f6ef7);
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.15), 0 2px 6px rgba(79, 110, 247, 0.08);
 }
 .notifyToggle {
   border: none;
@@ -541,18 +637,44 @@ defineExpose({ open });
 .ta {
   flex: 1;
   resize: none;
-  margin: 6px;
+  margin: 0;
+  padding: 6px 4px 5px;
   border: none;
   outline: none;
   font-family: var(--font-body);
-  font-size: var(--fs-body);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--color-mono10, #1e293b);
+  background: transparent;
+  max-height: 120px;
+  box-sizing: border-box;
+}
+.ta::placeholder {
+  color: #94a3b8;
 }
 .send {
   border: none;
-  background: transparent;
-  padding: 0 14px;
+  background: linear-gradient(135deg, #4f6ef7 0%, #3b82f6 100%);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
   cursor: pointer;
-  font-weight: 600;
-  color: var(--color-blue100);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+  box-shadow: 0 2px 6px rgba(79, 110, 247, 0.3);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.send:hover {
+  background: linear-gradient(135deg, #4361ee 0%, #2563eb 100%);
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 4px 12px rgba(79, 110, 247, 0.45);
+}
+.send:active {
+  transform: translateY(0) scale(0.96);
 }
 </style>

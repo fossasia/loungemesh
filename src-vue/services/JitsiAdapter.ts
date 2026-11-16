@@ -11,6 +11,14 @@ import type {
 } from './MediaService';
 import { participantIdFromTrack, sanitizeParticipantProperties } from '@/utils/jitsiParticipant';
 import { decodeXmppCommandValue, encodeXmppCommandValue } from '@/utils/xmppCommandWire';
+import { acquireDesktopTracks } from '@/utils/screenshareCapture';
+import {
+  isStickyPresenceCommand,
+  LIVE_COMMAND_GAP_MS,
+  LIVE_PRESENCE_KEYS_TO_CLEAR,
+  liveCommandPayload,
+  readLiveCommand,
+} from '@/utils/sessionLiveCommands';
 import { mediaDebug, mediaDebugTrack, isMediaDebugEnabled } from '@/utils/mediaDebug';
 import {
   installBenignJitsiConsoleFilter,
@@ -97,12 +105,19 @@ export class JitsiAdapter implements MediaService {
   private participantTracks = new Map<string, Set<string>>();
   private pendingRemoteAudio = new Map<string, JitsiTrack>();
   private remoteAudioStreamWatches = new Map<string, () => void>();
+  private remoteVideoTypeWatches = new Map<JitsiTrack, () => void>();
   private remoteAudioElements = new Map<string, HTMLAudioElement>();
   private wiredRemoteTracks = new Map<string, JitsiTrack>();
   private elementVolumeFallback = new Set<string>();
   private speakingMonitors = new Map<string, () => void>();
   private playbackUnlocked = false;
+  private remotePlaybackSuppressed = false;
+  private suppressedParticipants = new Set<string>();
   private addedLocalTracks = new Set<any>();
+  private liveQueue: { name: string; value: string }[] = [];
+  private liveQueueTimer: number | undefined;
+  /** True after a live message until the gap elapses, so bursts are spaced out. */
+  private liveGapPending = false;
 
   init(): void {
     if (this.jsMeet) return;
@@ -208,6 +223,25 @@ export class JitsiAdapter implements MediaService {
       this.emitExistingConferenceTracks(conference);
     });
     conference.on(ev.MESSAGE_RECEIVED, (id: unknown, text: unknown, nr: unknown) => {
+      let liveCmd: { name: string; value: string } | null = null;
+      /* v8 ignore start */
+      if (text && typeof text === 'object') {
+        liveCmd = readLiveCommand(text);
+      } else if (typeof text === 'string') {
+        try {
+          liveCmd = readLiveCommand(JSON.parse(text));
+        } catch {
+          liveCmd = null;
+        }
+      }
+      if (liveCmd) {
+        const senderId = String(id ?? '');
+        if (senderId && senderId !== this.getLocalUserId()) {
+          this.emit('command', liveCmd.name, { value: liveCmd.value }, senderId);
+        }
+        return;
+      }
+      /* v8 ignore stop */
       this.emit('messageReceived', String(id), String(text), Number(nr));
     });
     conference.on(ev.CONFERENCE_ERROR, () => {
@@ -242,6 +276,7 @@ export class JitsiAdapter implements MediaService {
       mediaDebugTrack('JitsiAdapter', 'TRACK_ADDED', t);
       if (t.isLocal?.()) return;
       if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      this.watchRemoteVideoType(t);
       this.emit('trackAdded', t);
     });
     conference.on(ev.TRACK_MUTE_CHANGED, (track: unknown) => {
@@ -274,6 +309,7 @@ export class JitsiAdapter implements MediaService {
         const trackId = (typeof t.getId === 'function') ? t.getId() : ((t as any).id || participantId || 'mock-track-id');
         if (participantId) this.removeTrackAudio(participantId, trackId);
       }
+      this.unwatchRemoteVideoType(t);
       this.emit('trackRemoved', t);
     });
     conference.on(ev.PARTICIPANT_PROPERTY_CHANGED, (e: unknown) => {
@@ -287,6 +323,15 @@ export class JitsiAdapter implements MediaService {
     conference.on(ev.DISPLAY_NAME_CHANGED, (id: unknown, displayName: unknown) => {
       const name = String(displayName ?? '').trim();
       if (name) this.emit('displayNameChanged', String(id), name);
+    });
+    conference.on('conference.endpoint_message_received', (from: unknown, payload: unknown) => {
+      this.emitLiveCommand(from, payload);
+    });
+    conference.on('conference.non_participant_message_received', (from: unknown, payload: unknown) => {
+      this.emitLiveCommand(from, payload);
+    });
+    conference.on('conference.dataChannelOpened', () => {
+      this.emit('bridgeChannelOpen');
     });
 
     const sessionCommands = [
@@ -305,6 +350,8 @@ export class JitsiAdapter implements MediaService {
       'chat',
       'stage',
       'config',
+      'hello',
+      'hello_req',
     ] as const;
     for (const cmd of sessionCommands) {
       conference.addCommandListener(cmd, (payload: { value: string }, senderId: string) => {
@@ -318,11 +365,21 @@ export class JitsiAdapter implements MediaService {
       });
     }
 
+    for (const name of LIVE_PRESENCE_KEYS_TO_CLEAR) {
+      try {
+        conference.removeCommand(name);
+      } catch {
+        /* presence map may not accept the key yet */
+      }
+    }
+
     conference.join();
     this.conference = conference;
   }
 
   leaveRoom(): void {
+    this.clearLiveQueue();
+    this.clearRemoteVideoTypeWatches();
     this.conference?.leave();
     this.conference = undefined;
     this.joined = false;
@@ -334,26 +391,30 @@ export class JitsiAdapter implements MediaService {
     this.init();
     const options = { firePermissionPromptIsShownEvent: true };
     if (devices.includes('desktop')) {
-      return this.jsMeet!.createLocalTracks({
-        devices: ['desktop'],
-        desktopSharingSources: ['screen', 'window', 'tab'],
-        ...options,
-      } as any);
+      return acquireDesktopTracks(this.jsMeet!);
     }
     const av = devices.filter((d): d is 'audio' | 'video' => d === 'audio' || d === 'video');
     const trackOptions: any = {
       devices: av.length ? av : ['video'],
+      resolution: 360,
       ...options,
     };
+    const constraints: Record<string, unknown> = {};
     if (devices.includes('audio')) {
-      trackOptions.constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }
+      constraints.audio = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       };
     }
+    if (av.includes('video') || !av.length) {
+      constraints.video = {
+        height: { ideal: 360, max: 480 },
+        width: { ideal: 480, max: 640 },
+        frameRate: { ideal: 24, max: 30 },
+      };
+    }
+    trackOptions.constraints = constraints;
     return this.jsMeet!.createLocalTracks(trackOptions);
   }
 
@@ -443,6 +504,7 @@ export class JitsiAdapter implements MediaService {
   }
 
   refreshRemoteAudio(): void {
+    if (this.remotePlaybackSuppressed) return;
     if (!this.playbackUnlocked) return;
     unlockAudioContextConstructor();
     const ctx = this.ensureAudioContext();
@@ -472,6 +534,31 @@ export class JitsiAdapter implements MediaService {
     this.conference?.setReceiverConstraints(constraints);
   }
 
+  setParticipantPlaybackSuppressed(userId: string, suppressed: boolean): void {
+    if (!userId) return;
+    if (suppressed) {
+      this.suppressedParticipants.add(userId);
+      const trackIds = this.participantTracks.get(userId);
+      if (trackIds) {
+        for (const trackId of [...trackIds]) this.removeTrackAudio(userId, trackId);
+      }
+      return;
+    }
+    this.suppressedParticipants.delete(userId);
+    this.refreshRemoteAudio();
+  }
+
+  setRemotePlaybackSuppressed(suppressed: boolean): void {
+    this.remotePlaybackSuppressed = suppressed;
+    if (!suppressed) {
+      this.refreshRemoteAudio();
+      return;
+    }
+    for (const [userId, trackIds] of [...this.participantTracks.entries()]) {
+      for (const trackId of [...trackIds]) this.removeTrackAudio(userId, trackId);
+    }
+  }
+
   setDisplayName(name: string): void {
     this.conference?.setDisplayName(name);
   }
@@ -484,22 +571,96 @@ export class JitsiAdapter implements MediaService {
     if (!this.conference) return false;
     try {
       this.conference.sendTextMessage(text);
-      return true;
     } catch {
       return false;
     }
+    this.enqueueLiveCommand('chat', JSON.stringify({ action: 'post', text }));
+    return true;
   }
 
   sendCommand(name: string, value: string): void {
     if (!this.conference) return;
-    this.conference.sendCommand(name, { value: encodeXmppCommandValue(value) });
-    if (name === 'stage' || name === 'react' || name === 'mod' || name === 'hand') {
+    if (isStickyPresenceCommand(name)) {
+      this.conference.sendCommand(name, { value: encodeXmppCommandValue(value) });
+      return;
+    }
+    this.enqueueLiveCommand(name, value);
+  }
+
+  private enqueueLiveCommand(name: string, value: string): void {
+    this.liveQueue.push({ name, value });
+    this.pumpLiveQueue();
+  }
+
+  private pumpLiveQueue(): void {
+    if (this.liveQueueTimer !== undefined) return;
+    if (!this.conference) return;
+    if (this.liveGapPending) {
+      this.liveQueueTimer = window.setTimeout(() => {
+        this.liveQueueTimer = undefined;
+        this.liveGapPending = false;
+        this.pumpLiveQueue();
+      }, LIVE_COMMAND_GAP_MS);
+      return;
+    }
+    const next = this.liveQueue.shift();
+    if (!next) return;
+    this.liveGapPending = true;
+    this.dispatchLiveCommand(next.name, next.value);
+    this.pumpLiveQueue();
+  }
+
+  private clearLiveQueue(): void {
+    this.liveQueue = [];
+    this.liveGapPending = false;
+    if (this.liveQueueTimer !== undefined) {
+      window.clearTimeout(this.liveQueueTimer);
+      this.liveQueueTimer = undefined;
+    }
+  }
+
+  private dispatchLiveCommand(name: string, value: string): void {
+    const conference = this.conference!;
+    try {
+      conference.removeCommand(name);
+    } catch {
+      /* keep going — the message is the delivery path */
+    }
+    const payload = liveCommandPayload(name, value);
+    /* v8 ignore start */
+    if (typeof (conference as any).sendEndpointMessage === 'function') {
       try {
-        this.conference.removeCommand(name);
-      } catch (e) {
-        // ignore
+        (conference as any).sendEndpointMessage('', payload);
+      } catch {
+        /* data channel not ready or unavailable */
       }
     }
+    /* v8 ignore stop */
+    if (typeof conference.sendMessage === 'function') {
+      try {
+        conference.sendMessage(payload);
+        return;
+      } catch {
+        /* fall back to a one-shot presence command */
+      }
+    }
+    conference.sendCommand(name, { value: encodeXmppCommandValue(value) });
+    try {
+      conference.removeCommand(name);
+    } catch {
+      /* already removed */
+    }
+  }
+
+  private emitLiveCommand(from: unknown, payload: unknown): void {
+    const command = readLiveCommand(payload);
+    if (!command) return;
+    const senderId =
+      typeof from === 'string'
+        ? from
+        : (from as { getId?: () => string } | null)?.getId?.();
+    if (senderId && senderId === this.getLocalUserId()) return;
+    this.emit('command', command.name, { value: command.value }, senderId);
   }
 
   removeCommand(name: string): void {
@@ -565,6 +726,34 @@ export class JitsiAdapter implements MediaService {
     this.listeners.get(event)?.forEach((fn) => fn(...args));
   }
 
+  private watchRemoteVideoType(t: JitsiTrack): void {
+    if (t.getType?.() !== 'video' || this.remoteVideoTypeWatches.has(t)) return;
+    const onFn = (t as { on?: (ev: string, cb: () => void) => void }).on;
+    if (typeof onFn !== 'function') return;
+    const eventName =
+      (this.jsMeet?.events as { track?: { TRACK_VIDEOTYPE_CHANGED?: string } } | undefined)?.track
+        ?.TRACK_VIDEOTYPE_CHANGED || 'track.videoTypeChanged';
+    const handler = () => {
+      this.emit('trackAdded', t);
+    };
+    onFn.call(t, eventName, handler);
+    this.remoteVideoTypeWatches.set(t, () => {
+      (t as { off?: (ev: string, cb: () => void) => void }).off?.(eventName, handler);
+    });
+  }
+
+  private unwatchRemoteVideoType(t: JitsiTrack): void {
+    const unwatch = this.remoteVideoTypeWatches.get(t);
+    if (!unwatch) return;
+    unwatch();
+    this.remoteVideoTypeWatches.delete(t);
+  }
+
+  private clearRemoteVideoTypeWatches(): void {
+    for (const unwatch of this.remoteVideoTypeWatches.values()) unwatch();
+    this.remoteVideoTypeWatches.clear();
+  }
+
   private emitParticipantTracks(participant: unknown): void {
     const tracks =
       (participant as { getTracks?: () => JitsiTrack[] }).getTracks?.() ?? [];
@@ -572,6 +761,7 @@ export class JitsiAdapter implements MediaService {
       const t = track as JitsiTrack;
       if (t.isLocal?.()) continue;
       if (t.getType?.() === 'audio' && !t.isMuted?.()) this.wireRemoteAudioTrack(t);
+      this.watchRemoteVideoType(t);
       this.emit('trackAdded', t);
     }
   }
@@ -652,6 +842,10 @@ export class JitsiAdapter implements MediaService {
     }
     /* v8 ignore next */
     const trackId = (typeof track.getId === 'function') ? track.getId() : ((track as any).id || userId || 'mock-track-id');
+    if (this.remotePlaybackSuppressed || this.suppressedParticipants.has(userId)) {
+      this.pendingRemoteAudio.set(trackId, track);
+      return;
+    }
 
     let trackSet = this.participantTracks.get(userId);
     if (!trackSet) {

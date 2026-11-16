@@ -13,6 +13,20 @@ import ExpandedScreenshare from './ExpandedScreenshare.vue';
 describe('SharedScreens', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
+  });
+
+  it('hides screenshares while the local person is waiting in the lobby', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.id = 'waiting';
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    local.screenshare = makeTrack('desktop');
+
+    const { wrapper } = await mountWithApp(SharedScreens);
+    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it('renders nothing when no screenshares are active', async () => {
@@ -182,34 +196,22 @@ describe('SharedScreens', () => {
     wrapper.unmount();
   });
 
-  it('toggles local preview visibility and collapses card', async () => {
+  it('shows the local screenshare video immediately', async () => {
     const local = useLocalStore();
     local.id = 'me';
     local.screenshare = makeTrack('desktop');
 
     const { wrapper } = await mountWithApp(SharedScreens);
 
-    // Initially preview is collapsed (.videoContainer does not exist, eye icon in button)
-    expect(wrapper.find('.videoContainer').exists()).toBe(false);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
+    expect(wrapper.find('.videoContainer').exists()).toBe(true);
+    expect(wrapper.find('.previewToggleButton').exists()).toBe(false);
     expect(wrapper.find('.sharingBadge').exists()).toBe(true);
     expect(wrapper.find('.sharingBadge').text()).toBe('Sharing');
-
-    // Click toggle to show preview
-    await wrapper.find('.previewToggleButton').trigger('click');
-    expect(wrapper.find('.videoContainer').exists()).toBe(true);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Hide preview');
-
-    // Click toggle to hide preview again
-    await wrapper.find('.previewToggleButton').trigger('click');
-    expect(wrapper.find('.videoContainer').exists()).toBe(false);
-    expect(wrapper.find('.previewToggleButton').attributes('title')).toBe('Show preview');
 
     wrapper.unmount();
   });
 
-  it('filters remote screenshares based on distance unless they are presenting', async () => {
-    const features = useSessionFeaturesStore();
+  it('shows a distant screenshare', async () => {
     const local = useLocalStore();
     local.pos = { x: 0, y: 0 };
 
@@ -220,12 +222,8 @@ describe('SharedScreens', () => {
     user.pos = { x: 1000, y: 1000 };
 
     const { wrapper } = await mountWithApp(SharedScreens);
-    expect(wrapper.find('.sharedScreensBox').exists()).toBe(false);
-
-    // Make presenter
-    features.stageOccupantId = 'far-user';
-    await nextTick();
     expect(wrapper.find('.sharedScreensBox').exists()).toBe(true);
+    expect(wrapper.find('.videoContainer').exists()).toBe(true);
 
     wrapper.unmount();
   });

@@ -11,10 +11,10 @@ concurrency:
 
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -26,7 +26,7 @@ jobs:
 
   docker:
     name: Docker Compose
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: test-and-build
     steps:
       - uses: actions/checkout@v4
@@ -36,11 +36,11 @@ jobs:
           docker compose config --quiet
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: test-and-build
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -51,7 +51,7 @@ jobs:
 
   deploy:
     name: Deploy to server
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test-and-build, docker, e2e]
     if: >-
       github.event_name == 'push' &&

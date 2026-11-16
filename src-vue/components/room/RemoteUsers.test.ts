@@ -12,6 +12,8 @@ describe('RemoteUsers', () => {
 
   it('renders remote users and updates when positions change', async () => {
     const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = false;
     conference.addUser('a');
     conference.addUser('b');
     conference.updateUserPosition('a', { x: 1, y: 2 });
@@ -29,9 +31,12 @@ describe('RemoteUsers', () => {
   it('filters users in lobby mode until approved', async () => {
     const conference = useConferenceStore();
     const features = useSessionFeaturesStore();
+    features.configLoaded = true;
     features.lobbyEnabled = true;
     features.hostId = 'host';
     features.lobbyApproved.host = true;
+    const { useLocalStore } = await import('@/stores/localStore');
+    useLocalStore().setMyID('host');
     conference.addUser('host');
     conference.addUser('guest');
     conference.updateUserPosition('host', { x: 0, y: 0 });
@@ -42,6 +47,21 @@ describe('RemoteUsers', () => {
     features.approveLobby('guest');
     await nextTick();
     expect(wrapper.findAll('.userContainer').length).toBe(2);
+    wrapper.unmount();
+  });
+
+  it('renders nothing while the local person is still in the lobby', async () => {
+    const conference = useConferenceStore();
+    const features = useSessionFeaturesStore();
+    const { useLocalStore } = await import('@/stores/localStore');
+    useLocalStore().setMyID('waiting');
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    conference.addUser('host');
+    conference.updateUserPosition('host', { x: 0, y: 0 });
+
+    const { wrapper } = await mountWithApp(RemoteUsers);
+    expect(wrapper.findAll('.userContainer').length).toBe(0);
     wrapper.unmount();
   });
 
