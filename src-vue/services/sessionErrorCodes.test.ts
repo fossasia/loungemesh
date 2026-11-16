@@ -35,6 +35,9 @@ describe('sessionErrorCodes', () => {
       SESSION_ERROR_CODES.NOT_READY,
     );
     expect(classifySessionError('connection lost')).toBe(SESSION_ERROR_CODES.CONNECTION_LOST);
+    expect(classifySessionError('XML Parsing Error: prefix not bound to a namespace')).toBe(
+      SESSION_ERROR_CODES.CONNECTION_LOST,
+    );
     expect(classifySessionError('room join failed')).toBe(SESSION_ERROR_CODES.JOIN_FAILED);
     expect(classifySessionError('weird failure')).toBe(SESSION_ERROR_CODES.UNKNOWN);
     expect(classifySessionError('   ')).toBe(SESSION_ERROR_CODES.UNKNOWN);

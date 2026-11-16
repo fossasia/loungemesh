@@ -5,6 +5,8 @@ import AppIcon, { type IconName } from './AppIcon.vue';
 const ICON_NAMES: IconName[] = [
   'arrow-right',
   'bar-chart',
+  'bell',
+  'bell-off',
   'chat',
   'close',
   'eye-off',
@@ -23,6 +25,10 @@ const ICON_NAMES: IconName[] = [
   'video',
   'video-off',
   'volume-x',
+  'send',
+  'user-plus',
+  'share',
+  'copy',
 ];
 
 describe('AppIcon', () => {

@@ -32,4 +32,17 @@ describe('ErrorHandler', () => {
     expect(wrapper.text()).not.toContain('LM-E004');
     wrapper.unmount();
   });
+
+  it('suppresses connection errors when reconnect phase is active', async () => {
+    const { useReconnectStore } = await import('@/stores/reconnectStore');
+    const reconnect = useReconnectStore();
+    reconnect.phase = 'waiting';
+
+    const conn = useConnectionStore();
+    conn.$patch({ error: SESSION_ERROR_CODES.CONNECTION_FAILED });
+
+    const { wrapper } = await mountWithApp(ErrorHandler);
+    expect(wrapper.text()).not.toContain("Couldn't connect to the session.");
+    wrapper.unmount();
+  });
 });

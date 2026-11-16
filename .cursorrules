@@ -1,0 +1,38 @@
+# LoungeMesh Cursor Rules
+
+## Architecture Rules
+- Vue 3 + TypeScript + Pinia frontend; Express + Prisma + PostgreSQL + Redis backend.
+- UI components and Pinia stores MUST NEVER import `lib-jitsi-meet` directly. Always use `src-vue/services/MediaService.ts` via `useMediaEngine.ts`.
+- Pure headless WebRTC (no Jitsi iframe embeds).
+- Spatial distance math belongs in `src-vue/workers/proximityAudio.worker.ts`.
+
+## Scaling & Performance
+- Never introduce hardcoded memory limits (`mem_limit`) in `docker-compose.yml`. Maintain low baseline resource consumption (2 vCPU / 2 GB RAM target) by design.
+- In `src-vue/utils/receiverConstraints.ts`, off-screen peers must receive zero video streams (`selectedSources = []`, `lastN = 0`).
+- Avatar camera is capped at 360p ideal / 480p max @ 24 fps; screenshare is capped at 720p @ 15–30 fps.
+- Use single-roundtrip `/api/meetings/state/:roomName/init` for room bootstrapping.
+
+## Security
+- NEVER return `joinPin` or internal raw database strings in config responses. Always use `sanitizeMeetingConfig` in `server/src/controllers/meetingController.ts`.
+- Derive `meetingExists` directly from `data.role.hostId` (`this.meetingExists = !!data.role.hostId`).
+- Encrypt third-party integration secrets with AES-256-GCM.
+
+## Testing & Pre-PR Verification
+- Strict 100% test coverage requirement across `src-vue/` (`npm test`).
+- Playwright E2E integration test suite must pass (`npm run build && npm run test:e2e`).
+- Frontend typecheck (`npm run typecheck`) and server TypeScript compilation (`npm --prefix server run build`).
+- Documentation build must pass cleanly (`npm run docs:build`).
+
+## Documentation & AI Skills Maintenance
+- Whenever introducing or modifying user flows, features, or architectural components:
+  - Update all READMEs (`README.md`, `server/README.md`) and guides in `docs-site/`.
+  - Update relevant domain skills in `.agents/skills/` so all AI assistants and contributors stay aligned on the newest user flows and contracts.
+
+## Domain Skills
+Detailed skills are located in `.agents/skills/`:
+- `loungemesh-architecture`
+- `loungemesh-scaling`
+- `loungemesh-security`
+- `loungemesh-eventyay-integration`
+- `loungemesh-deployment`
+- `loungemesh-features-and-testing`

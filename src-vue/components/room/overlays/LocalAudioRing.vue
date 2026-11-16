@@ -19,8 +19,8 @@ import { audioRadius } from '@/utils/vector';
   transform: translate(-50%, -50%);
   box-sizing: border-box;
   border-radius: 50%;
-  border: 2px dashed var(--color-mono60);
-  opacity: 0.55;
+  border: 5px solid var(--line-dark);
+  opacity: 1;
   pointer-events: none;
   z-index: 0;
 }

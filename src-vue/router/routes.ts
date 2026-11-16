@@ -45,4 +45,23 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/JoinPage.vue'),
     props: true,
   },
+  {
+    path: '/m/:event/:room',
+    name: 'public-meet',
+    /* v8 ignore next */
+    component: () => import('@/pages/PublicMeetPage.vue'),
+    props: true,
+  },
+  {
+    path: '/kicked',
+    name: 'kicked',
+    /* v8 ignore next */
+    component: () => import('@/pages/KickedPage.vue'),
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    /* v8 ignore next */
+    component: () => import('@/pages/NotFoundPage.vue'),
+  },
 ];

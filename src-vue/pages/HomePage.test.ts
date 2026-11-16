@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useAuthStore } from '@/stores/authStore';
 import HomePage from './HomePage.vue';
 
 describe('HomePage', () => {
@@ -17,6 +18,10 @@ describe('HomePage', () => {
   });
 
   it('mounts and submits username and session', async () => {
+    const auth = useAuthStore();
+    auth.loading = false;
+    auth.isAuthenticated = false;
+
     const { wrapper, router } = await mountWithApp(HomePage, { route: '/' });
     expect(wrapper.text()).toContain('LoungeMesh');
     const push = vi.spyOn(router, 'push');

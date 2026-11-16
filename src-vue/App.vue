@@ -10,9 +10,9 @@
 /* Legacy `AppContainer` from src/App.tsx */
 .app {
   text-align: center;
-  position: fixed;
+  position: relative;
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
   cursor: default;
   font-family: var(--font-display);
 }

@@ -3,6 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import { useLocalStore } from '@/stores/localStore';
 import { applyZoomStep, clampedPanZoom, wheelScaleDelta } from '@/constants/panZoom';
 import ZoomControls from '@/components/layout/ZoomControls.vue';
+import ViewportBackground from '@/components/layout/ViewportBackground.vue';
+
+const props = defineProps<{ eventIdentifier?: string }>();
 
 const localStore = useLocalStore();
 const isPanning = ref(false);
@@ -81,6 +84,7 @@ onMounted(() => {
     @pointercancel="onPointerUp"
     @wheel="onWheel"
   >
+    <ViewportBackground :event-identifier="props.eventIdentifier" />
     <div class="panTranslate" :class="{ panning: isPanning }" :style="translateStyle">
       <div class="panScale" :class="{ panning: isPanning }" :style="scaleStyle">
         <slot />
@@ -102,6 +106,8 @@ onMounted(() => {
   text-align: left;
 }
 .panTranslate {
+  position: relative;
+  z-index: 1;
   width: 1px;
   height: 1px;
   display: inline-flex;

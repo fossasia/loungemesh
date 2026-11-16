@@ -1,86 +1,60 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import StatusScreen from '@/components/common/StatusScreen.vue';
 
 const props = defineProps<{ reason?: string }>();
 
 const message = computed(() => {
   switch (props.reason) {
-    case 'no_token':
-      return 'You need a valid Eventyay ticket to access this lounge. Please join through your event page.';
+    case 'room_full':
+      return 'This lounge has reached its maximum participant capacity. Please try again later.';
+    case 'not_allowed':
+      return 'You do not have permission to join this session. If you believe this is an error, please check your Eventyay registration.';
+    case 'grant_expired':
     case 'token_expired':
-      return 'Your access link has expired. Please return to the event page and re-open the lounge.';
+      return 'Your access link has expired. Please return to your Eventyay event page and re-open the lounge.';
+    case 'single_user_replayed':
+    case 'token_already_claimed':
+      return 'This unique attendee link has already been used by another participant. Attendee links only allow one user.';
+    case 'invalid_pin':
+      return 'The PIN you entered was incorrect. Please try again with the correct meeting PIN.';
+    case 'grant_replayed':
     case 'token_already_used':
-      return 'This access link has already been used. Each link is single-use — please re-open the lounge from your event page.';
+      return 'This access link has already been used. Please re-open the lounge from your Eventyay event page.';
+    case 'meet_not_found':
     case 'event_not_found':
-      return 'The event could not be found.';
+      return 'The requested lounge session could not be found.';
+    case 'no_token':
+      return 'You need a valid Eventyay ticket or pass to access this lounge. Please join through your event page.';
     case 'network_error':
-      return 'Could not reach the Eventyay server. Please check your connection and try again.';
+      return 'Could not reach the server. Please check your connection and try again.';
     default:
-      return 'Access to this lounge is restricted to ticket holders. If you have a ticket, please open the lounge from your Eventyay event page.';
+      return 'Access to this lounge is restricted. Please open the lounge from your Eventyay event page.';
   }
 });
 </script>
 
 <template>
-  <div class="denied-shell">
-    <div class="denied-card">
-      <div class="denied-icon" aria-hidden="true">🔒</div>
-      <h1 class="denied-title">Lounge not available</h1>
-      <p class="denied-msg">{{ message }}</p>
-      <p class="denied-hint">
-        This LoungeMesh lounge is integrated with
-        <a href="https://eventyay.com" target="_blank" rel="noopener noreferrer">Eventyay</a>.
-        Sessions and access are configured per-event by the organizer.
-      </p>
-    </div>
-  </div>
+  <StatusScreen title="Lounge Not Available" :message="message" icon="shield" tone="warning">
+    <p class="denied-hint">
+      This LoungeMesh lounge is integrated with
+      <a href="https://eventyay.com" target="_blank" rel="noopener noreferrer">Eventyay</a>.
+      Sessions and access are configured per-event by the organizer.
+    </p>
+  </StatusScreen>
 </template>
 
 <style scoped>
-.denied-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-page, #eef1ff);
-  padding: 24px;
-}
-.denied-card {
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 4px 32px rgba(79, 110, 247, 0.12);
-  padding: 52px 44px;
-  max-width: 440px;
-  width: 100%;
-  text-align: center;
-}
-.denied-icon {
-  font-size: 3.5rem;
-  margin-bottom: 20px;
-}
-.denied-title {
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: #1a1c2e;
-  margin: 0 0 14px;
-}
-.denied-msg {
-  font-size: 0.975rem;
-  color: #4b5563;
-  line-height: 1.6;
-  margin: 0 0 20px;
-}
 .denied-hint {
-  font-size: 0.85rem;
-  color: #9ca3af;
+  font-size: var(--fs-small);
+  color: var(--color-mono40);
   line-height: 1.5;
   margin: 0;
 }
+
 .denied-hint a {
-  color: #4f6ef7;
+  color: var(--color-blue100);
   text-decoration: none;
-}
-.denied-hint a:hover {
-  text-decoration: underline;
+  font-weight: 600;
 }
 </style>

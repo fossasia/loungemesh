@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isRecordingSupported, pickRecorderMimeType, useSessionRecorder } from './useSessionRecorder';
 
 const originalRecorder = (globalThis as { MediaRecorder?: unknown }).MediaRecorder;
+const originalNavigator = globalThis.navigator;
 
 afterEach(() => {
   (globalThis as { MediaRecorder?: unknown }).MediaRecorder = originalRecorder;
+  vi.stubGlobal('navigator', originalNavigator);
   vi.restoreAllMocks();
 });
 
@@ -14,7 +16,27 @@ describe('pickRecorderMimeType', () => {
     expect(pickRecorderMimeType()).toBeUndefined();
   });
 
-  it('returns the first supported candidate', () => {
+  it('prefers webm on Chrome-like browsers when both are supported', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Chrome/130.0.0.0' });
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = {
+      isTypeSupported: (t: string) => t.startsWith('video/webm') || t.startsWith('video/mp4'),
+    };
+    expect(pickRecorderMimeType()).toBe('video/webm;codecs=vp9,opus');
+  });
+
+  it('prefers mp4 on Safari when both are supported', () => {
+    vi.stubGlobal('navigator', {
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    });
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = {
+      isTypeSupported: (t: string) => t.startsWith('video/mp4'),
+    };
+    expect(pickRecorderMimeType()).toBe('video/mp4;codecs=avc1.42E01E,mp4a.40.2');
+  });
+
+  it('falls back to webm when mp4 is unsupported', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Firefox/130.0' });
     (globalThis as { MediaRecorder?: unknown }).MediaRecorder = {
       isTypeSupported: (t: string) => t === 'video/webm',
     };

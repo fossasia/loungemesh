@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import AppIcon from '@/components/ui/AppIcon.vue';
+import { computed } from 'vue';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     onStage?: boolean;
+    displayName?: string;
+    avatarUrl?: string | null;
   }>(),
-  { onStage: false },
+  { onStage: false, displayName: '', avatarUrl: null },
 );
+
+const computedAvatarUrl = computed(() => {
+  /* v8 ignore next */
+  if (props.avatarUrl) return props.avatarUrl;
+  const seed = props.displayName ? props.displayName.replace(/'s Sphere|' Sphere/i, '').trim() : 'Guest';
+  return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seed)}`;
+});
 </script>
 
 <template>
@@ -15,7 +25,7 @@ withDefaults(
     Presenting
   </div>
   <div v-else class="base avatar">
-    <AppIcon name="user" class="ic" :size="48" />
+    <img :src="computedAvatarUrl" alt="" class="avatarImg" draggable="false" />
   </div>
 </template>
 
@@ -42,6 +52,13 @@ withDefaults(
 }
 .onStage .ic {
   margin-bottom: 4px;
-  color: currentColor;
+  color: var(--color-blue100);
+}
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
 }
 </style>

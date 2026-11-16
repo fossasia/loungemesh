@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import {
+  isBridgeOriginAllowed,
   resetJwtRefreshCallback,
   setJwtRefreshCallback,
   useEventyayBridge,
@@ -217,5 +218,36 @@ describe('useEventyayBridge', () => {
     );
     expect(refresh).not.toHaveBeenCalled();
     wrapper.unmount();
+  });
+
+  describe('isBridgeOriginAllowed', () => {
+    it('allows any origin when allowedOrigins is empty', () => {
+      expect(isBridgeOriginAllowed('https://example.com', [])).toBe(true);
+    });
+
+    it('allows origins matching exact strings in allowedOrigins', () => {
+      expect(isBridgeOriginAllowed('https://custom.org', ['https://custom.org'])).toBe(true);
+    });
+
+    it('allows localhost and loopback domains', () => {
+      expect(isBridgeOriginAllowed('http://localhost:8000', ['https://eventyay.com'])).toBe(true);
+      expect(isBridgeOriginAllowed('http://127.0.0.1:8880', ['https://eventyay.com'])).toBe(true);
+      expect(isBridgeOriginAllowed('http://host.docker.internal:8000', ['https://eventyay.com'])).toBe(true);
+    });
+
+    it('allows eventyay.com and any *.eventyay.com subdomain', () => {
+      expect(isBridgeOriginAllowed('https://eventyay.com', ['https://other.com'])).toBe(true);
+      expect(isBridgeOriginAllowed('https://dev.eventyay.com', ['https://other.com'])).toBe(true);
+      expect(isBridgeOriginAllowed('https://video.eventyay.com', ['https://other.com'])).toBe(true);
+    });
+
+    it('supports wildcard origin patterns', () => {
+      expect(isBridgeOriginAllowed('https://stage.mysite.com', ['https://*.mysite.com'])).toBe(true);
+      expect(isBridgeOriginAllowed('https://other.org', ['https://*.mysite.com'])).toBe(false);
+    });
+
+    it('returns false for malformed origin strings', () => {
+      expect(isBridgeOriginAllowed('not-a-valid-url', ['https://custom.org'])).toBe(false);
+    });
   });
 });

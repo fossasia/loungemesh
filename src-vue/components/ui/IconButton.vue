@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { playUiSound, type UiSoundId } from '@/utils/uiSounds';
+import AppIcon from '@/components/ui/AppIcon.vue';
 
 defineOptions({ inheritAttrs: false });
 
@@ -9,17 +10,20 @@ const props = withDefaults(
     active?: boolean;
     highlight?: boolean;
     warning?: boolean;
+    error?: boolean;
     ghost?: boolean;
     primary?: boolean;
     /** Short click feedback; set false to silence this button. */
     sound?: UiSoundId | false;
     /** Unread / new-activity indicator dot. */
     activityDot?: boolean;
+    disabled?: boolean;
   }>(),
-  { ghost: false, primary: false, sound: 'tap', activityDot: false },
+  { ghost: false, primary: false, sound: 'tap', activityDot: false, disabled: false },
 );
 
 function onClick(): void {
+  if (props.disabled) return;
   if (props.sound !== false) playUiSound(props.sound);
 }
 </script>
@@ -31,17 +35,23 @@ function onClick(): void {
       active: !!active,
       highlight: !!highlight,
       warning: !!warning,
+      error: !!error,
       ghost,
       primary,
       hasActivityDot: !!activityDot,
+      disabled: !!disabled,
     }"
     type="button"
     :title="label"
     :aria-label="label"
+    :disabled="disabled"
     v-bind="$attrs"
     @click="onClick"
   >
     <span class="icon"><slot name="icon" /></span>
+    <span v-if="error" class="errorBadge" title="Hardware error">
+      <AppIcon name="alert-triangle" :size="12" />
+    </span>
     <span class="sr-only">{{ label }}</span>
   </button>
 </template>
@@ -93,6 +103,13 @@ function onClick(): void {
 
 .ibtn:active {
   background-color: var(--color-mono60);
+}
+
+.ibtn.disabled,
+.ibtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .ibtn:focus {
@@ -170,6 +187,32 @@ function onClick(): void {
 .ibtn.active.hasActivityDot::after,
 .ibtn.warning.hasActivityDot::after {
   border-color: currentColor;
+}
+
+.ibtn.error {
+  color: #fff;
+  background-color: #ef4444;
+  border-color: #dc2626;
+}
+.ibtn.error :deep(svg) {
+  stroke: #fff;
+}
+.ibtn.error:hover {
+  background-color: #dc2626;
+}
+.errorBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #f59e0b;
+  color: #fff;
+  border-radius: 50%;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 2;
 }
 
 .sr-only {
