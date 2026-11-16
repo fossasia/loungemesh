@@ -1,8 +1,9 @@
-import { canApplyChatEdit } from '@/utils/chatMessage';
+import { canApplyChatEdit, findChatMessage } from '@/utils/chatMessage';
 import * as Y from 'yjs';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import { useLocalStore } from '@/stores/localStore';
+import { useAuthStore } from '@/stores/authStore';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import type { WhiteboardCommand } from '@/utils/whiteboardSync';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
@@ -18,6 +19,19 @@ import {
 
 export type CommandPayload = { value: string };
 
+export function buildHelloCommand(id: string): string {
+  const local = useLocalStore();
+  const conference = useConferenceStore();
+  const auth = useAuthStore();
+  return JSON.stringify({
+    id,
+    userKey: local.userKey,
+    pos: local.pos,
+    name: conference.displayName,
+    email: auth.user?.email || undefined,
+  });
+}
+
 const processedStageCommandIds = new Set<string>();
 
 function parse<T>(payload: CommandPayload): T | null {
@@ -29,13 +43,70 @@ function parse<T>(payload: CommandPayload): T | null {
 }
 
 /* v8 ignore start */
-function isSenderModeratorOrHost(senderId: string | undefined, features: ReturnType<typeof useSessionFeaturesStore>): boolean {
+function sameEmail(left?: string, right?: string): boolean {
+  const a = left?.trim().toLowerCase() || '';
+  const b = right?.trim().toLowerCase() || '';
+  return !!a && a === b;
+}
+
+/** Host or moderator room controls. A matching email still counts while hostId is the database id. */
+export function canApplyRoomControl(
+  senderId: string | undefined,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  conference: ReturnType<typeof useConferenceStore>,
+  email?: string,
+): boolean {
   if (!senderId) return true;
-  if (features.hostId === senderId) return true;
-  if (features.userGrants[senderId]?.moderator) return true;
-  const conference = useConferenceStore();
-  const user = conference.users[senderId];
-  if (user?.properties?.role === 'moderator' || user?.properties?.role === 'owner') return true;
+  if (features.isParticipantHost(senderId)) return true;
+  if (features.isParticipantModerator(senderId)) return true;
+  const remoteUser = (conference.users as Record<string, any>)[senderId];
+  const senderRole = remoteUser?.properties?.role || remoteUser?.role;
+  if (senderRole === 'host' || senderRole === 'moderator') return true;
+  if (sameEmail(email, features.hostEmail)) return true;
+  return features.moderatorEmails.some((item) => sameEmail(email, item));
+}
+
+/** Room-wide settings stay with the meeting host. */
+export function canApplyHostSettings(
+  senderId: string | undefined,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  email?: string,
+): boolean {
+  if (!senderId) return true;
+  if (features.isParticipantHost(senderId)) return true;
+  return sameEmail(email, features.hostEmail);
+}
+
+/** Host can moderate anyone. A moderator cannot mute or remove the host or another moderator. */
+function canModerateParticipant(
+  senderId: string | undefined,
+  targetId: string,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  conference: ReturnType<typeof useConferenceStore>,
+  email?: string,
+): boolean {
+  if (!senderId) return true;
+  if (!canApplyRoomControl(senderId, features, conference, email)) return false;
+  if (canApplyHostSettings(senderId, features, email)) return true;
+  if (targetId && features.isParticipantHost(targetId)) return false;
+  const targetEmail = conference.users[targetId]?.email;
+  if (targetEmail && sameEmail(targetEmail, features.hostEmail)) return false;
+  if (targetId && features.isParticipantModerator(targetId)) return false;
+  const local = useLocalStore();
+  if (targetId && targetId === local.id && (features.isHost || features.isModerator)) return false;
+  return true;
+}
+
+function isSenderModeratorOrHost(
+  senderId: string | undefined,
+  features: ReturnType<typeof useSessionFeaturesStore>,
+  conference?: ReturnType<typeof useConferenceStore>,
+  email?: string,
+): boolean {
+  if (!senderId) return false;
+  if (features.isParticipantHost(senderId)) return true;
+  if (features.isParticipantModerator(senderId)) return true;
+  if (conference && canApplyRoomControl(senderId, features, conference, email)) return true;
   return false;
 }
 /* v8 ignore stop */
@@ -47,6 +118,42 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
   const local = useLocalStore();
 
   switch (name) {
+    case 'hello': {
+      const data = parse<{ id?: string; userKey?: string; pos?: { x: number; y: number }; name?: string; email?: string }>(payload);
+      if (!data?.id || data.id === local.id || (senderId && data.id !== senderId)) break;
+      if (data.userKey) {
+        conference.dedupeUserByKey(data.id, data.userKey);
+      }
+      if (!conference.users[data.id]) {
+        conference.addUser(data.id, { _displayName: data.name }, data.userKey);
+      } else if (data.userKey) {
+        conference.users[data.id].userKey = data.userKey;
+      }
+      if (data.pos) {
+        conference.updateUserPosition(data.id, data.pos);
+      }
+      if (data.name) {
+        conference.updateUserDisplayName(data.id, data.name);
+      }
+      if (data.email?.trim()) {
+        conference.patchUser(data.id, { email: data.email.trim().toLowerCase() }, false);
+        if (!features.isVerifiedHost && !features.pendingHostClaim && sameEmail(data.email, features.hostEmail)) {
+          features.setHost(data.id);
+        }
+      }
+      features.admitParticipantEmail(data.id, data.email);
+      conference.recordUserHeartbeat(data.id);
+      break;
+    }
+    case 'hello_req': {
+      const data = parse<{ from?: string }>(payload);
+      if (!data?.from || data.from === local.id) break;
+      const engine = getMediaEngineInstance();
+      if (engine && local.id) {
+        engine.sendCommand('hello', buildHelloCommand(local.id));
+      }
+      break;
+    }
     case 'pos': {
       const pos = parse<{ id?: string; x?: number; y?: number }>(payload);
       if (pos?.id != null && pos.x != null && pos.y != null) {
@@ -62,17 +169,12 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       break;
     }
     case 'host': {
-      const data = parse<{ hostId?: string }>(payload);
-      if (data?.hostId) {
-        if (features.meetingExists) {
-          // Keep DB host ID - do not let Jitsi clients overwrite it
-        } else {
-          // Ad-hoc fallback: accept if not claiming host and not already set
-          if (!features.pendingHostClaim && !features.hostId) {
-            features.setHost(data.hostId);
-          }
-        }
-      }
+      const data = parse<{ hostId?: string; email?: string }>(payload);
+      if (!data?.hostId || features.pendingHostClaim || features.isVerifiedHost) break;
+      const email = (data.email || '').trim().toLowerCase();
+      const expected = features.hostEmail.trim().toLowerCase();
+      if (!email || !expected || email !== expected) break;
+      features.setHost(data.hostId);
       break;
     }
     case 'lobby': {
@@ -83,9 +185,19 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         enabled?: boolean;
         email?: string;
         reason?: string;
+        emails?: unknown[];
       }>(payload);
       if (!data) break;
-      if (data.enabled != null) features.lobbyEnabled = data.enabled;
+      if (data.enabled != null && canApplyHostSettings(senderId, features, data.email)) {
+        features.lobbyEnabled = data.enabled;
+      }
+      if (data.action === 'invite' && Array.isArray(data.emails)) {
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
+        const stringEmails = data.emails.filter((item): item is string => typeof item === 'string');
+        if (stringEmails.length > 0) {
+          features.addInvitedEmails(stringEmails);
+        }
+      }
       if (data.action === 'wait' && data.id && data.name) {
         features.addLobbyWaiter({
           id: data.id,
@@ -93,14 +205,34 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
           email: data.email,
           reason: data.reason,
         });
+        if (features.isHost || features.isModerator) {
+          playUiSound('lobbyKnock');
+        }
       }
-      if (data.action === 'approve' && data.id) {
-        features.approveLobby(data.id);
-        if (data.id === local.id) features.localLobbyPending = false;
-      }
-      if (data.action === 'reject' && data.id) {
+      if (data.action === 'cancel' && data.id) {
+        if (senderId && senderId !== data.id) break;
         features.rejectLobby(data.id);
-        if (data.id === local.id) {
+      }
+      if (data.action === 'approve' && (data.id || (data as any).userKey)) {
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
+        const targetId = data.id || '';
+        if (targetId) features.approveLobby(targetId);
+        const matchesLocal =
+          (targetId && (targetId === local.id || targetId === local.userKey || targetId === 'all')) ||
+          Boolean((data as any).userKey && (data as any).userKey === local.userKey);
+        if (matchesLocal) {
+          if (local.id) features.approveLobby(local.id);
+          features.localLobbyPending = false;
+        }
+      }
+      if (data.action === 'reject' && (data.id || (data as any).userKey)) {
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
+        const targetId = data.id || '';
+        if (targetId) features.rejectLobby(targetId);
+        const matchesLocal =
+          (targetId && (targetId === local.id || targetId === local.userKey)) ||
+          Boolean((data as any).userKey && (data as any).userKey === local.userKey);
+        if (matchesLocal) {
           features.localLobbyPending = false;
           features.lobbyRejected = true;
         }
@@ -119,6 +251,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       break;
     }
     case 'poll': {
+      if (features.enabledFeatures.poll === false) break;
       if (payload.value === 'null') {
         /* v8 ignore next 4 */
         if (senderId && !isSenderModeratorOrHost(senderId, features)) {
@@ -144,9 +277,37 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         features.bumpPollActivity();
         if (panelClosed) playUiSound('chatMessage');
       }
+      features.pollRequestNotice = '';
+      break;
+    }
+    case 'poll_req': {
+      if (features.enabledFeatures.poll === false) break;
+      const data = parse<{
+        action?: 'create' | 'approve' | 'reject' | 'cancel';
+        request?: import('@/stores/sessionFeaturesStore').PollRequest;
+        requestId?: string;
+      }>(payload);
+      if (!data?.action) break;
+      if (data.action === 'create' && data.request?.id) {
+        features.addPollRequest(data.request);
+        if (features.isHost || features.isModerator) {
+          features.bumpPollActivity();
+          if (features.panel !== 'poll') playUiSound('chatMessage');
+        }
+      } else if (data.action === 'approve' && data.requestId) {
+        features.removePollRequest(data.requestId);
+      } else if (data.action === 'reject' && data.requestId) {
+        if (features.myPendingPollRequestId === data.requestId) {
+          features.pollRequestNotice = 'Your poll request was declined by a moderator.';
+        }
+        features.removePollRequest(data.requestId);
+      } else if (data.action === 'cancel' && data.requestId) {
+        features.removePollRequest(data.requestId);
+      }
       break;
     }
     case 'notes': {
+      if (features.enabledFeatures.notes === false) break;
       const data = parse<any>(payload);
       if (!data) break;
       if ('action' in data && data.action) {
@@ -183,11 +344,13 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
     }
     case 'room': {
       const data = parse<
-        import('@/utils/roomBackgroundSync').RoomBackgroundCommand | {
-          gridBackgroundUrl?: string | null;
-        }
+        (
+          | import('@/utils/roomBackgroundSync').RoomBackgroundCommand
+          | { gridBackgroundUrl?: string | null }
+        ) & { email?: string }
       >(payload);
       if (!data) break;
+      if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
       if ('action' in data && data.action) {
         features.applyRoomBackgroundCommand(data);
         break;
@@ -204,9 +367,17 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         import('@/utils/sessionAccess').AccessCommandPayload & {
           notes?: boolean;
           whiteboard?: boolean;
+          email?: string;
         }
       >(payload);
       if (!data) break;
+      if (!canApplyRoomControl(senderId, features, conference, data.email)) break;
+      if (senderId && !canApplyHostSettings(senderId, features, data.email)) {
+        const grants = data.grants ? { ...data.grants } : undefined;
+        if (grants) delete grants.moderator;
+        features.applyAccessUpdate({ userId: data.userId, grants });
+        break;
+      }
       features.applyAccessUpdate(data);
       break;
     }
@@ -214,36 +385,45 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       const data = parse<{
         allowParticipantRecording?: boolean;
         lobbyEnabled?: boolean;
+        lobbyForm?: 'name' | 'details';
         stagePromotionEnabled?: boolean;
+        enabledFeatures?: Partial<Record<import('@/utils/featureAccess').GatedFeatureKey, boolean>>;
+        email?: string;
       }>(payload);
       if (data) {
-        if (data.allowParticipantRecording !== undefined) {
-          features.allowParticipantRecording = data.allowParticipantRecording;
-        }
-        if (data.lobbyEnabled !== undefined) {
-          features.lobbyEnabled = data.lobbyEnabled;
-        }
-        if (data.stagePromotionEnabled !== undefined) {
-          features.stagePromotionEnabled = data.stagePromotionEnabled;
-        }
+        if (!canApplyHostSettings(senderId, features, data.email)) break;
+        features.applyConfigUpdate(data);
       }
       break;
     }
     case 'chat': {
+      if (features.enabledFeatures.chat === false) break;
       const data = parse<{
         action?: string;
-        messageId?: string;
         text?: string;
+        nr?: number;
+        messageId?: string;
         editedAt?: number;
         editorId?: string;
-        nr?: number;
+        senderId?: string;
       }>(payload);
+      if (data?.action === 'post') {
+        if (typeof data.text === 'string' && senderId) {
+          conference.ingestChatMessage(
+            senderId,
+            data.text,
+            typeof data.nr === 'number' ? data.nr : -1,
+          );
+        }
+        break;
+      }
       if (
         data?.action === 'edit' &&
         data.messageId &&
         data.text != null &&
         data.editedAt != null &&
         data.editorId &&
+        (!senderId || senderId === data.editorId) &&
         canApplyChatEdit(conference.messages, data.messageId, data.editorId, data.nr)
       ) {
         conference.editChatMessage(
@@ -254,27 +434,124 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
           data.editorId,
         );
       }
+      if (data?.action === 'delete') {
+        const caller = senderId || data.senderId;
+        const isMod = isSenderModeratorOrHost(caller, features);
+        const msg = findChatMessage(conference.messages, {
+          messageId: data.messageId || '',
+          nr: data.nr,
+          authorId: caller,
+        });
+        const isOwner = Boolean(caller && msg && msg.id === caller);
+        if (isMod || isOwner) {
+          conference.removeChatMessage(data.messageId || '', data.nr);
+        }
+      }
+      break;
+    }
+    case 'mod_change': {
+      const data = parse<{
+        action?: 'propose' | 'approve' | 'reject';
+        id?: string;
+        type?: 'whiteboard' | 'notes';
+        authorId?: string;
+        authorName?: string;
+        payload?: any;
+        timestamp?: number;
+      }>(payload);
+      if (!data?.action || !data.id) break;
+      if (data.type === 'whiteboard' && features.enabledFeatures.whiteboard === false) break;
+      if (data.type === 'notes' && features.enabledFeatures.notes === false) break;
+      if (data.action === 'propose' && data.type && data.payload) {
+        features.addModerationChange({
+          id: data.id,
+          type: data.type,
+          authorId: data.authorId || '',
+          authorName: data.authorName || '',
+          payload: data.payload,
+          timestamp: data.timestamp || 0,
+        }, getMediaEngineInstance());
+      } else if (data.action === 'approve') {
+        if (senderId && !isSenderModeratorOrHost(senderId, features)) break;
+        features.approveModerationChange(data.id, undefined, true);
+      } else {
+        if (senderId && !isSenderModeratorOrHost(senderId, features)) break;
+        features.rejectModerationChange(data.id);
+      }
       break;
     }
     case 'mod': {
-      const data = parse<{ action?: string; id?: string }>(payload);
-      if (data?.action === 'kick' && data.id === local.id) {
-        conference.leaveConference();
-        window.location.href = '/kicked';
-      }
-      if (data?.action === 'mute' && data.id) {
-        if (data.id === local.id && !local.mute) {
-          void local.toggleMute();
+      const data = parse<{
+        action?: string;
+        id?: string;
+        mic?: boolean;
+        camera?: boolean;
+        email?: string;
+      }>(payload);
+      if (!data?.action || !data.id) break;
+      if (!canModerateParticipant(senderId, data.id, features, conference, data.email)) break;
+      if (data.action === 'kick') {
+        if (data.id === local.id) {
+          conference.leaveConference();
+          window.location.href = '/kicked';
+        } else if (conference.users[data.id]) {
+          conference.removeUser(data.id);
+        }
+      } else if (data.action === 'mute') {
+        if (data.id === local.id) {
+          if (!local.mute) {
+            void local.toggleMute();
+          }
+          features.setStageMessage('A moderator muted your microphone.');
         } else if (conference.users[data.id]) {
           conference.patchUser(data.id, { mute: true });
           const engine = getMediaEngineInstance();
           engine.setParticipantVolume(data.id, 0);
-          engine.disconnectParticipantAudio?.(data.id);
+        }
+      } else if (data.action === 'camera_off') {
+        if (data.id === local.id) {
+          if (!local.cameraOff) {
+            void local.toggleCamera();
+          }
+          features.setStageMessage('A moderator turned off your camera.');
+        } else if (conference.users[data.id]) {
+          conference.clearUserTrack(data.id, 'video');
+        }
+      } else if (data.action === 'lock_media') {
+        const prev = features.mediaLocks[data.id] ?? {};
+        const nextMic = data.mic !== undefined ? data.mic : prev.mic;
+        const nextCam = data.camera !== undefined ? data.camera : prev.camera;
+        features.setMediaLock(data.id, { mic: nextMic, camera: nextCam });
+        if (data.id === local.id) {
+          if (nextMic && !local.mute) {
+            void local.toggleMute();
+          }
+          if (nextCam && !local.cameraOff) {
+            void local.toggleCamera();
+          }
+          if (nextMic && !prev.mic && nextCam && !prev.camera) {
+            features.setStageMessage('Your microphone and camera were locked by a moderator.');
+          } else if (nextMic && !prev.mic) {
+            features.setStageMessage('Your microphone was locked by a moderator.');
+          } else if (nextCam && !prev.camera) {
+            features.setStageMessage('Your camera was locked by a moderator.');
+          } else if ((!nextMic && prev.mic) || (!nextCam && prev.camera)) {
+            features.setStageMessage('A moderator unlocked your media controls.');
+          }
+        } else if (conference.users[data.id]) {
+          if (nextMic) {
+            conference.patchUser(data.id, { mute: true });
+            getMediaEngineInstance().setParticipantVolume(data.id, 0);
+          }
+          if (nextCam) {
+            conference.clearUserTrack(data.id, 'video');
+          }
         }
       }
       break;
     }
     case 'wb': {
+      if (features.enabledFeatures.whiteboard === false) break;
       const data = parse<WhiteboardCommand>(payload);
       if (!data) break;
       if (data.action === 'clear') {
@@ -293,7 +570,8 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
       break;
     }
     case 'stage': {
-      const data = parse<StageCommand & { _cmdId?: string }>(payload);
+      if (features.enabledFeatures.stage === false) break;
+      const data = parse<StageCommand & { _cmdId?: string; email?: string }>(payload);
       if (!data?.action) break;
       if (data._cmdId) {
         if (processedStageCommandIds.has(data._cmdId)) {
@@ -308,13 +586,28 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       }
       if (data.action === 'invite' && data.id) {
+        if (senderId && !canApplyRoomControl(senderId, features, conference, data.email)) break;
         const engine = getMediaEngineInstance();
         applyStageInvite(engine, data.id);
       }
       if (data.action === 'promote' && data.id) {
+        const invitedSelf =
+          !!senderId &&
+          senderId === data.id &&
+          (features.invitedStageUserId === data.id ||
+            (local.id === data.id && features.stageInvitationPending));
+        if (
+          senderId &&
+          !invitedSelf &&
+          !canApplyRoomControl(senderId, features, conference, data.email)
+        ) {
+          break;
+        }
         applyStagePromote(data.id);
       }
       if (data.action === 'demote' && data.id) {
+        const self = !!senderId && senderId === data.id;
+        if (senderId && !self && !canApplyRoomControl(senderId, features, conference, data.email)) break;
         applyStageDemote(data.id);
       }
       if (data.action === 'layout' && data.layout) {
@@ -323,6 +616,7 @@ export function handleSessionCommand(name: string, payload: CommandPayload, send
         }
       }
       if (data.action === 'settings' && data.stagePromotionEnabled != null) {
+        if (senderId && !canApplyHostSettings(senderId, features, data.email)) break;
         features.stagePromotionEnabled = data.stagePromotionEnabled;
       }
       break;

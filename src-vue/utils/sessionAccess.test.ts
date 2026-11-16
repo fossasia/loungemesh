@@ -13,15 +13,21 @@ describe('sessionAccess', () => {
     const room = defaultUserGrants();
     expect(effectiveGrants('u1', room, {}, false)).toEqual(room);
     expect(effectiveGrants('host', room, {}, true).notes).toBe(true);
-    const grants = effectiveGrants('u1', { ...room, notes: true }, { u1: { poll: true } }, false);
+    expect(effectiveGrants('host', room, {}, true).chat).toBe(true);
+    const grants = effectiveGrants('u1', { ...room, notes: true }, { u1: { poll: true, chat: false } }, false);
     expect(grants.notes).toBe(true);
     expect(grants.poll).toBe(true);
+    expect(grants.chat).toBe(false);
   });
 
   it('checks individual feature flags', () => {
     const grants = mergeGrants(defaultUserGrants(), { notes: true });
     expect(canUseFeature(grants, 'notes')).toBe(true);
     expect(canUseFeature(grants, 'poll')).toBe(false);
+    expect(canUseFeature(grants, 'chat')).toBe(true);
+    expect(canUseFeature({} as any, 'chat')).toBe(true);
+    const emptyChat = mergeGrants({ ...defaultUserGrants(), chat: undefined as any }, {});
+    expect(emptyChat.chat).toBe(true);
   });
 
   it('builds sync payloads and legacy defaults', () => {

@@ -182,4 +182,17 @@ describe('handleSessionConnectionWatch', () => {
     await handleSessionConnectionWatch('room-a', true, deps);
     expect(deps.joinRoom).not.toHaveBeenCalled();
   });
+
+  it('handles reconnect without delay and passes isReconnect to resetSessionForJoin', async () => {
+    const resetSpy = vi.fn();
+    const { deps, conferenceStore } = makeDeps({
+      isReconnect: true,
+      resetSessionForJoin: resetSpy,
+    });
+    const p = handleSessionConnectionWatch('room-a', true, deps);
+    await p;
+    expect(resetSpy).toHaveBeenCalledWith({ isReconnect: true });
+    expect(deps.joinRoom).toHaveBeenCalledWith('room-a', 'Alice', {});
+    expect(conferenceStore.conferenceName).toBe('room-a');
+  });
 });

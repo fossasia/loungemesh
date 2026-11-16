@@ -155,9 +155,16 @@ export function spreadInitialUserPosition(existing: PanVec[]): PanVec {
 }
 
 /** Keep zoom within a range where the room stays navigable (not tiny or selfie-only). */
-export const minScale = 0.35;
-export const maxScale = 1.4;
-export const defaultScale = 0.65;
+export const minScale = 0.28;
+export const maxScale = 2.4;
+export const defaultScale = 0.52;
+
+/** Starting zoom keeps a 200px sphere a small part of the shorter screen side. */
+export function preferredRoomScale(width = window.innerWidth, height = window.innerHeight): number {
+  const shorter = Math.min(width, height);
+  const target = shorter <= 480 ? 72 : shorter <= 900 ? 88 : 104;
+  return Math.max(minScale, Math.min(maxScale, target / userSize.x));
+}
 
 /** Visible area inside the session UI (below header, above footer). */
 export function visibleViewport(): { width: number; height: number } {

@@ -33,8 +33,11 @@ export function canPromoteToStage(
   stagePromotionEnabled: boolean,
   stageOccupantId: string,
   targetId: string,
+  isModerator = false,
 ): { ok: true } | { ok: false; message: string } {
-  if (!isHost) return { ok: false, message: 'Only the host can promote to stage.' };
+  if (!isHost && !isModerator) {
+    return { ok: false, message: 'Only hosts or moderators can promote to stage.' };
+  }
   if (!stagePromotionEnabled) return { ok: false, message: 'Stage promotion is disabled.' };
   if (stageOccupantId && stageOccupantId !== targetId) {
     return { ok: false, message: STAGE_OCCUPIED_MESSAGE };
@@ -42,18 +45,25 @@ export function canPromoteToStage(
   return { ok: true };
 }
 
-export function canDemoteFromStage(isHost: boolean, stageOccupantId: string, targetId: string): boolean {
+export function canDemoteFromStage(
+  isHost: boolean,
+  stageOccupantId: string,
+  targetId: string,
+  isModerator = false,
+): boolean {
   const local = useLocalStore();
   const features = useSessionFeaturesStore();
   const isSelf = !!(local.id && local.id === targetId);
   const isOccupant = stageOccupantId === targetId;
   const isInvited = features.invitedStageUserId === targetId || (isSelf && features.stageInvitationPending);
-  return (isHost || isSelf) && (isOccupant || isInvited);
+  return (isHost || isModerator || isSelf) && (isOccupant || isInvited);
 }
 
 function sendStageCommand(engine: MediaService, command: StageCommand): void {
+  const email = useSessionFeaturesStore().controlEmail();
   const cmdWithId = {
     ...command,
+    ...(email ? { email } : {}),
     _cmdId: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
   };
   engine.sendCommand('stage', JSON.stringify(cmdWithId));
@@ -132,6 +142,7 @@ export function promoteToStage(engine: MediaService, targetId: string): { ok: tr
     features.stagePromotionEnabled,
     features.stageOccupantId,
     targetId,
+    features.isModerator || features.canModerate,
   );
   if (!check.ok) return check;
 
@@ -147,7 +158,7 @@ export function promoteToStage(engine: MediaService, targetId: string): { ok: tr
 
 export function demoteFromStage(engine: MediaService, targetId: string): void {
   const features = useSessionFeaturesStore();
-  if (!canDemoteFromStage(features.isHost, features.stageOccupantId, targetId)) return;
+  if (!canDemoteFromStage(features.isHost, features.stageOccupantId, targetId, features.isModerator)) return;
   sendStageCommand(engine, { action: 'demote', id: targetId });
   applyStageDemote(targetId);
 }

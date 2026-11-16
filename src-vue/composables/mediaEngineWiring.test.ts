@@ -12,7 +12,10 @@ import { wireStoreSync } from './mediaEngineWiring';
 import { handleSessionCommand } from '@/utils/sessionCommands';
 
 describe('wireStoreSync', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useSessionFeaturesStore().lobbyEnabled = false;
+  });
 
   it('syncs connection, conference, tracks, and position commands', async () => {
     const engine = getMediaEngineInstance();
@@ -49,6 +52,22 @@ describe('wireStoreSync', () => {
     jitsi.conference._handlers.get('cmd:pos')?.({ value: 'bad-json' });
 
     expect(conference.users.existing.pos).toEqual({ x: 3, y: 4 });
+
+    const refreshSpy = vi.spyOn(engine, 'refreshRemoteAudio');
+    jitsi.conference._fire('conference.dataChannelOpened');
+    expect(refreshSpy).toHaveBeenCalled();
+
+    conference.addUser('sharer');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, {
+      getParticipantId: () => 'sharer',
+      getType: () => 'audio',
+      videoType: 'desktop',
+      isMuted: () => false,
+      isLocal: () => false,
+      getId: () => 'share-audio',
+    } as JitsiTrack);
+    expect(conference.users.sharer.screenshareAudio).toBeDefined();
+    expect(conference.users.sharer.audio).toBeUndefined();
 
     const before = local.id;
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue(undefined);
@@ -91,6 +110,15 @@ describe('wireStoreSync', () => {
       false,
     );
     expect(conference.users.u1.speaking).toBe(false);
+  });
+
+  it('drops a lobby knock when that person leaves', () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    wireStoreSync(engine);
+    features.addLobbyWaiter({ id: 'gone', name: 'Gone' });
+    (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit('userLeft', 'gone');
+    expect(features.lobbyWaiting).toHaveLength(0);
   });
 
   it('ignores speaking changes for unknown users', () => {
@@ -445,7 +473,7 @@ describe('wireStoreSync', () => {
     expect(conference.error).toBeUndefined();
   });
 
-  it('claims host on join when host id is still empty', async () => {
+  it('does not claim host on join when the account is not the mapped host', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
@@ -460,11 +488,34 @@ describe('wireStoreSync', () => {
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.pendingHostClaim).toBe(false);
     expect(local.id).toBe('solo');
-    expect(features.hostId).toBe('solo');
-    expect(cmdSpy).toHaveBeenCalledWith('host', JSON.stringify({ hostId: 'solo' }));
+    expect(features.hostId).toBe('');
+    expect(features.isHost).toBe(false);
+    expect(cmdSpy).not.toHaveBeenCalledWith('host', expect.any(String));
   });
 
-  it('claims host on join when pendingHostClaim is set', async () => {
+  it('announces the verified host email on join', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.isVerifiedHost = true;
+    features.hostEmail = 'ada@example.com';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Ada', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('ada-jitsi');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(features.hostId).toBe('ada-jitsi');
+    expect(features.isHost).toBe(true);
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'host',
+      JSON.stringify({ hostId: 'ada-jitsi', email: 'ada@example.com' }),
+    );
+  });
+
+  it('does not claim host on join when pendingHostClaim is set for an attendee', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
@@ -479,9 +530,10 @@ describe('wireStoreSync', () => {
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue('solo');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(local.id).toBe('solo');
-    expect(features.hostId).toBe('solo');
+    expect(features.hostId).toBe('');
+    expect(features.isHost).toBe(false);
     expect(features.pendingHostClaim).toBe(false);
-    expect(cmdSpy).toHaveBeenCalledWith('host', JSON.stringify({ hostId: 'solo' }));
+    expect(cmdSpy).not.toHaveBeenCalledWith('host', expect.any(String));
   });
 
   it('ignores stale host commands while pendingHostClaim is set', () => {
@@ -554,6 +606,8 @@ describe('wireStoreSync', () => {
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
     features.resetHostForJoin();
+    features.isVerifiedHost = true;
+    features.hostEmail = 'host@example.com';
     features.hostSettingsSessionId = 'room';
     features.notesTemplate = '# Agenda';
     features.gridBackgroundUrl = 'data:image/jpeg;base64,wall';
@@ -565,15 +619,20 @@ describe('wireStoreSync', () => {
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue('host');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Agenda');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'reload', email: 'host@example.com' }),
+    );
   });
 
-  it('applies host template when the first participant becomes host', async () => {
+  it('applies the notes template when the verified host joins', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
     const jitsi = getJitsiTestContext();
     const ev = jitsi.jsMeet.events;
+    features.isVerifiedHost = true;
+    features.hostEmail = 'solo@example.com';
     features.notesTemplate = '# Kickoff';
     features.gridBackgroundUrl = 'data:image/jpeg;base64,grid';
     wireStoreSync(engine);
@@ -584,8 +643,11 @@ describe('wireStoreSync', () => {
     vi.spyOn(engine, 'getLocalUserId').mockReturnValue('solo');
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(features.sharedNotes).toBe('# Kickoff');
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
-    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'room',
+      JSON.stringify({ action: 'reload', email: 'solo@example.com' }),
+    );
   });
 
   it('rebroadcasts room background when host sees a new participant', async () => {
@@ -606,6 +668,26 @@ describe('wireStoreSync', () => {
     expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
   });
 
+  it('rebroadcasts room background when a moderator sees a new participant', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    local.setMyID('mod');
+    features.setHost('host');
+    features.userGrants.mod = { moderator: true };
+    features.gridBackgroundUrl = 'data:image/jpeg;base64,wall';
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Mod', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
+    expect(cmdSpy).toHaveBeenCalledWith('room', JSON.stringify({ action: 'reload' }));
+    expect(cmdSpy).not.toHaveBeenCalledWith('access', expect.any(String));
+  });
+
   it('rebroadcasts shared notes when host sees a new participant', async () => {
     const engine = getMediaEngineInstance();
     const features = useSessionFeaturesStore();
@@ -621,7 +703,30 @@ describe('wireStoreSync', () => {
     await engine.joinRoom('room', 'Host', {});
     const cmdSpy = vi.spyOn(engine, 'sendCommand');
     jitsi.conference._fire(ev.conference.USER_JOINED, 'guest', {});
-    expect(cmdSpy).toHaveBeenCalledWith('notes', JSON.stringify({ action: 'begin', total: 1 }));
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"begin"'));
+  });
+
+  it('announces lobby approval when an invited person joins', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.configLoaded = true;
+    features.lobbyEnabled = true;
+    features.isInvited = true;
+    features.setHost('room-host');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Guest', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    vi.spyOn(engine, 'getLocalUserId').mockReturnValue('guest-jitsi');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    expect(features.isLobbyBlocked).toBe(false);
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'lobby',
+      JSON.stringify({ action: 'approve', id: 'guest-jitsi' }),
+    );
   });
 
   it('sends lobby wait when joining with lobby enabled', async () => {
@@ -712,6 +817,37 @@ describe('wireStoreSync', () => {
 
     jitsi.conference._fire(ev.conference.TRACK_REMOVED, track);
     expect(conference.users['u-muted-screen'].screenshare).toBeUndefined();
+
+    // Normal camera video track removed
+    const camTrack = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'video',
+      isMuted: () => false,
+      isLocal: () => false,
+      videoType: 'camera',
+    } as JitsiTrack;
+    conference.setUserTrack('u-muted-screen', 'video', camTrack);
+    jitsi.conference._fire(ev.conference.TRACK_REMOVED, camTrack);
+    expect(conference.users['u-muted-screen'].video).toBeUndefined();
+
+    // Remote audio track mute change
+    const audioTrack = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'audio',
+      isMuted: () => true,
+      isLocal: () => false,
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, audioTrack);
+    expect(conference.users['u-muted-screen'].mute).toBe(true);
+
+    const unmutedAudioTrack = {
+      getParticipantId: () => 'u-muted-screen',
+      getType: () => 'audio',
+      isMuted: () => false,
+      isLocal: () => false,
+    } as JitsiTrack;
+    jitsi.conference._fire(ev.conference.TRACK_MUTE_CHANGED, unmutedAudioTrack);
+    expect(conference.users['u-muted-screen'].audio).toBeDefined();
   });
 
   it('patches onStage and syncs the stage occupant id', async () => {
@@ -809,6 +945,216 @@ describe('wireStoreSync', () => {
     
     jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
     expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  it('runs periodic heartbeat hello and stale user pruning', async () => {
+    vi.useFakeTimers();
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    const pruneSpy = vi.spyOn(conference, 'pruneStaleUsers');
+
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Alice', {});
+    local.setMyID('local_alice');
+    local.userKey = 'uk_alice';
+    local.pos = { x: 100, y: 100 };
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    // Re-fire to test existing heartbeat timer replacement
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+
+    cmdSpy.mockClear();
+    vi.advanceTimersByTime(5000);
+
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'hello',
+      expect.stringContaining('"id":"local-1"'),
+    );
+    expect(pruneSpy).toHaveBeenCalledWith(45000, expect.any(Array));
+
+    // test tick when isJoined is false
+    const joinedSpy = vi.spyOn(engine, 'isJoined').mockReturnValue(false);
+    vi.advanceTimersByTime(5000);
+    joinedSpy.mockRestore();
+
+    // test tick when myId is empty and getConference is null
+    local.setMyID('');
+    const idSpy = vi.spyOn(engine, 'getLocalUserId').mockReturnValue('');
+    const confSpy = vi.spyOn(engine, 'getConference').mockReturnValue(null as any);
+    vi.advanceTimersByTime(5000);
+    expect(pruneSpy).toHaveBeenCalledWith(45000, []);
+    idSpy.mockRestore();
+    confSpy.mockRestore();
+    local.setMyID('local-1');
+
+    // connectionFailed clears active timer
+    jitsi.connection._fire(ev.connection.CONNECTION_FAILED);
+    cmdSpy.mockClear();
+    vi.advanceTimersByTime(5000);
+    expect(cmdSpy).not.toHaveBeenCalled();
+
+    // second connectionFailed when timer is already cleared
+    jitsi.connection._fire(ev.connection.CONNECTION_FAILED, 'network_error');
+
+    // Rejoin to restart timer
+    const reIdSpy = vi.spyOn(engine, 'getLocalUserId').mockReturnValue('local-1');
+    jitsi.conference._fire(ev.conference.CONFERENCE_JOINED);
+    reIdSpy.mockRestore();
+
+    // Disconnection clears timer
+    jitsi.connection._fire(ev.connection.CONNECTION_DISCONNECTED);
+    cmdSpy.mockClear();
+    vi.advanceTimersByTime(5000);
+    expect(cmdSpy).not.toHaveBeenCalled();
+
+    // second disconnected when timer is already cleared
+    jitsi.connection._fire(ev.connection.CONNECTION_DISCONNECTED);
+
+    vi.useRealTimers();
+  });
+
+  it('holds a waiting person and plays them after admission', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+    features.lobbyEnabled = true;
+    features.hostId = 'host';
+    local.setMyID('host');
+    features.setHost('host');
+    features.isVerifiedHost = true;
+    const { seedNotesDocument } = await import('@/utils/notesYjsSync');
+    seedNotesDocument(features.ydoc, 'Hello');
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, makeRemoteAudioTrack('guest'));
+    expect(conference.users.guest?.audio).toBeUndefined();
+    features.$patch({ lobbyForm: 'details' });
+    expect(conference.users.guest?.audio).toBeUndefined();
+    features.$patch({ lobbyApproved: { guest: true } });
+    await flushPromises();
+    expect(conference.users.guest?.audio).toBeTruthy();
+    const muted = makeRemoteAudioTrack('guest2');
+    muted.isMuted = () => true;
+    features.lobbyApproved = { ...features.lobbyApproved, guest2: true };
+    jitsi.conference._fire(ev.conference.TRACK_ADDED, muted);
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'late', {});
+    expect(cmdSpy).toHaveBeenCalledWith('notes', expect.stringContaining('"action":"yjs_begin"'));
+  });
+
+  it('preserves initial participant properties and syncs mediaLocks on userJoined', async () => {
+    const engine = getMediaEngineInstance();
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const local = useLocalStore();
+    const jitsi = getJitsiTestContext();
+    const ev = jitsi.jsMeet.events;
+
+    local.setMyID('host');
+    features.setHost('host');
+    features.isVerifiedHost = true;
+    features.hostEmail = 'host@example.com';
+    features.setMediaLock('locked-guest', { mic: true, camera: false });
+
+    wireStoreSync(engine);
+    await engine.connect();
+    jitsi.connection._fire(ev.connection.CONNECTION_ESTABLISHED);
+    await engine.joinRoom('room', 'Host', {});
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'locked-guest', {
+      _properties: { role: 'moderator', handRaised: 'true' },
+    });
+    expect(conference.users['locked-guest'].properties.role).toBe('moderator');
+    expect(conference.users['locked-guest'].properties.handRaised).toBe(true);
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'mod',
+      JSON.stringify({
+        action: 'lock_media',
+        id: 'locked-guest',
+        mic: true,
+        camera: false,
+        email: 'host@example.com',
+      }),
+    );
+
+    // Also test camera-only lock with no controlEmail
+    features.hostEmail = '';
+    features.setMediaLock('cam-locked-guest', { mic: false, camera: true });
+    jitsi.conference._fire(ev.conference.USER_JOINED, 'cam-locked-guest', {});
+    expect(cmdSpy).toHaveBeenCalledWith(
+      'mod',
+      JSON.stringify({
+        action: 'lock_media',
+        id: 'cam-locked-guest',
+        mic: false,
+        camera: true,
+      }),
+    );
+  });
+
+  it('clears screenshare on trackMuteChanged and trackRemoved even if videoType reverted, without clearing separate camera', () => {
+    const engine = getMediaEngineInstance();
+    const conference = useConferenceStore();
+    wireStoreSync(engine);
+    conference.addUser('u-screen-revert');
+    const emit = (engine as unknown as { emit: (event: string, ...args: unknown[]) => void }).emit.bind(engine);
+
+    const screenTrack = {
+      getParticipantId: () => 'u-screen-revert',
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop',
+      getSourceName: () => 'u-screen-revert-v0',
+    };
+    const camTrack = {
+      getParticipantId: () => 'u-screen-revert',
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera',
+      getSourceName: () => 'u-screen-revert-v0',
+    };
+
+    emit('trackAdded', screenTrack);
+    emit('trackAdded', camTrack);
+    expect(conference.users['u-screen-revert'].screenshare).toBe(screenTrack);
+    expect(conference.users['u-screen-revert'].video).toBe(camTrack);
+
+    // Muting camera while a different screenshare is active clears video only
+    camTrack.isMuted = () => true;
+    emit('trackMuteChanged', camTrack);
+    expect(conference.users['u-screen-revert'].video).toBeUndefined();
+    expect(conference.users['u-screen-revert'].screenshare).toBe(screenTrack);
+
+    // Muting screenshare whose videoType reverted to camera still clears screenshare via identity match
+    screenTrack.videoType = 'camera';
+    screenTrack.isMuted = () => true;
+    emit('trackMuteChanged', screenTrack);
+    expect(conference.users['u-screen-revert'].screenshare).toBeUndefined();
+
+    // Re-add both and test trackRemoved with both non-matching camera and identity-matched screenshare
+    screenTrack.videoType = 'desktop';
+    screenTrack.isMuted = () => false;
+    camTrack.isMuted = () => false;
+    emit('trackAdded', screenTrack);
+    emit('trackAdded', camTrack);
+    emit('trackRemoved', camTrack);
+    expect(conference.users['u-screen-revert'].video).toBeUndefined();
+    expect(conference.users['u-screen-revert'].screenshare).toBe(screenTrack);
+
+    screenTrack.videoType = 'camera';
+    emit('trackRemoved', screenTrack);
+    expect(conference.users['u-screen-revert'].screenshare).toBeUndefined();
   });
 });
 

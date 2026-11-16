@@ -102,4 +102,48 @@ describe('JoinPage', () => {
     expect(wrapper.findComponent(AccessDeniedPage).exists()).toBe(true);
     wrapper.unmount();
   });
+
+  it('renders PIN prompt when pin is required and submits entered PIN', async () => {
+    check.mockImplementation(async (_id: string, pin?: string) => {
+      if (!pin) {
+        state.value = { status: 'denied', reason: 'pin_required' };
+        return { status: 'denied', reason: 'pin_required' };
+      }
+      if (pin === '1234') {
+        state.value = { status: 'granted' };
+        return { status: 'granted', jwt: null, displayName: 'Guest', jitsiRoom: 'room-a' };
+      }
+      state.value = { status: 'denied', reason: 'invalid_pin' };
+      return { status: 'denied', reason: 'invalid_pin' };
+    });
+
+    const pinia = createPinia();
+    const router = await createTestRouter('/join/room-a?grant=g');
+    const replace = vi.spyOn(router, 'replace');
+    const wrapper = mount(JoinPage, {
+      props: { id: 'room-a' },
+      global: { plugins: [pinia, router] },
+    });
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.text()).toContain('Meeting PIN Required');
+    const input = wrapper.find('input[type="password"]');
+    expect(input.exists()).toBe(true);
+
+    await input.setValue('9999');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.text()).toContain('Incorrect meeting PIN');
+
+    await input.setValue('1234');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+    await nextTick();
+
+    expect(check).toHaveBeenCalledWith('room-a', '1234');
+    expect(replace).toHaveBeenCalledWith({ name: 'session', params: { id: 'room-a' } });
+    wrapper.unmount();
+  });
 });

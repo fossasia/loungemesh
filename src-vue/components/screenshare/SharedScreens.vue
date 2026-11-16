@@ -6,7 +6,6 @@ import ScreenshareVideo from './ScreenshareVideo.vue';
 import ExpandedScreenshare from './ExpandedScreenshare.vue';
 import AppIcon from '../ui/AppIcon.vue';
 
-import { getVectorDistance } from '@/utils/vector';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 
 const conference = useConferenceStore();
@@ -15,11 +14,11 @@ const features = useSessionFeaturesStore();
 
 const isCollapsed = ref(false);
 const poppedOutIds = ref<string[]>([]);
-const showLocalPreview = ref(false);
 
 const screenshares = computed(() => {
   // Access usersEpoch to reactivity trigger on remote user updates
   conference.usersEpoch;
+  if (features.isLobbyBlocked) return [];
   const list = [];
 
   if (local.screenshare) {
@@ -34,11 +33,6 @@ const screenshares = computed(() => {
 
   for (const [id, user] of Object.entries(conference.users)) {
     if (user.screenshare) {
-      const dist = getVectorDistance(local.pos, user.pos);
-      const isPresenter = features.stageOccupantId === id;
-      if (dist > 650 && !isPresenter) {
-        continue;
-      }
       list.push({
         id,
         name: user.user?._displayName || 'Friendly Sphere',
@@ -155,17 +149,7 @@ function toggleScreenshareAudio(item: any) {
                 >
                   <AppIcon :name="item.isAudioMuted ? 'volume-x' : 'volume-2'" :size="14" />
                 </button>
-                <template v-if="item.id === 'local' || item.id === local.id || item.name === 'You'">
-                  <button
-                    class="previewToggleButton"
-                    type="button"
-                    @click.stop="showLocalPreview = !showLocalPreview"
-                    :title="showLocalPreview ? 'Hide preview' : 'Show preview'"
-                  >
-                    <AppIcon :name="showLocalPreview ? 'eye-off' : 'eye'" :size="14" />
-                  </button>
-                </template>
-                <template v-else>
+                <template v-if="item.id !== 'local' && item.id !== local.id && item.name !== 'You'">
                   <button
                     class="expandButton"
                     type="button"
@@ -176,7 +160,7 @@ function toggleScreenshareAudio(item: any) {
                   </button>
                 </template>
               </div>
-              <div class="videoContainer" v-if="item.id !== 'local' && item.id !== local.id && item.name !== 'You' || showLocalPreview">
+              <div class="videoContainer">
                 <ScreenshareVideo :track="item.track" />
               </div>
             </div>
@@ -270,7 +254,7 @@ function toggleScreenshareAudio(item: any) {
   top: 104px;
   width: 300px;
   max-height: calc(100vh - 200px);
-  z-index: 4000; /* below footer, above room items */
+  z-index: 5600;
   background: rgba(245, 247, 255, 0.85);
   backdrop-filter: blur(12px);
   border: 1px solid var(--line-light);
@@ -280,6 +264,17 @@ function toggleScreenshareAudio(item: any) {
   flex-direction: column;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@media (max-width: 768px) {
+  .sharedScreensBox {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 112px;
+    width: auto;
+    max-height: min(42dvh, calc(100dvh - 160px));
+  }
 }
 
 .boxHeader {

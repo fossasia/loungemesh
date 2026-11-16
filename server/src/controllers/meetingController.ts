@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { prisma } from '../config/db.js';
 import { redisClient } from '../config/redis.js';
 import { decryptToken, encryptToken } from '../utils/crypto.js';
 import { OAuth2Client } from 'google-auth-library';
-import { sendMeetingInvitation } from '../utils/mailer.js';
+import { sendLiveMeetingInvitation, sendMeetingInvitation } from '../utils/mailer.js';
+import { LoungeMeshRole, normalizeRole } from '../integration/roles.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -73,6 +75,22 @@ function markdownToHtml(md: string): string {
     .replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>')
     .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
     .replace(/\n/g, '<br />');
+}
+
+// Helper: Sanitize meeting configuration to prevent exposing joinPin or internal fields
+function lobbyFormValue(value: unknown): 'name' | 'details' {
+  return value === 'details' ? 'details' : 'name';
+}
+
+function sanitizeMeetingConfig(configs: any) {
+  if (!configs) return null;
+  return {
+    lobbyEnabled: !!configs.lobbyEnabled,
+    lobbyForm: lobbyFormValue(configs.lobbyForm),
+    stagePromotionEnabled: configs.stagePromotionEnabled !== undefined ? configs.stagePromotionEnabled : true,
+    allowParticipantRecording: !!configs.allowParticipantRecording,
+    notesTemplate: configs.notesTemplate || '',
+  };
 }
 
 // Helper: Sync Event to Google Calendar (Create or Update)
@@ -177,12 +195,14 @@ export async function createMeeting(req: Request, res: Response) {
     recurrence, 
     syncGoogleCal, 
     guestEmails,
+    attendeeEmails,
     moderatorEmails,
     lobbyEnabled,
     stagePromotionEnabled,
     allowParticipantRecording,
     roomDefaults,
-    description
+    description,
+    lobbyForm,
   } = req.body;
 
   if (!title || !roomName) {
@@ -194,7 +214,8 @@ export async function createMeeting(req: Request, res: Response) {
     return res.status(401).json({ error: 'Unauthorized: Account required to create meeting' });
   }
 
-  const guests = Array.isArray(guestEmails) ? guestEmails : [];
+  const attendeeInput = attendeeEmails ?? guestEmails;
+  const guests = Array.isArray(attendeeInput) ? attendeeInput : [];
   const moderators = Array.isArray(moderatorEmails) ? moderatorEmails : [];
 
   try {
@@ -221,7 +242,8 @@ export async function createMeeting(req: Request, res: Response) {
         hostId,
         configs: {
           create: {
-            lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : false,
+            lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : true,
+            lobbyForm: lobbyFormValue(lobbyForm),
             stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : true,
             allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : false,
             roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : undefined,
@@ -274,7 +296,7 @@ export async function createMeeting(req: Request, res: Response) {
     // Cache meeting configuration in Redis
     if (meeting.configs) {
       const cacheKey = `meeting:config:${roomName}`;
-      await redisClient.set(cacheKey, JSON.stringify(meeting.configs));
+      await redisClient.set(cacheKey, JSON.stringify(sanitizeMeetingConfig(meeting.configs)));
     }
 
     return res.status(201).json(meeting);
@@ -331,13 +353,15 @@ export async function updateMeeting(req: Request, res: Response) {
     endTime,
     recurrence,
     guestEmails,
+    attendeeEmails,
     moderatorEmails,
     lobbyEnabled,
     stagePromotionEnabled,
     allowParticipantRecording,
     roomDefaults,
     syncGoogleCal,
-    description
+    description,
+    lobbyForm,
   } = req.body;
 
   try {
@@ -369,7 +393,8 @@ export async function updateMeeting(req: Request, res: Response) {
     const start = startTime ? new Date(startTime) : meeting.startTime;
     const end = endTime ? new Date(endTime) : meeting.endTime;
     const rec = recurrence !== undefined ? recurrence : meeting.recurrence;
-    const guests = Array.isArray(guestEmails) ? guestEmails : meeting.guestEmails;
+    const attendeeInput = attendeeEmails ?? guestEmails;
+    const guests = Array.isArray(attendeeInput) ? attendeeInput : meeting.guestEmails;
     const moderators = Array.isArray(moderatorEmails) ? moderatorEmails : meeting.moderatorEmails;
 
     const updated = await prisma.meeting.update({
@@ -386,12 +411,14 @@ export async function updateMeeting(req: Request, res: Response) {
           upsert: {
             update: {
               lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : undefined,
+              lobbyForm: lobbyForm !== undefined ? lobbyFormValue(lobbyForm) : undefined,
               stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : undefined,
               allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : undefined,
               roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : undefined,
             },
             create: {
-              lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : false,
+              lobbyEnabled: lobbyEnabled !== undefined ? !!lobbyEnabled : true,
+              lobbyForm: lobbyFormValue(lobbyForm),
               stagePromotionEnabled: stagePromotionEnabled !== undefined ? !!stagePromotionEnabled : true,
               allowParticipantRecording: allowParticipantRecording !== undefined ? !!allowParticipantRecording : false,
               roomDefaults: roomDefaults ? JSON.stringify(roomDefaults) : JSON.stringify({ notes: false, whiteboard: false, poll: false, moderator: false }),
@@ -523,52 +550,141 @@ export async function cancelMeeting(req: Request, res: Response) {
 
 // ── Meeting Configurations & Roles (Cashed via Redis) ───────────────────────
 
-// Helper to determine role of a user in a meeting
-async function getMeetingRoleForUser(roomName: string, userId?: string): Promise<'host' | 'moderator' | 'guest'> {
-  if (!userId) return 'guest';
+function sameEmail(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function emailInList(list: string[] | null | undefined, email?: string | null): boolean {
+  if (!email || !list?.length) return false;
+  const needle = email.trim().toLowerCase();
+  return list.some((item) => item.trim().toLowerCase() === needle);
+}
+
+// Helper to determine role of a user in a meeting from the host account and email lists.
+async function getMeetingRoleForUser(roomName: string, userId?: string): Promise<LoungeMeshRole> {
+  if (!userId) return 'attendee';
   try {
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
-      include: { configs: true },
+      include: { configs: true, host: { select: { email: true } } },
     });
-    if (!meeting) return 'guest';
-    if (meeting.hostId === userId) return 'host';
+    if (!meeting) return 'attendee';
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user?.email) return 'attendee';
+    if (sameEmail(user.email, meeting.host?.email) || meeting.hostId === userId) return 'host';
     if (meeting.configs?.userGrants) {
       const grants = JSON.parse(meeting.configs.userGrants);
       if (grants[userId]?.moderator) {
         return 'moderator';
       }
     }
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    if (user && meeting.moderatorEmails.includes(user.email)) {
+    if (emailInList(meeting.moderatorEmails, user.email)) {
       return 'moderator';
     }
-    return 'guest';
+    return 'attendee';
   } catch (err) {
     console.error('Error in getMeetingRoleForUser:', err);
-    return 'guest';
+    return 'attendee';
   }
+}
+
+function invitationForEmail(
+  email: string | null | undefined,
+  meeting: { host?: { email: string } | null; guestEmails: string[]; moderatorEmails: string[] },
+): boolean {
+  if (!email) return false;
+  return (
+    sameEmail(email, meeting.host?.email) ||
+    emailInList(meeting.guestEmails, email) ||
+    emailInList(meeting.moderatorEmails, email)
+  );
+}
+
+function mergeEmailLists(...lists: Array<string[] | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      const normalized = (item || '').trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      out.push(normalized);
+    }
+  }
+  return out;
 }
 
 export async function getMeetingRole(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   try {
-    const meeting = await prisma.meeting.findUnique({
-      where: { roomName },
-      select: { hostId: true, guestEmails: true, moderatorEmails: true }
-    });
+    const [meeting, rawRuntimeInvites] = await Promise.all([
+      prisma.meeting.findUnique({
+        where: { roomName },
+        select: {
+          hostId: true,
+          guestEmails: true,
+          moderatorEmails: true,
+          eventyayEventSlug: true,
+          host: { select: { email: true } },
+        },
+      }),
+      redisClient.get(`meeting:state:${roomName}:invites`),
+    ]);
+    const runtimeInvites: string[] = rawRuntimeInvites ? JSON.parse(rawRuntimeInvites) : [];
     if (!meeting) {
-      return res.json({ role: 'guest', hostId: null, isInvited: false });
+      const isAdHocInvited = emailInList(runtimeInvites, req.user?.email);
+      return res.json({
+        role: 'attendee',
+        hostId: null,
+        hostEmail: null,
+        isInvited: isAdHocInvited,
+        moderatorEmails: [],
+        guestEmails: mergeEmailLists(runtimeInvites),
+      });
     }
+
+    const mergedGuestEmails = mergeEmailLists(meeting.guestEmails, runtimeInvites);
+
+    // For Eventyay-linked meets, role is determined solely by the validated grant session
+    if (meeting.eventyayEventSlug) {
+      if (req.access && req.access.room === roomName) {
+        return res.json({
+          role: normalizeRole(req.access.role),
+          hostId: meeting.hostId,
+          hostEmail: meeting.host?.email || null,
+          isInvited: !req.access.sub?.startsWith('guest:'),
+          moderatorEmails: meeting.moderatorEmails,
+          guestEmails: mergedGuestEmails,
+        });
+      }
+      return res.json({
+        role: 'attendee',
+        hostId: meeting.hostId,
+        hostEmail: meeting.host?.email || null,
+        isInvited: false,
+        moderatorEmails: meeting.moderatorEmails,
+        guestEmails: mergedGuestEmails,
+      });
+    }
+
     const role = await getMeetingRoleForUser(roomName, req.user?.id);
-    let isInvited = false;
-    if (req.user?.email) {
-      isInvited = meeting.guestEmails.includes(req.user.email) || meeting.moderatorEmails.includes(req.user.email);
-    }
-    return res.json({ role, hostId: meeting.hostId, isInvited });
+    const isInvited = invitationForEmail(req.user?.email, {
+      ...meeting,
+      guestEmails: mergedGuestEmails,
+    });
+    return res.json({
+      role,
+      hostId: meeting.hostId,
+      hostEmail: meeting.host?.email || null,
+      isInvited,
+      moderatorEmails: meeting.moderatorEmails,
+      guestEmails: mergedGuestEmails,
+    });
   } catch (err) {
     console.error('Get meeting role error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -584,7 +700,7 @@ export async function getMeetingConfig(req: Request, res: Response) {
     // Check Redis config cache
     const cached = await redisClient.get(cacheKey);
     if (cached) {
-      return res.json(JSON.parse(cached));
+      return res.json(sanitizeMeetingConfig(JSON.parse(cached)));
     }
 
     const meeting = (await prisma.meeting.findUnique({
@@ -596,10 +712,12 @@ export async function getMeetingConfig(req: Request, res: Response) {
       return res.status(404).json({ error: 'Config not found' });
     }
 
-    // Cache in Redis
-    await redisClient.set(cacheKey, JSON.stringify(meeting.configs));
+    const publicConfig = sanitizeMeetingConfig(meeting.configs);
 
-    return res.json(meeting.configs);
+    // Cache in Redis
+    await redisClient.set(cacheKey, JSON.stringify(publicConfig));
+
+    return res.json(publicConfig);
   } catch (err) {
     console.error('Get meeting config error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -608,7 +726,7 @@ export async function getMeetingConfig(req: Request, res: Response) {
 
 export async function updateMeetingConfig(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
-  const { lobbyEnabled, stagePromotionEnabled, allowParticipantRecording, notesTemplate } = req.body;
+  const { lobbyEnabled, lobbyForm, stagePromotionEnabled, allowParticipantRecording, notesTemplate } = req.body;
 
   try {
     const meeting = await prisma.meeting.findUnique({
@@ -636,6 +754,7 @@ export async function updateMeetingConfig(req: Request, res: Response) {
       where: { meetingId: meeting.id },
       update: {
         lobbyEnabled: lobbyEnabled !== undefined ? lobbyEnabled : undefined,
+        lobbyForm: lobbyForm !== undefined ? lobbyFormValue(lobbyForm) : undefined,
         stagePromotionEnabled: stagePromotionEnabled !== undefined ? stagePromotionEnabled : undefined,
         allowParticipantRecording: allowParticipantRecording !== undefined ? allowParticipantRecording : undefined,
         notesTemplate: notesTemplate !== undefined ? notesTemplate : undefined,
@@ -643,6 +762,7 @@ export async function updateMeetingConfig(req: Request, res: Response) {
       create: {
         meetingId: meeting.id,
         lobbyEnabled: !!lobbyEnabled,
+        lobbyForm: lobbyFormValue(lobbyForm),
         stagePromotionEnabled: stagePromotionEnabled !== undefined ? stagePromotionEnabled : true,
         allowParticipantRecording: !!allowParticipantRecording,
         notesTemplate: notesTemplate !== undefined ? notesTemplate : null,
@@ -650,10 +770,11 @@ export async function updateMeetingConfig(req: Request, res: Response) {
     });
 
     // Sync Redis cache
+    const publicConfig = sanitizeMeetingConfig(updatedConfig);
     const cacheKey = `meeting:config:${roomName}`;
-    await redisClient.set(cacheKey, JSON.stringify(updatedConfig));
+    await redisClient.set(cacheKey, JSON.stringify(publicConfig));
 
-    return res.json(updatedConfig);
+    return res.json(publicConfig);
   } catch (err) {
     console.error('Update config error:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -771,21 +892,47 @@ export async function updateNotesState(req: Request, res: Response) {
   }
 }
 
+const DEFAULT_ENABLED_FEATURES = {
+  chat: true,
+  notes: true,
+  whiteboard: true,
+  poll: true,
+  stage: true,
+};
+
 export async function getAccessState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   const cacheKey = `meeting:state:${roomName}:access`;
   try {
     const raw = await redisClient.get(cacheKey);
     if (raw) {
-      return res.json(JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      if (!parsed.enabledFeatures) {
+        parsed.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES };
+      }
+      return res.json(parsed);
     }
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
       include: { configs: true },
     });
-    const defaults = meeting?.configs?.roomDefaults ? JSON.parse(meeting.configs.roomDefaults) : null;
+    let defaults = null;
+    let enabledFeatures = { ...DEFAULT_ENABLED_FEATURES };
+    if (meeting?.configs?.roomDefaults) {
+      try {
+        const parsedDefaults = JSON.parse(meeting.configs.roomDefaults);
+        if (parsedDefaults?.enabledFeatures) {
+          enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...parsedDefaults.enabledFeatures };
+          defaults = parsedDefaults.defaults ?? null;
+        } else {
+          defaults = parsedDefaults;
+        }
+      } catch {
+        defaults = null;
+      }
+    }
     const grants = meeting?.configs?.userGrants ? JSON.parse(meeting.configs.userGrants) : {};
-    const access = { defaults, grants };
+    const access = { defaults, grants, enabledFeatures };
     await redisClient.setEx(cacheKey, 86400, JSON.stringify(access));
     return res.json(access);
   } catch (err) {
@@ -796,9 +943,9 @@ export async function getAccessState(req: Request, res: Response) {
 
 export async function updateAccessDefaults(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
-  const { defaults } = req.body;
-  if (!defaults) {
-    return res.status(400).json({ error: 'Missing defaults payload' });
+  const { defaults, enabledFeatures } = req.body;
+  if (!defaults && !enabledFeatures) {
+    return res.status(400).json({ error: 'Missing defaults or enabledFeatures payload' });
   }
   try {
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
@@ -814,21 +961,27 @@ export async function updateAccessDefaults(req: Request, res: Response) {
 
     if (!isAnonymousMeeting) {
       const role = await getMeetingRoleForUser(roomName, req.user?.id);
-      if (role !== 'host' && role !== 'moderator') {
-        return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update access defaults' });
+      if (role !== 'host') {
+        return res.status(403).json({ error: 'Forbidden: Only the host can update room defaults or enabled features' });
       }
     }
 
     const cacheKey = `meeting:state:${roomName}:access`;
     const raw = await redisClient.get(cacheKey);
-    const access = raw ? JSON.parse(raw) : { defaults: null, grants: {} };
-    access.defaults = defaults;
+    const access = raw ? JSON.parse(raw) : { defaults: null, grants: {}, enabledFeatures: { ...DEFAULT_ENABLED_FEATURES } };
+    if (defaults !== undefined) {
+      access.defaults = defaults;
+    }
+    if (enabledFeatures !== undefined) {
+      access.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...enabledFeatures };
+    }
     await redisClient.setEx(cacheKey, 86400, JSON.stringify(access));
     if (meeting) {
+      const dbPayload = JSON.stringify({ defaults: access.defaults, enabledFeatures: access.enabledFeatures });
       await prisma.meetingConfig.upsert({
         where: { meetingId: meeting.id },
-        update: { roomDefaults: JSON.stringify(defaults) },
-        create: { meetingId: meeting.id, roomDefaults: JSON.stringify(defaults) },
+        update: { roomDefaults: dbPayload },
+        create: { meetingId: meeting.id, roomDefaults: dbPayload },
       });
     }
     return res.json({ success: true, access });
@@ -858,24 +1011,54 @@ export async function updateAccessGrants(req: Request, res: Response) {
     });
 
     const isAnonymousMeeting = anonUser && meeting.hostId === anonUser.id;
+    let callerRole: LoungeMeshRole = 'attendee';
 
     if (!isAnonymousMeeting) {
-      const role = await getMeetingRoleForUser(roomName, req.user?.id);
-      if (role !== 'host' && role !== 'moderator') {
+      callerRole = await getMeetingRoleForUser(roomName, req.user?.id);
+      if (callerRole !== 'host' && callerRole !== 'moderator') {
         return res.status(403).json({ error: 'Forbidden: Only the host or a moderator can update access grants' });
       }
     }
 
+    // Only host can grant moderator role
+    if (grants.moderator === true && callerRole !== 'host' && !isAnonymousMeeting) {
+      return res.status(403).json({ error: 'Forbidden: Only the host can grant moderator privileges' });
+    }
+
     const cacheKey = `meeting:state:${roomName}:access`;
-    let access;
+    let access: any;
     const raw = await redisClient.get(cacheKey);
     if (raw) {
       access = JSON.parse(raw);
     } else {
-      const defaults = meeting?.configs?.roomDefaults ? JSON.parse(meeting.configs.roomDefaults) : null;
+      let defaults = null;
+      let enabledFeatures = { ...DEFAULT_ENABLED_FEATURES };
+      if (meeting?.configs?.roomDefaults) {
+        try {
+          const parsed = JSON.parse(meeting.configs.roomDefaults);
+          if (parsed?.enabledFeatures) {
+            enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...parsed.enabledFeatures };
+            defaults = parsed.defaults;
+          } else {
+            defaults = parsed;
+          }
+        } catch {}
+      }
       const grantsDb = meeting?.configs?.userGrants ? JSON.parse(meeting.configs.userGrants) : {};
-      access = { defaults, grants: grantsDb };
+      access = { defaults, grants: grantsDb, enabledFeatures };
     }
+
+    const enabled = access.enabledFeatures || DEFAULT_ENABLED_FEATURES;
+    // Check if any granted feature is disabled by host room-wide
+    for (const [feat, val] of Object.entries(grants)) {
+      if (feat !== 'moderator' && val === true && (enabled as Record<string, boolean>)[feat] === false) {
+        return res.status(403).json({
+          error: `Forbidden: Cannot grant "${feat}" because it is disabled by the host for this room`,
+          feature: feat,
+        });
+      }
+    }
+
     access.grants = access.grants || {};
     access.grants[userId] = grants;
     await redisClient.setEx(cacheKey, 86400, JSON.stringify(access));
@@ -889,6 +1072,59 @@ export async function updateAccessGrants(req: Request, res: Response) {
     return res.json({ success: true, access });
   } catch (err) {
     console.error('Update access grants error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function getRoleSnapshot(req: Request, res: Response) {
+  const roomName = req.params.roomName as string;
+  try {
+    const meeting = await prisma.meeting.findUnique({
+      where: { roomName },
+      select: { hostId: true, eventyayEventSlug: true, configs: true },
+    });
+    if (!meeting) {
+      return res.status(404).json({ error: 'Meeting not found' });
+    }
+
+    let role: 'host' | 'moderator' | 'attendee' = 'attendee';
+    const userId = req.user?.id || (req.access?.sub) || 'anonymous';
+    if (meeting.eventyayEventSlug) {
+      if (req.access && req.access.room === roomName) {
+        role = normalizeRole(req.access.role) as any;
+      }
+    } else {
+      role = (await getMeetingRoleForUser(roomName, req.user?.id)) as any;
+    }
+
+    const accessKey = `meeting:state:${roomName}:access`;
+    const raw = await redisClient.get(accessKey);
+    let enabledFeatures = { ...DEFAULT_ENABLED_FEATURES };
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.enabledFeatures) {
+          enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...parsed.enabledFeatures };
+        }
+      } catch {}
+    } else if (meeting.configs?.roomDefaults) {
+      try {
+        const parsed = JSON.parse(meeting.configs.roomDefaults);
+        if (parsed?.enabledFeatures) {
+          enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...parsed.enabledFeatures };
+        }
+      } catch {}
+    }
+
+    const exp = Math.floor(Date.now() / 1000) + 120;
+    const token = jwt.sign(
+      { sub: userId, room: roomName, role, enabledFeatures },
+      process.env.JWT_SECRET || 'fallback-jwt-secret-for-dev',
+      { expiresIn: '120s' }
+    );
+    return res.json({ token, role, enabledFeatures, exp });
+  } catch (err) {
+    console.error('getRoleSnapshot error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -1021,6 +1257,270 @@ export async function clearBackgroundState(req: Request, res: Response) {
     return res.json({ success: true });
   } catch (err) {
     console.error('Clear background state error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+const INVITE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function inviteMeetingAttendees(req: Request, res: Response) {
+  const roomName = req.params.roomName as string;
+  const rawInput = req.body?.emails ?? req.body?.email;
+  const rawList: string[] = Array.isArray(rawInput)
+    ? rawInput.map((item) => String(item || ''))
+    : typeof rawInput === 'string'
+      ? rawInput.split(/[,\s;]+/)
+      : [];
+
+  const validEmails = mergeEmailLists(rawList).filter((email) => INVITE_EMAIL_REGEX.test(email));
+  if (validEmails.length === 0) {
+    return res.status(400).json({ error: 'At least one valid email address is required' });
+  }
+
+  try {
+    const meeting = await prisma.meeting.findUnique({
+      where: { roomName },
+      include: {
+        configs: true,
+        host: { select: { email: true, displayName: true } },
+      },
+    });
+
+    const invitesKey = `meeting:state:${roomName}:invites`;
+    const rawRuntimeInvites = await redisClient.get(invitesKey);
+    const runtimeInvites: string[] = rawRuntimeInvites ? JSON.parse(rawRuntimeInvites) : [];
+
+    const protoHeader = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+    const hostHeader = req.headers.host || 'localhost:8780';
+
+    if (meeting) {
+      if (!meeting.eventyayEventSlug) {
+        const anonUser = await prisma.user.findFirst({
+          where: { email: 'anonymous@loungemesh.local' },
+        });
+        const isAnonymousMeeting = Boolean(anonUser && meeting.hostId === anonUser.id);
+        if (!isAnonymousMeeting) {
+          const callerRole = await getMeetingRoleForUser(roomName, req.user?.id);
+          if (callerRole !== 'host' && callerRole !== 'moderator') {
+            return res
+              .status(403)
+              .json({ error: 'Forbidden: Only the host or a moderator can invite attendees' });
+          }
+        }
+      }
+
+      const newlyAdded = validEmails.filter(
+        (email) =>
+          !sameEmail(email, meeting.host?.email) &&
+          !emailInList(meeting.moderatorEmails, email) &&
+          !emailInList(meeting.guestEmails, email) &&
+          !emailInList(runtimeInvites, email),
+      );
+
+      const mergedGuests = mergeEmailLists(meeting.guestEmails, runtimeInvites, validEmails).filter(
+        (email) => !sameEmail(email, meeting.host?.email) && !emailInList(meeting.moderatorEmails, email),
+      );
+
+      if (newlyAdded.length > 0) {
+        await prisma.meeting.update({
+          where: { id: meeting.id },
+          data: { guestEmails: mergedGuests },
+        });
+      }
+      await redisClient.setEx(invitesKey, 86400, JSON.stringify(mergedGuests));
+
+      const recipientsToNotify = newlyAdded.length > 0 ? newlyAdded : validEmails;
+      const inviterName =
+        req.user?.displayName || req.access?.name || meeting.host?.displayName || 'Host';
+      const inviterEmail =
+        req.user?.email || meeting.host?.email || 'noreply@loungemesh.com';
+
+      let emailSent = false;
+      if (meeting.isScheduled && meeting.startTime && meeting.endTime) {
+        if (meeting.googleEventId) {
+          await syncGoogleCalendarEvent(
+            meeting.hostId,
+            {
+              title: meeting.title,
+              description: meeting.description,
+              roomName: meeting.roomName,
+              startTime: meeting.startTime,
+              endTime: meeting.endTime,
+              recurrence: meeting.recurrence,
+              guestEmails: mergedGuests,
+              moderatorEmails: meeting.moderatorEmails,
+            },
+            meeting.googleEventId,
+            req,
+          );
+          emailSent = true;
+        } else {
+          await sendMeetingInvitation({
+            title: meeting.title,
+            roomName: meeting.roomName,
+            startTime: meeting.startTime,
+            endTime: meeting.endTime,
+            recurrence: meeting.recurrence || 'NONE',
+            guestEmails: recipientsToNotify,
+            hostName: inviterName,
+            hostEmail: inviterEmail,
+            hostHeader,
+            protocol: protoHeader,
+          });
+          emailSent = true;
+        }
+      } else {
+        emailSent = await sendLiveMeetingInvitation({
+          title: meeting.title || roomName,
+          roomName: meeting.roomName,
+          guestEmails: recipientsToNotify,
+          inviterName,
+          inviterEmail,
+          hostHeader,
+          protocol: protoHeader,
+        });
+      }
+
+      return res.json({
+        success: true,
+        addedEmails: newlyAdded,
+        guestEmails: mergedGuests,
+        emailSent,
+      });
+    }
+
+    // Ad-hoc room without a persisted Meeting record
+    const mergedAdHoc = mergeEmailLists(runtimeInvites, validEmails);
+    await redisClient.setEx(invitesKey, 86400, JSON.stringify(mergedAdHoc));
+
+    let emailSent = false;
+    if (req.user || req.access) {
+      emailSent = await sendLiveMeetingInvitation({
+        title: roomName,
+        roomName,
+        guestEmails: validEmails,
+        inviterName: req.user?.displayName || req.access?.name || 'Host',
+        inviterEmail: req.user?.email || 'noreply@loungemesh.com',
+        hostHeader,
+        protocol: protoHeader,
+      });
+    }
+
+    return res.json({
+      success: true,
+      addedEmails: validEmails.filter((email) => !emailInList(runtimeInvites, email)),
+      guestEmails: mergedAdHoc,
+      emailSent,
+    });
+  } catch (err) {
+    console.error('Invite meeting attendees error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function getRoomInitialState(req: Request, res: Response) {
+  const roomName = req.params.roomName as string;
+  try {
+    const meetingPromise = prisma.meeting.findUnique({
+      where: { roomName },
+      include: { configs: true, host: { select: { email: true } } },
+    });
+
+    const wbPromise = redisClient.get(`meeting:state:${roomName}:whiteboard`);
+    const notesPromise = redisClient.get(`meeting:state:${roomName}:notes`);
+    const accessPromise = redisClient.get(`meeting:state:${roomName}:access`);
+    const pollPromise = redisClient.get(`meeting:state:${roomName}:poll`);
+    const bgPromise = redisClient.get(`meeting:state:${roomName}:background`);
+    const invitesPromise = redisClient.get(`meeting:state:${roomName}:invites`);
+
+    const [meeting, rawWb, rawNotes, rawAccess, rawPoll, rawBg, rawInvites] = await Promise.all([
+      meetingPromise,
+      wbPromise,
+      notesPromise,
+      accessPromise,
+      pollPromise,
+      bgPromise,
+      invitesPromise,
+    ]);
+
+    const runtimeInvites: string[] = rawInvites ? JSON.parse(rawInvites) : [];
+    const mergedGuestEmails = mergeEmailLists(meeting?.guestEmails, runtimeInvites);
+
+    let role: 'host' | 'moderator' | 'attendee' = 'attendee';
+    const hostId: string | null = meeting ? meeting.hostId : null;
+    const hostEmail: string | null = meeting?.host?.email || null;
+    let isInvited = false;
+
+    if (meeting) {
+      if (meeting.eventyayEventSlug) {
+        if (req.access && req.access.room === roomName) {
+          role = normalizeRole(req.access.role) as any;
+          isInvited = !req.access.sub?.startsWith('guest:');
+        }
+      } else {
+        role = (await getMeetingRoleForUser(roomName, req.user?.id)) as any;
+        isInvited = invitationForEmail(req.user?.email, {
+          ...meeting,
+          guestEmails: mergedGuestEmails,
+        });
+      }
+    } else {
+      isInvited = emailInList(mergedGuestEmails, req.user?.email);
+    }
+
+    const config = sanitizeMeetingConfig(meeting?.configs);
+    const strokes = rawWb ? JSON.parse(rawWb) : [];
+    let notes = rawNotes;
+    if (notes === null) {
+      notes = meeting?.configs?.sharedNotes || '';
+    }
+
+    let access: any = null;
+    if (rawAccess) {
+      access = JSON.parse(rawAccess);
+      if (!access.enabledFeatures) {
+        access.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES };
+      }
+    } else {
+      let defaults = null;
+      let enabledFeatures = { ...DEFAULT_ENABLED_FEATURES };
+      if (meeting?.configs?.roomDefaults) {
+        try {
+          const parsedDefaults = JSON.parse(meeting.configs.roomDefaults);
+          if (parsedDefaults?.enabledFeatures) {
+            enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...parsedDefaults.enabledFeatures };
+            defaults = parsedDefaults.defaults ?? null;
+          } else {
+            defaults = parsedDefaults;
+          }
+        } catch {
+          defaults = null;
+        }
+      }
+      const grants = meeting?.configs?.userGrants ? JSON.parse(meeting.configs.userGrants) : {};
+      access = { defaults, grants, enabledFeatures };
+    }
+
+    const poll = rawPoll
+      ? JSON.parse(rawPoll)
+      : meeting?.configs?.activePoll
+      ? JSON.parse(meeting.configs.activePoll)
+      : null;
+
+    const gridBackgroundUrl =
+      rawBg !== null ? rawBg : meeting?.configs?.gridBackgroundUrl || '';
+
+    return res.json({
+      role: { role, hostId, hostEmail, isInvited, moderatorEmails: meeting?.moderatorEmails ?? [], guestEmails: mergedGuestEmails },
+      config,
+      whiteboard: { strokes },
+      notes: { notes },
+      access,
+      poll: { poll },
+      background: { gridBackgroundUrl },
+    });
+  } catch (err) {
+    console.error('getRoomInitialState error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

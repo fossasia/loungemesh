@@ -5,22 +5,34 @@ import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../config/db.js';
 import { redisClient } from '../config/redis.js';
 import { encryptToken } from '../utils/crypto.js';
+import { cookieOptions } from '../config/deploy.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-jwt-secret-for-dev';
-const COOKIE_SECURE = process.env.NODE_ENV === 'production';
+const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Initialize Google OAuth2 client credentials
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 function getBaseUri(req: Request): string {
-  const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
+  const allowedOriginsEnv = process.env.ALLOWED_OAUTH_ORIGINS || 'http://localhost:8780,https://loungemesh.com,https://www.loungemesh.com';
+  const allowedOrigins = allowedOriginsEnv.split(',').map(o => o.trim()).filter(Boolean);
+
+  const loungeUrl = (process.env.LOUNGEMESH_PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (loungeUrl) {
+    return loungeUrl;
+  }
+
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
   const host = req.headers.host || 'localhost:8780';
   const origin = `${proto}://${host}`;
-  const allowedOriginsEnv = process.env.ALLOWED_OAUTH_ORIGINS || 'http://localhost:8780,https://loungemesh.com,https://www.loungemesh.com';
-  const allowedOrigins = allowedOriginsEnv.split(',').map(o => o.trim());
-  const isValid = allowedOrigins.includes(origin) || allowedOrigins.includes(`${proto}://${host.split(':')[0]}`);
-  return isValid ? origin : (allowedOrigins[0] || 'http://localhost:8780');
+  const originNoPort = `${proto}://${host.split(':')[0]}`;
+
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes(originNoPort)) {
+    return origin;
+  }
+
+  return allowedOrigins[0] || origin || 'http://localhost:8780';
 }
 
 function getGoogleClient(req: Request): OAuth2Client {
@@ -63,12 +75,7 @@ export async function signup(req: Request, res: Response) {
     // Sign session JWT
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: COOKIE_SECURE,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie('token', token, cookieOptions(AUTH_COOKIE_MAX_AGE));
 
     return res.status(201).json(user);
   } catch (err) {
@@ -97,12 +104,7 @@ export async function login(req: Request, res: Response) {
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: COOKIE_SECURE,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('token', token, cookieOptions(AUTH_COOKIE_MAX_AGE));
 
     return res.json({
       id: user.id,
@@ -121,7 +123,7 @@ export async function logout(req: Request, res: Response) {
     // Clear session cache in Redis
     await redisClient.del(`session:user:${req.user.id}`);
   }
-  res.clearCookie('token');
+  res.clearCookie('token', cookieOptions(0));
   return res.json({ success: true });
 }
 
@@ -252,12 +254,7 @@ export async function googleCallback(req: Request, res: Response) {
 
     // Set HttpOnly session cookie
     const sessionToken = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('token', sessionToken, {
-      httpOnly: true,
-      secure: COOKIE_SECURE,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('token', sessionToken, cookieOptions(AUTH_COOKIE_MAX_AGE));
 
     // Clear session cache in Redis to trigger refresh
     await redisClient.del(`session:user:${user.id}`);
