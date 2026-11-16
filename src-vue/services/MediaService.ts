@@ -30,6 +30,7 @@ export type MediaServiceEvent =
   | 'participantSpeakingChanged'
   | 'displayNameChanged'
   | 'command'
+  | 'bridgeChannelOpen'
   | 'tokenExpired';
 
 export type MediaServiceEventMap = {
@@ -47,7 +48,9 @@ export type MediaServiceEventMap = {
   participantPropertyChanged: [id: string, properties: Record<string, unknown>];
   participantSpeakingChanged: [id: string, speaking: boolean];
   displayNameChanged: [id: string, displayName: string];
-  command: [name: string, payload: { value: string }];
+  command: [name: string, payload: { value: string }, senderId?: string];
+  /** JVB bridge channel is up — receiver constraints can be delivered. */
+  bridgeChannelOpen: [];
   /** Fired when Jitsi reports AUTHENTICATION_REQUIRED (JWT expired) */
   tokenExpired: [];
 };
@@ -60,20 +63,27 @@ export interface MediaService {
   leaveRoom(): void;
   createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<MediaTrackHandle[]>;
   addLocalTrack(track: MediaTrackHandle): Promise<void>;
+  removeLocalTrack?(track: MediaTrackHandle): Promise<void>;
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;
   /** 0.0–1.0 gain for spatial audio */
   setParticipantVolume(userId: string, gain: number): void;
+  setTrackMute?(trackId: string, muted: boolean): void;
   /** Tear down remote audio routing when a participant is fully muted. */
   disconnectParticipantAudio?(userId: string): void;
   /** Resume Web Audio after autoplay policy (call on first user gesture). */
   resumePlayback?(): void;
   /** Reconnect remote audio after the output graph was suspended (e.g. local mic off). */
   refreshRemoteAudio?(): void;
+  /** Drop remote playback while this client is waiting in the lobby. */
+  setRemotePlaybackSuppressed?(suppressed: boolean): void;
+  /** Drop one participant's audio until they are admitted. */
+  setParticipantPlaybackSuppressed?(userId: string, suppressed: boolean): void;
   setReceiverConstraints(constraints: ReceiverConstraints): void;
   setDisplayName(name: string): void;
   setLocalParticipantProperty(key: string, value: unknown): void;
   sendTextMessage(text: string): boolean;
   sendCommand(name: string, value: string): void;
+  removeCommand(name: string): void;
   getLocalUserId(): string | undefined;
   getConference(): import('@/types/jitsi').JitsiConference | undefined;
   isConnected(): boolean;

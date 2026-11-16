@@ -1,6 +1,6 @@
 import { stopMediaStreamTracks } from '@/utils/disposeJitsiTrack';
 
-type ClearMediaElementOptions = {
+export type ClearMediaElementOptions = {
   /** Stop underlying capture tracks — use for local preview release only. */
   stopTracks?: boolean;
 };

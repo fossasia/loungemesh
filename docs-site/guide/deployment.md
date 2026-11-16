@@ -1,114 +1,111 @@
 # Deployment
 
-Everything (local dev and production) runs through a single script,
-`scripts/loungemesh.sh`, and a single template, `env.example`. There are no
-separate `env.development.example` / `env.production.example` files and no
-per-task scripts to remember.
+LoungeMesh deployment is unified across local testing and production through a single automation script, `scripts/loungemesh.sh`, and configuration template, `env.example`.
 
-For a step-by-step AWS free-tier walkthrough with HTTPS, see
-[AWS free-tier deploy](/guide/aws-deployment).
+For a step-by-step AWS free-tier walkthrough with HTTPS, see [AWS free-tier deploy](/guide/aws-deployment).
 
-## Local / Docker
+---
+
+## Architecture of the Deployed Stack
+
+The production Docker Compose deployment comprises the following coordinated services:
+
+| Container | Image / Source | Role |
+|---|---|---|
+| `loungemesh` | Custom Dockerfile | Vue 3 SPA frontend & Express REST API server |
+| `postgres` | `postgres:15-alpine` | Relational database (Prisma ORM) |
+| `redis` | `redis:7-alpine` | In-memory session cache for whiteboard, notes & polls |
+| `jitsi-web` | `jitsi/web` | Jitsi Meet web server & Nginx proxy |
+| `prosody` | `jitsi/prosody` | XMPP signaling server with auto-tuned rate limits |
+| `jicofo` | `jitsi/jicofo` | Focus component managing conference bridge channels |
+| `jvb` | `jitsi/jvb` | Jitsi Videobridge forwarding WebRTC audio/video |
+
+---
+
+## Local / Staging Docker Deployment
 
 ```bash
-npm run setup          # = loungemesh.sh dev: writes .env, auto-detects your LAN IP
-npm run docker:up      # LoungeMesh :8780, Jitsi :8001
+# 1. Generate .env and auto-detect LAN/Docker host IP
+npm run setup
+
+# 2. Start all services
+npm run docker:up
 ```
 
-`npm run setup` needs **zero configuration** — it copies `env.example` to `.env`
-(generating Jitsi passwords) and fills `DOCKER_HOST_ADDRESS` with your detected
-LAN IP so other devices on the network can reach the bridge.
+`npm run setup` copies `env.example` to `.env` (generating strong cryptographically secure passwords for Jitsi and database services) and detects `DOCKER_HOST_ADDRESS`.
 
-## Production server
+---
 
-First time on a fresh Linux host (installs Docker + Caddy, writes `.env`, gets
-HTTPS certificates, and deploys):
+## Production Server Provisioning
+
+### First-Time Bootstrap
+On a fresh Linux host (Ubuntu 22.04+ or Debian 12), the bootstrap command installs Docker and Caddy, creates `.env`, provisions Let's Encrypt HTTPS certificates, and deploys the stack:
 
 ```bash
 ./scripts/loungemesh.sh bootstrap \
   --app-host=loungemesh.example.com \
-  --jitsi-host=jitsi.example.com \
   --email=admin@example.com \
   --deploy
-# --public-ip is auto-detected from the host; pass --public-ip=1.2.3.4 to override
 ```
+*`--public-ip` is auto-detected; pass `--public-ip=1.2.3.4` to override explicitly if behind a NAT.*
 
-Redeploy after `git pull`:
+### Redeploying After Updates
+After pulling the latest code via git:
 
 ```bash
-npm run deploy         # = loungemesh.sh deploy
+npm run deploy         # = ./scripts/loungemesh.sh deploy
 ```
 
-`deploy` re-merges `.env` from `env.example` (**existing passwords and keys are
-kept**) and rebuilds. No manual `.env` edits are needed.
+`deploy` safely re-merges `.env` with `env.example` (**preserving existing database secrets, JWT keys, and passwords**) and initiates a rebuild:
+1. Re-validates the host address.
+2. Builds the LoungeMesh SPA with production Brotli/gzip compression.
+3. Automatically awaits Prosody configuration files via `wait_for_prosody_config` (90s finite deadline).
+4. Applies Prosody rate limit (128 kb/s) and stream buffer (25 stanzas) patches.
+5. Reloads Prosody safely (`prosodyctl reload`).
+6. Verifies WebSocket endpoints on the bridge.
 
-### Dynamic / changing public IP
-
-If the server's public IP can change (e.g. an Elastic IP is reassigned), deploy
-with `--auto-ip` so `DOCKER_HOST_ADDRESS` is re-detected on every deploy:
+### Dynamic Public IP Handling
+If the host server IP can change (e.g., an AWS EC2 instance without an Elastic IP), pass `--auto-ip`:
 
 ```bash
 ./scripts/loungemesh.sh deploy --auto-ip
 ```
 
-This is exactly what CI runs, so auto-deploys keep working across IP changes.
+---
 
-## CI / auto-deploy
+## CI / Auto-Deployment
 
-`.github/workflows/ci.yml` runs typecheck, unit tests with coverage, build, docs
-build, a Docker Compose config validation, and Playwright e2e. On a push to
-`main`/`master`/`dev` it deploys over SSH **only if** the `DEPLOY_HOST` Actions
-variable is set. The deploy step runs `loungemesh.sh deploy --auto-ip` on the
-server, so it tolerates IP changes.
+`.github/workflows/ci.yml` runs type-checking, unit tests with 100% coverage, production builds, docs build, Docker config validation, and Playwright e2e tests.
 
-Required GitHub **Actions variables / secrets**:
+On merges to `main`, CI triggers deployment over SSH if the `DEPLOY_HOST` variable is configured.
 
-| Kind | Name | Value |
-|------|------|-------|
-| Variable | `DEPLOY_HOST` | Server public IP / hostname |
-| Variable | `DEPLOY_PATH` | App dir on server (optional, default `/opt/loungemesh`) |
-| Secret | `DEPLOY_USER` | SSH user (e.g. `ubuntu`) |
-| Secret | `DEPLOY_SSH_PRIVATE_KEY` | Private key for that user |
+### Required GitHub Secrets & Variables
+| Kind | Name | Description |
+|---|---|---|
+| Variable | `DEPLOY_HOST` | Server public IP or domain name |
+| Variable | `DEPLOY_PATH` | Application directory on server (default: `/opt/loungemesh`) |
+| Secret | `DEPLOY_USER` | SSH user (e.g., `ubuntu`) |
+| Secret | `DEPLOY_SSH_PRIVATE_KEY` | Private SSH key for automated deployment |
 
-`.env` is never committed; CI only ever copies `env.example`, so no real secrets
-live in GitHub.
+---
 
-## Fixing a broken bridge (no audio/video)
+## Fixing Bridge IP Advertisement
 
-If browser logs show `colibri-ws/172.18.0.x` (the Docker bridge IP) instead of
-your public IP, the JVB is advertising the wrong address. Fix the running bridge
-without a full redeploy:
+If client browser logs report `colibri-ws/172.18.0.x` (internal Docker IP) instead of the server's public IP, the bridge is advertising the internal container IP. Fix it in place:
 
 ```bash
-npm run fix:jvb        # = loungemesh.sh fix-jvb, public IP auto-detected
+npm run fix:jvb        # Auto-detects public IP and reconfigures JVB
 ```
 
-## Production build (static only)
+---
 
-```bash
-npm ci
-npm run build
-```
+## Nginx & Security Headers
 
-`vite-plugin-compression2` emits `.gz` and `.br` siblings. Output in `dist/`.
-
-## nginx
-
-`nginx/default.conf.template` enables `gzip_static`, long-cache assets, an SPA
-fallback, a CSP `frame-ancestors` controlled by `NGINX_ALLOW_IFRAME_FROM`, and a
-same-origin `/libs/` proxy to the `jitsi-web` container so `lib-jitsi-meet` is
-always served from the exact image/tag the JVB runs (no vendored copies to drift).
-
-## iframe embedding
-
-```bash
-NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://video.eventyay.com"
-```
-
-## Eventyay plugin
-
-See [Eventyay integration](/guide/eventyay-integration).
-
-## Docs site
-
-See [Publishing docs](/guide/publishing-docs).
+The reverse proxy configuration (`nginx/default.conf.template`) includes:
+- **Client Real-IP Extraction**: `set_real_ip_from` and `real_ip_header X-Forwarded-For` so rate limits accurately track client origins.
+- **Rate Limiting**: `50r/s burst=100` protecting API and media signaling from abuse.
+- **CSP Frame Ancestors**: Configured via `NGINX_ALLOW_IFRAME_FROM` to allow embedding within Eventyay portals:
+  ```bash
+  NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://video.eventyay.com"
+  ```
+- **Static Asset Caching**: 1-year immutable cache headers for hashed Vite chunks and pre-compressed `.br` / `.gz` files.

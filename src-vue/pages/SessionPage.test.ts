@@ -4,9 +4,121 @@ import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { connectAndJoinTestConference } from '@/test/jitsiTestContext';
 import { useLocalStore } from '@/stores/localStore';
+import { useConferenceStore } from '@/stores/conferenceStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
 import AppIcon from '@/components/ui/AppIcon.vue';
 import SessionPage from './SessionPage.vue';
+import { playUiSound } from '@/utils/uiSounds';
+import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
+
+vi.mock('@/utils/uiSounds', () => ({
+  playUiSound: vi.fn(),
+  resetUiSoundsForTests: vi.fn(),
+}));
+
+vi.mock('@/components/screenshare/SharedScreens.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'SharedScreens',
+  __name: 'SharedScreens',
+  default: {
+    name: 'SharedScreens',
+    template: '<div class="shared-screens-mock" />',
+  },
+}));
+
+vi.mock('@/components/chat/ChatPanel.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'ChatPanel',
+  __name: 'ChatPanel',
+  default: {
+    name: 'ChatPanel',
+    template: '<div class="chat-stub" />',
+  },
+}));
+
+vi.mock('@/components/stage/StagePresentation.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'StagePresentation',
+  __name: 'StagePresentation',
+  default: {
+    name: 'StagePresentation',
+    template: '<div class="stage-presentation-stub" />',
+  },
+}));
+
+vi.mock('@/components/session/SessionTools.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'SessionTools',
+  __name: 'SessionTools',
+  default: {
+    name: 'SessionTools',
+    template: '<div class="session-tools-stub" />',
+  },
+}));
+
+vi.mock('@/components/session/SessionFeaturePanels.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'SessionFeaturePanels',
+  __name: 'SessionFeaturePanels',
+  default: {
+    name: 'SessionFeaturePanels',
+    template: '<div class="session-panels-stub" />',
+  },
+}));
+
+vi.mock('@/components/session/LobbyOverlay.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'LobbyOverlay',
+  __name: 'LobbyOverlay',
+  default: {
+    name: 'LobbyOverlay',
+    template: '<div />',
+  },
+}));
+
+vi.mock('@/components/session/WhiteboardOverlay.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'WhiteboardOverlay',
+  __name: 'WhiteboardOverlay',
+  default: {
+    name: 'WhiteboardOverlay',
+    template: '<div />',
+  },
+}));
+
+vi.mock('@/components/stage/StagePreviewDialog.vue', () => ({
+  __esModule: true,
+  __v_isVNode: false,
+  __isTeleport: false,
+  __isKeepAlive: false,
+  name: 'StagePreviewDialog',
+  __name: 'StagePreviewDialog',
+  default: {
+    name: 'StagePreviewDialog',
+    template: '<button class="stage-preview-dialog-stub" @click="$emit(\'close\')">Close Dialog</button>',
+  },
+}));
 
 /** Stub async SessionPage children so imports do not finish after test teardown. */
 const sessionStubs = {
@@ -16,23 +128,66 @@ const sessionStubs = {
   Room: { template: '<div><slot /></div>' },
   RemoteUsers: { template: '<div />' },
   LocalUser: { template: '<div />' },
-  FooterBar: { template: '<div><slot /><slot name="right" /></div>' },
-  StageButton: { template: '<div />' },
   ScreenshareButton: { template: '<div />' },
+  StagePresentation: { template: '<div class="stage-presentation-stub" />' },
   ZoomControls: { template: '<div class="zoom-stub" />' },
   SessionTools: { template: '<div class="session-tools-stub" />' },
   SessionFeaturePanels: { template: '<div class="session-panels-stub" />' },
   LobbyOverlay: { template: '<div />' },
   ChatPanel: { template: '<div class="chat-stub" />' },
-  StagePanel: { template: '<div />' },
   WhiteboardOverlay: { template: '<div />' },
 };
 
 describe('SessionPage', () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    const features = useSessionFeaturesStore();
+    features.configLoaded = true;
+    features.lobbyEnabled = false;
+  });
 
   afterEach(async () => {
     await flushPromises();
+  });
+
+  it('hides shared screens while stage mode is active', async () => {
+    const features = useSessionFeaturesStore();
+    features.stageOccupantId = 'presenter';
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('.shared-screens-mock').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows the stage view for everyone, including the occupant', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('presenter');
+    features.stageOccupantId = 'presenter';
+    local.onStage = true;
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('.stage-presentation-stub').exists()).toBe(true);
+    wrapper.unmount();
+
+    local.setMyID('viewer');
+    features.stageOccupantId = 'presenter';
+    const audience = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(audience.wrapper.find('.stage-presentation-stub').exists()).toBe(true);
+    audience.wrapper.unmount();
   });
 
   it('hides moderator control for non-host participants', async () => {
@@ -47,7 +202,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div class="chat-stub" />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -71,7 +226,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div class="chat-stub" />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -107,11 +262,13 @@ describe('SessionPage', () => {
   });
 
   it('shows mic state and leaves session', async () => {
-    await connectAndJoinTestConference();
     const local = useLocalStore();
+    const features = useSessionFeaturesStore();
     local.setMyID('host');
     local.mute = false;
     local.onStage = true;
+    features.isVerifiedHost = true;
+    features.setHost('host');
 
     const { wrapper, router } = await mountWithApp(SessionPage, {
       route: '/session/loungemesh',
@@ -120,7 +277,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -128,12 +285,12 @@ describe('SessionPage', () => {
       },
     });
     await flushPromises();
+    expect(features.isHost).toBe(true);
     expect(wrapper.findAllComponents(AppIcon).length).toBeGreaterThan(0);
 
     const push = vi.spyOn(router, 'push');
     const stopSpy = vi.spyOn(local, 'stopAllLocalMedia');
     await wrapper.find('[aria-label="Mute"]').trigger('click');
-    // Host leave opens the export dialog; confirm via its Leave button.
     await wrapper.find('.btn-leave-call').trigger('click');
     await flushPromises();
     await wrapper.find('.leaveCard .btn.leave').trigger('click');
@@ -166,7 +323,7 @@ describe('SessionPage', () => {
     await flushPromises();
   });
 
-  it('shows the record button for hosts when recording is supported', async () => {
+  it('shows recording controls in the footer and leave export for hosts', async () => {
     const local = useLocalStore();
     local.setMyID('host');
     useSessionFeaturesStore().setHost('host');
@@ -184,12 +341,20 @@ describe('SessionPage', () => {
     });
     await flushPromises();
     expect(wrapper.find('[aria-label="Record session"]').exists()).toBe(true);
+    expect(wrapper.find('.qualityPicker').exists()).toBe(true);
+    await wrapper.find('.btn-leave-call').trigger('click');
+    await flushPromises();
+    const recordingExport = wrapper
+      .findAll('.leaveCard .export')
+      .find((btn) => btn.text().includes('Recording'));
+    expect(recordingExport?.find('.ext').text()).toBe('.mp4');
     wrapper.unmount();
 
     (globalThis as { MediaRecorder?: unknown }).MediaRecorder = savedRecorder;
     if (savedCapture) HTMLCanvasElement.prototype.captureStream = savedCapture;
     else delete (HTMLCanvasElement.prototype as { captureStream?: unknown }).captureStream;
   });
+
 
   it('handles missing route id param', async () => {
     const { createRouter, createMemoryHistory } = await import('vue-router');
@@ -247,7 +412,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           SessionTools: { template: '<div />' },
           SessionFeaturePanels: { template: '<div />' },
           LobbyOverlay: { template: '<div />' },
@@ -311,7 +476,7 @@ describe('SessionPage', () => {
         stubs: {
           ...sessionStubs,
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           WhiteboardOverlay: {
             props: ['onClose'],
             template: '<button class="wb-close" @click="onClose()">Close</button>',
@@ -334,7 +499,7 @@ describe('SessionPage', () => {
       global: {
         stubs: {
           ChatPanel: { template: '<div />' },
-          StagePanel: { template: '<div />' },
+          StagePresentation: { template: '<div />' },
           ...sessionStubs,
         },
       },
@@ -346,4 +511,542 @@ describe('SessionPage', () => {
     resetSpy.mockRestore();
     wrapper.unmount();
   });
+
+  it('plays persistent invitation sound when stageInvitationPending is true', async () => {
+    vi.mocked(playUiSound).mockClear();
+    vi.useFakeTimers();
+
+    const features = useSessionFeaturesStore();
+    features.stageInvitationPending = false;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    expect(playUiSound).not.toHaveBeenCalled();
+
+    features.stageInvitationPending = true;
+    await flushPromises();
+
+    expect(playUiSound).toHaveBeenLastCalledWith('stageInvite');
+    expect(playUiSound).toHaveBeenCalledTimes(1);
+
+    // Fast-forward time
+    vi.advanceTimersByTime(4000);
+    expect(playUiSound).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(4000);
+    expect(playUiSound).toHaveBeenCalledTimes(3);
+
+    features.stageInvitationPending = false;
+    await flushPromises();
+
+    vi.advanceTimersByTime(4000);
+    expect(playUiSound).toHaveBeenCalledTimes(3); // should stop playing
+
+    vi.useRealTimers();
+    wrapper.unmount();
+  });
+
+  it('renders stageToast when stageMessage is set', async () => {
+    const features = useSessionFeaturesStore();
+    features.stageMessage = 'Stage message toast text';
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    const toast = wrapper.find('.stageToast');
+    expect(toast.exists()).toBe(true);
+    expect(toast.text()).toBe('Stage message toast text');
+    
+    // Clear it
+    features.stageMessage = '';
+    await flushPromises();
+    expect(wrapper.find('.stageToast').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('loads async components when not stubbed', async () => {
+    const features = useSessionFeaturesStore();
+    // Enable stage presentation, whiteboard, and stage preview dialog to trigger all loaders
+    features.stageOccupantId = 'someone';
+    features.panel = 'whiteboard';
+    features.stageInvitationPending = true;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: {
+        stubs: {
+          LocalStoreLogic: true,
+          JitsiConnection: true,
+          PanWrapper: true,
+          Room: true,
+          RemoteUsers: true,
+          LocalUser: true,
+          ScreenshareButton: true,
+          ChatPanel: true,
+        }
+      }
+    });
+    await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('covers all LeaveDialog event handlers and stageBtn toggle on SessionPage', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('host');
+    features.setHost('host');
+
+    // Mock URL object creation APIs
+    const createObjectURL = window.URL.createObjectURL;
+    const revokeObjectURL = window.URL.revokeObjectURL;
+    window.URL.createObjectURL = vi.fn(() => 'blob:url');
+    window.URL.revokeObjectURL = vi.fn();
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    // 1. Trigger stageBtn click
+    features.stageInvitationPending = true;
+    await flushPromises();
+    expect(wrapper.vm.showStagePreviewDialog).toBe(true);
+    await wrapper.find('.stageBtn').trigger('click');
+    expect(wrapper.vm.showStagePreviewDialog).toBe(false);
+    await wrapper.find('.stageBtn').trigger('click');
+    expect(wrapper.vm.showStagePreviewDialog).toBe(true);
+
+    // 2. Show LeaveDialog
+    await wrapper.find('.btn-leave-call').trigger('click');
+    await flushPromises();
+
+    const leaveDialog = wrapper.findComponent({ name: 'LeaveDialog' });
+    expect(leaveDialog.exists()).toBe(true);
+
+    // 3. Emit all event handlers
+    leaveDialog.vm.$emit('export-notes');
+    leaveDialog.vm.$emit('export-whiteboard');
+    leaveDialog.vm.$emit('export-recording');
+    leaveDialog.vm.$emit('toggle-recording', '720p');
+    leaveDialog.vm.$emit('update:quality', '480p');
+    leaveDialog.vm.$emit('cancel');
+
+    await flushPromises();
+    wrapper.unmount();
+
+    // Restore URL mocks
+    window.URL.createObjectURL = createObjectURL;
+    window.URL.revokeObjectURL = revokeObjectURL;
+  });
+
+  it('covers remaining template logic (StagePreviewDialog close, stage presentation, panel backdrop click, and record settings)', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+
+    // Set up state. stageInvitationPending=true with isLocalStageOccupant=false triggers showStagePreviewDialog=true.
+    local.setMyID('host');
+    features.setHost('host');
+    local.onStage = false;
+    features.stageOccupantId = '';
+    features.stageInvitationPending = false;
+    features.panel = 'moderator'; // renders panelBackdrop
+
+    // Mock MediaRecorder support for SessionRecordButton
+    const savedRecorder = (globalThis as { MediaRecorder?: unknown }).MediaRecorder;
+    const savedCapture = HTMLCanvasElement.prototype.captureStream;
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = function MockRecorder() {} as never;
+    HTMLCanvasElement.prototype.captureStream = function () {
+      return {} as MediaStream;
+    } as never;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: {
+        stubs: {
+          ...sessionStubs,
+          StagePreviewDialog: {
+            template: '<button class="stage-preview-dialog-stub" @click="$emit(\'close\')">Close Dialog</button>'
+          }
+        }
+      },
+    });
+    await flushPromises();
+
+    // Trigger watcher to show StagePreviewDialog
+    features.stageInvitationPending = true;
+    await flushPromises();
+
+    // Verify backdrop exists and click it to dismiss panel
+    const backdrop = wrapper.find('.panelBackdrop');
+    expect(backdrop.exists()).toBe(true);
+    await backdrop.trigger('click');
+    expect(features.panel).toBe('');
+
+    // Click close on StagePreviewDialog stub to emit close event
+    const dialogCloseBtn = wrapper.find('.stage-preview-dialog-stub');
+    expect(dialogCloseBtn.exists()).toBe(true);
+    await dialogCloseBtn.trigger('click');
+    expect(wrapper.vm.showStagePreviewDialog).toBe(false);
+
+    // Set stage mode active to render StagePresentation
+    local.onStage = true;
+    features.stageOccupantId = 'host';
+    await flushPromises();
+    expect(wrapper.find('.stage-presentation-stub').exists()).toBe(true);
+
+    // Verify SessionRecordButton is rendered and interact with it
+    const recordBtn = wrapper.find('[aria-label="Record session"]');
+    expect(recordBtn.exists()).toBe(true);
+    await recordBtn.trigger('click'); // triggers @toggle
+
+    const select = wrapper.find('.qualityPicker');
+    expect(select.exists()).toBe(true);
+    (select.element as HTMLSelectElement).value = '480p';
+    await select.trigger('change'); // triggers v-model update
+    expect(wrapper.vm.selectedQuality).toBe('480p');
+
+    wrapper.unmount();
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = savedRecorder;
+    if (savedCapture) HTMLCanvasElement.prototype.captureStream = savedCapture;
+    else delete (HTMLCanvasElement.prototype as { captureStream?: unknown }).captureStream;
+  });
+
+  it('renders lobby notification banner for host/moderator and handles admit/deny', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.lobbyWaiting = [
+      { id: 'guest-1', name: 'Bob', email: 'bob@example.com', reason: 'To present' }
+    ];
+
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    // Click trigger to open dropdown
+    const trigger = wrapper.find('.lobbyMenuBtn');
+    expect(trigger.exists()).toBe(true);
+    await trigger.trigger('click');
+
+    // Check dropdown render
+    const dropdown = wrapper.find('.lobbyDropdownCard');
+    expect(dropdown.exists()).toBe(true);
+    expect(dropdown.text()).toContain('Bob');
+    expect(dropdown.text()).toContain('bob@example.com');
+    expect(dropdown.text()).toContain('To present');
+
+    // Click Admit
+    await dropdown.find('.btnAdmit').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"approve"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-1"'));
+
+    // Reset lobby wait for reject test
+    features.lobbyWaiting = [
+      { id: 'guest-2', name: 'Alice' }
+    ];
+    await flushPromises();
+
+    // Click Deny
+    await wrapper.find('.btnDeny').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"reject"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-2"'));
+
+    // Test dropdown admit all when multiple waiters exist
+    features.lobbyWaiting = [
+      { id: 'guest-3', name: 'Charlie' },
+      { id: 'guest-4', name: 'Dave' },
+    ];
+    await flushPromises();
+    const dropdownAdmitAll = wrapper.find('.btnDropdownAdmitAll');
+    expect(dropdownAdmitAll.exists()).toBe(true);
+    await dropdownAdmitAll.trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-3"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-4"'));
+
+    // Test dropdown empty state when no waiters
+    features.lobbyWaiting = [];
+    await flushPromises();
+    expect(wrapper.find('.lobbyEmptyState').exists()).toBe(true);
+
+    // Test moderator role badge
+    features.setHost('someone-else');
+    features.isVerifiedHost = false;
+    features.isVerifiedModerator = true;
+    await flushPromises();
+    expect(wrapper.find('.headerRoleBadge .badgeInner.mod').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('renders floating Google Meet lobby admission banner and handles admit, deny, and admit all', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('host');
+    features.setHost('host');
+    features.lobbyWaiting = [
+      { id: 'guest-1', name: 'Bob' },
+      { id: 'guest-2', name: 'Alice' },
+    ];
+
+    const cmdSpy = vi.spyOn(getMediaEngineInstance(), 'sendCommand');
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    const banner = wrapper.find('.gmeetLobbyBanner');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('Bob');
+    expect(banner.text()).toContain('and 1 other(s) want to join');
+    expect(banner.find('.btnBannerAdmitAll').exists()).toBe(true);
+
+    await banner.find('.btnBannerAdmit').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"approve"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-1"'));
+
+    // Reset with 2 waiters to test admit all
+    features.lobbyWaiting = [
+      { id: 'guest-1', name: 'Bob' },
+      { id: 'guest-2', name: 'Alice' },
+    ];
+    await flushPromises();
+
+    await banner.find('.btnBannerAdmitAll').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-1"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-2"'));
+
+    // Test banner deny with fallback name
+    features.lobbyWaiting = [
+      { id: 'guest-1', name: '' },
+    ];
+    await flushPromises();
+
+    await banner.find('.btnBannerDeny').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"action":"reject"'));
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"guest-1"'));
+
+    wrapper.unmount();
+  });
+
+  it('shows participants control for attendee and toggles participants panel', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('guest');
+    features.setHost('host');
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    const participantsBtn = wrapper.find('[aria-label="Participants"]');
+    expect(participantsBtn.exists()).toBe(true);
+    await participantsBtn.trigger('click');
+    expect(features.panel).toBe('participants');
+
+    wrapper.unmount();
+  });
+
+  it('renders pending moderation banner and approves/rejects changes', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    local.setMyID('host');
+    features.setHost('host');
+
+    features.pendingModerationChanges = [
+      {
+        id: 'mod-1',
+        type: 'whiteboard',
+        authorId: 'guest-1',
+        authorName: 'Guest 1',
+        payload: { id: 's1', points: [] },
+        timestamp: Date.now(),
+      },
+      {
+        id: 'mod-2',
+        type: 'notes',
+        authorId: 'guest-2',
+        authorName: 'Guest 2',
+        payload: 'test notes',
+        timestamp: Date.now(),
+      },
+    ];
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="mod-pending-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('Whiteboard');
+    expect(banner.text()).toContain('Guest 1');
+
+    const acceptBtn = banner.find('.btnAccept');
+    await acceptBtn.trigger('click');
+    expect(features.pendingModerationChanges).toHaveLength(1);
+
+    const rejectBtn = banner.find('.btnReject');
+    await rejectBtn.trigger('click');
+    expect(features.pendingModerationChanges).toHaveLength(0);
+
+    wrapper.unmount();
+  });
+
+  it('reflects locked mic and camera states on footer controls, header status pill, and role sync', async () => {
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+    const conference = useConferenceStore();
+    const engine = getMediaEngineInstance();
+    const propSpy = vi.spyOn(engine, 'setLocalParticipantProperty');
+    const cmdSpy = vi.spyOn(engine, 'sendCommand');
+
+    local.setMyID('guest-1');
+    features.setHost('host-1');
+    features.configLoaded = false;
+
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+
+    // Header shows Connecting… before configLoaded or while joining, In lobby when blocked, and hides Attendee badge once open
+    features.configLoaded = false;
+    await flushPromises();
+    expect(wrapper.find('.headerRoleBadge .badgeInner.connecting').text()).toContain('Connecting');
+
+    features.configLoaded = true;
+    features.lobbyEnabled = true;
+    await flushPromises();
+    expect(wrapper.find('.headerRoleBadge .badgeInner.lobby').text()).toContain('In lobby');
+
+    features.lobbyEnabled = false;
+    conference.isJoined = false;
+    conference.isJoining = true;
+    await flushPromises();
+    expect(wrapper.find('.headerRoleBadge .badgeInner.connecting').text()).toContain('Connecting');
+
+    conference.isJoining = false;
+    conference.isJoined = true;
+    await flushPromises();
+    expect(wrapper.find('.headerRoleBadge').exists()).toBe(false);
+    expect(propSpy).toHaveBeenCalledWith('role', 'attendee');
+
+    // Active unlocked camera and mic vs moderator-locked camera and mic
+    local.cameraOff = false;
+    local.mute = false;
+    await flushPromises();
+    expect(wrapper.find('[aria-label="Turn off camera"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Mute"]').exists()).toBe(true);
+
+    features.setMediaLock('guest-1', { mic: true, camera: true });
+    await flushPromises();
+    expect(wrapper.find('[aria-label="Camera locked"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Mic locked"]').exists()).toBe(true);
+
+    // Host admission with controlEmail populated attaches email
+    local.setMyID('host-1');
+    features.hostEmail = 'host@example.com';
+    features.lobbyWaiting = [{ id: 'w1', name: 'Waiter 1' }];
+    await flushPromises();
+    await wrapper.find('.btnBannerAdmit').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"email":"host@example.com"'));
+
+    features.lobbyWaiting = [{ id: 'w2', name: 'Waiter 2' }];
+    await flushPromises();
+    await wrapper.find('.btnBannerDeny').trigger('click');
+    expect(cmdSpy).toHaveBeenCalledWith('lobby', expect.stringContaining('"id":"w2"'));
+
+    wrapper.unmount();
+  });
+
+  it('exposes quick Add and Share actions for host and moderators, hidden from attendees', async () => {
+    vi.useFakeTimers();
+    const local = useLocalStore();
+    const features = useSessionFeaturesStore();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    // Attendee does not see quick Add / Share
+    local.setMyID('guest-1');
+    features.setHost('host-1');
+    const { wrapper } = await mountWithApp(SessionPage, {
+      route: '/session/loungemesh',
+      props: { id: 'loungemesh' },
+      global: { stubs: sessionStubs },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="quick-add-attendee-btn"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="quick-share-link-btn"]').exists()).toBe(false);
+
+    // Moderator sees quick Add and Share
+    features.isVerifiedModerator = true;
+    await flushPromises();
+
+    const addBtn = wrapper.find('[data-testid="quick-add-attendee-btn"]');
+    const shareBtn = wrapper.find('[data-testid="quick-share-link-btn"]');
+    expect(addBtn.exists()).toBe(true);
+    expect(shareBtn.exists()).toBe(true);
+
+    await addBtn.trigger('click');
+    expect(features.panel).toBe('moderator');
+    expect(features.moderatorTab).toBe('people');
+    expect(features.peopleActionPane).toBe('add');
+
+    await shareBtn.trigger('click');
+    await flushPromises();
+    expect(features.peopleActionPane).toBe('share');
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/session/loungemesh'));
+    expect(shareBtn.text()).toContain('Copied');
+    expect(features.stageMessage).toBe('Meeting link copied to clipboard!');
+
+    vi.advanceTimersByTime(2000);
+    await flushPromises();
+    expect(shareBtn.text()).toContain('Share');
+
+    // Clipboard failure branch leaves quickShareCopied false
+    writeText.mockRejectedValueOnce(new Error('denied'));
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: undefined,
+    });
+    await shareBtn.trigger('click');
+    await flushPromises();
+    expect(shareBtn.text()).toContain('Share');
+
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
 });
+
+

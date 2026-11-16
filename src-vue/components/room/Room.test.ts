@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { flushPromises } from '@vue/test-utils';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import Room from './Room.vue';
@@ -7,44 +6,16 @@ import Room from './Room.vue';
 describe('Room', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('loads optional background when API succeeds', async () => {
-    vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.test');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ data: { attributes: { 'bg-img-url': 'https://cdn/bg.png' } } }),
-      }),
-    );
+  it('sizes the room from store bounds', async () => {
     const { wrapper } = await mountWithApp(Room, { props: { identifier: 'evt-1' } });
-    await flushPromises();
-    expect(wrapper.find('.room').attributes('style')).toContain('bg.png');
+    const style = wrapper.find('.room').attributes('style');
+    expect(style).toContain('width:');
+    expect(style).toContain('height:');
     wrapper.unmount();
   });
 
-  it('skips fetch when API base is unset but identifier is present', async () => {
-    vi.stubEnv('VITE_EVENTYAY_API_BASE', '');
-    const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
-    const { wrapper } = await mountWithApp(Room, { props: { identifier: 'evt-1' } });
-    await flushPromises();
-    expect(fetchSpy).not.toHaveBeenCalled();
-    wrapper.unmount();
-  });
-
-  it('skips fetch without identifier or API base', async () => {
-    vi.stubEnv('VITE_EVENTYAY_API_BASE', '');
-    const { wrapper } = await mountWithApp(Room, { props: { identifier: '' } });
-    await flushPromises();
-    expect(wrapper.find('.room').attributes('style')).not.toContain('url(');
-    wrapper.unmount();
-  });
-
-  it('ignores failed background fetch', async () => {
-    vi.stubEnv('VITE_EVENTYAY_API_BASE', 'https://eventyay.test');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
-    const { wrapper } = await mountWithApp(Room, { props: { identifier: 'evt-1' } });
-    await flushPromises();
+  it('uses a transparent canvas so the viewport wallpaper shows through', async () => {
+    const { wrapper } = await mountWithApp(Room);
     expect(wrapper.find('.room').attributes('style')).not.toContain('url(');
     wrapper.unmount();
   });

@@ -1,7 +1,27 @@
+# Extract client IP from upstream proxy (Caddy / Docker bridge / Cloudflare)
+set_real_ip_from 127.0.0.1;
+set_real_ip_from 10.0.0.0/8;
+set_real_ip_from 172.16.0.0/12;
+set_real_ip_from 192.168.0.0/16;
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+
+# Rate Limiting configuration based on real client IP
+# We use binary remote address to save space. 10m zone holds ~160,000 IPs.
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=50r/s;
+limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=10r/s;
+
+# Preserving the original request scheme (http vs https) from upstream proxy (Caddy)
+map $http_x_forwarded_proto $pass_access_scheme {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
 server {
     listen 80;
     listen [::]:80;
     server_name _;
+    client_max_body_size 5m;
     root /usr/share/nginx/html;
     index index.html;
 
@@ -55,6 +75,43 @@ server {
     location = /manifest.json {
         add_header Cache-Control "public, max-age=3600";
         try_files $uri =404;
+    }
+
+    # Strict rate-limiting for login/signup endpoints to protect against brute-force
+    location ~ ^/api/auth/(login|signup) {
+        resolver 127.0.0.11 valid=30s ipv6=off;
+        set $backend_upstream server;
+        proxy_pass http://$backend_upstream:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $pass_access_scheme;
+        
+        limit_req zone=auth_limit burst=20 nodelay;
+    }
+
+    location /api/ {
+        resolver 127.0.0.11 valid=30s ipv6=off;
+        set $backend_upstream server;
+        proxy_pass http://$backend_upstream:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $pass_access_scheme;
+
+        limit_req zone=api_limit burst=100 nodelay;
+        proxy_intercept_errors off;
+    }
+
+    error_page 502 503 504 /maintenance.html;
+
+    location = /maintenance.html {
+        internal;
+        add_header Cache-Control "no-store" always;
     }
 
     location / {

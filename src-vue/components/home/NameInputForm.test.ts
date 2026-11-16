@@ -28,12 +28,24 @@ describe('NameInputForm', () => {
     wrapper.unmount();
   });
 
-  it('emits default session name when room input is empty', async () => {
+  it('does not emit when username is empty', async () => {
     const { wrapper } = await mountWithApp(NameInputForm);
+    const inputs = wrapper.findAll('input[type="text"]');
+    await inputs[1].setValue('my-room');
     await wrapper.find('form').trigger('submit');
-    expect(wrapper.emitted('submit')?.[0]).toEqual([
-      { displayName: '', sessionName: conferenceNameDefault },
-    ]);
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('pre-populates display name when user is authenticated', async () => {
+    const { useAuthStore } = await import('@/stores/authStore');
+    const auth = useAuthStore();
+    auth.isAuthenticated = true;
+    auth.user = { displayName: 'Authenticated User', email: 'a@b.com' } as any;
+
+    const { wrapper } = await mountWithApp(NameInputForm);
+    const inputs = wrapper.findAll('input[type="text"]');
+    expect((inputs[0].element as HTMLInputElement).value).toBe('Authenticated User');
     wrapper.unmount();
   });
 });
