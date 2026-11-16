@@ -1,0 +1,227 @@
+import { computed, onBeforeUnmount, ref, watch, type Component, type Ref } from 'vue';
+import { useEditor, Editor } from '@tiptap/vue-3';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import { Markdown } from 'tiptap-markdown';
+import Collaboration from '@tiptap/extension-collaboration';
+import * as Y from 'yjs';
+import {
+  Bold,
+  Code,
+  Heading2,
+  Heading3,
+  Italic,
+  List,
+  ListOrdered,
+  Redo2,
+  Strikethrough,
+  TextQuote,
+  Undo2,
+} from '@lucide/vue';
+
+export function markdownStorage(ed?: { storage: unknown } | null) {
+  return (ed?.storage as { markdown?: { getMarkdown: () => string } } | undefined)?.markdown;
+}
+
+export function getEditorMarkdown(ed?: { storage: unknown } | null): string {
+  return markdownStorage(ed)?.getMarkdown() ?? '';
+}
+
+export type ToolbarAction = {
+  icon: Component;
+  title: string;
+  active?: () => boolean;
+  disabled?: () => boolean;
+  run: () => void;
+};
+
+export function buildToolbarGroups(
+  editor: Ref<Editor | undefined>,
+  toolbarEpoch: Ref<number>,
+): ToolbarAction[][] {
+  toolbarEpoch.value;
+  return [
+    [
+      {
+        icon: Bold,
+        title: 'Bold',
+        active: () => !!editor.value?.isActive('bold'),
+        run: () => editor.value?.chain().focus().toggleBold().run(),
+      },
+      {
+        icon: Italic,
+        title: 'Italic',
+        active: () => !!editor.value?.isActive('italic'),
+        run: () => editor.value?.chain().focus().toggleItalic().run(),
+      },
+      {
+        icon: Strikethrough,
+        title: 'Strikethrough',
+        active: () => !!editor.value?.isActive('strike'),
+        run: () => editor.value?.chain().focus().toggleStrike().run(),
+      },
+      {
+        icon: Code,
+        title: 'Inline code',
+        active: () => !!editor.value?.isActive('code'),
+        run: () => editor.value?.chain().focus().toggleCode().run(),
+      },
+    ],
+    [
+      {
+        icon: Heading2,
+        title: 'Heading 2',
+        active: () => !!editor.value?.isActive('heading', { level: 2 }),
+        run: () => editor.value?.chain().focus().toggleHeading({ level: 2 }).run(),
+      },
+      {
+        icon: Heading3,
+        title: 'Heading 3',
+        active: () => !!editor.value?.isActive('heading', { level: 3 }),
+        run: () => editor.value?.chain().focus().toggleHeading({ level: 3 }).run(),
+      },
+    ],
+    [
+      {
+        icon: List,
+        title: 'Bullet list',
+        active: () => !!editor.value?.isActive('bulletList'),
+        run: () => editor.value?.chain().focus().toggleBulletList().run(),
+      },
+      {
+        icon: ListOrdered,
+        title: 'Numbered list',
+        active: () => !!editor.value?.isActive('orderedList'),
+        run: () => editor.value?.chain().focus().toggleOrderedList().run(),
+      },
+      {
+        icon: TextQuote,
+        title: 'Quote',
+        active: () => !!editor.value?.isActive('blockquote'),
+        run: () => editor.value?.chain().focus().toggleBlockquote().run(),
+      },
+    ],
+    [
+      {
+        icon: Undo2,
+        title: 'Undo',
+        disabled: () => !editor.value?.can().undo(),
+        run: () => editor.value?.chain().focus().undo().run(),
+      },
+      {
+        icon: Redo2,
+        title: 'Redo',
+        disabled: () => !editor.value?.can().redo(),
+        run: () => editor.value?.chain().focus().redo().run(),
+      },
+    ],
+  ];
+}
+
+export function applyRemoteNotesContent(
+  editor: Ref<Editor | undefined>,
+  next: string,
+  getMarkdown: (ed?: { storage: unknown } | null) => string = getEditorMarkdown,
+) {
+  if (!editor.value) return;
+  const current = getMarkdown(editor.value);
+  if (current === next) return;
+
+  const state = editor.value.state;
+  const selection = state?.selection;
+  const { from, to } = selection || { from: 1, to: 1 };
+
+  editor.value.commands.setContent(next, { emitUpdate: false });
+
+  if (state && editor.value.commands.setTextSelection) {
+    const maxPos = state.doc?.content?.size ?? 0;
+    const newFrom = Math.max(1, Math.min(from, maxPos + 1));
+    const newTo = Math.max(1, Math.min(to, maxPos + 1));
+    editor.value.commands.setTextSelection({ from: newFrom, to: newTo });
+  }
+}
+
+export type NotesEditorOptions = {
+  model: Ref<string>;
+  readonly: Ref<boolean>;
+  placeholder: string;
+  onBlur: () => void;
+  ydoc?: Y.Doc;
+};
+
+export function useNotesEditor({ model, readonly, placeholder, onBlur, ydoc }: NotesEditorOptions) {
+  const toolbarEpoch = ref(0);
+
+  const extensions: any[] = [
+    StarterKit.configure({
+      heading: { levels: [2, 3] },
+      codeBlock: false,
+      horizontalRule: false,
+      // Collaboration ships its own history. Leaving StarterKit undo/redo on
+      // crashes the editor on mount ("Unexpected case") so shared notes never open.
+      ...(ydoc ? { undoRedo: false } : {}),
+    }),
+    Placeholder.configure({ placeholder }),
+    Markdown.configure({
+      html: false,
+      transformPastedText: true,
+      transformCopiedText: true,
+    }),
+  ];
+
+  if (ydoc) {
+    const fragment = ydoc.getXmlFragment('default');
+    if (fragment.length === 0) {
+      fragment.insert(0, [new Y.XmlElement('paragraph')]);
+    }
+    extensions.push(
+      Collaboration.configure({
+        document: ydoc,
+      }),
+    );
+  }
+
+  const editor = useEditor({
+    // Collaboration owns the document. Seeding `content` as well makes the first
+    // transaction map a selection onto a Yjs type that is not a root yet.
+    content: ydoc ? undefined : model.value,
+    extensions,
+    editable: !readonly.value,
+    editorProps: {
+      attributes: {
+        class: 'notesEditorContent',
+        'data-testid': 'notes-editor',
+        dir: 'ltr',
+      },
+    },
+    onUpdate: ({ editor: ed }) => {
+      const md = getEditorMarkdown(ed);
+      if (md !== model.value) {
+        model.value = md;
+      }
+    },
+    onBlur,
+    onSelectionUpdate: () => {
+      toolbarEpoch.value += 1;
+    },
+    onTransaction: () => {
+      toolbarEpoch.value += 1;
+    },
+  });
+
+  watch(model, (next) => {
+    applyRemoteNotesContent(editor, next);
+  });
+
+  watch(readonly, (value) => {
+    editor.value?.setEditable(!value);
+  });
+
+  onBeforeUnmount(() => {
+    editor.value?.destroy();
+  });
+
+  const toolbarGroups = computed(() => buildToolbarGroups(editor, toolbarEpoch));
+
+  return { editor, toolbarGroups };
+}

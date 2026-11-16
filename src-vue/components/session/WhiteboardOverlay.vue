@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
+import { useMediaEngine } from '@/composables/useMediaEngine';
 import { whiteboardChrome } from '@/constants/pan';
 import { useWhiteboard } from '@/composables/useWhiteboard';
+import { useWhiteboardLayout } from '@/composables/useWhiteboardLayout';
+import WhiteboardPenToolbar from '@/components/session/WhiteboardPenToolbar.vue';
 import IconButton from '@/components/ui/IconButton.vue';
 import AppIcon from '@/components/ui/AppIcon.vue';
 
@@ -11,66 +14,154 @@ defineProps<{
 }>();
 
 const features = useSessionFeaturesStore();
+const { engine } = useMediaEngine();
+const pendingWhiteboardChanges = computed(() =>
+  features.pendingModerationChanges.filter((c) => c.type === 'whiteboard'),
+);
+const shellRef = ref<HTMLElement | null>(null);
 const surfaceRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const canDraw = computed(() => features.canUseWhiteboard);
-const { bindCanvas, onCanvasDown, onCanvasMove, onCanvasUp, clearWhiteboard } = useWhiteboard(
-  () => features.panel === 'whiteboard',
-  () => canDraw.value,
-);
+const {
+  bindCanvas,
+  penColor,
+  penWidth,
+  onCanvasDown,
+  onCanvasMove,
+  onCanvasUp,
+  clearWhiteboard,
+} = useWhiteboard(() => features.panel === 'whiteboard', () => canDraw.value);
+const {
+  canDrag,
+  overlayStyle,
+  onResizeDown,
+  onResizeMove,
+  onResizeUp,
+  onResizeCancel,
+  onDragDown,
+  onDragMove,
+  onDragUp,
+  onDragCancel,
+} = useWhiteboardLayout(shellRef);
+
+const shellStyle = computed(() => ({
+  top: `${whiteboardChrome.top}px`,
+  right: `${whiteboardChrome.right}px`,
+  bottom: `${whiteboardChrome.bottom}px`,
+  left: `${whiteboardChrome.left}px`,
+}));
 
 watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
 </script>
 
 <template>
-  <div
-    class="wbOverlay"
-    :style="{
-      top: `${whiteboardChrome.top}px`,
-      right: `${whiteboardChrome.right}px`,
-      bottom: `${whiteboardChrome.bottom}px`,
-      left: `${whiteboardChrome.left}px`,
-    }"
-    @pointerdown.stop
-    @wheel.stop
-  >
-    <div class="wbChrome">
-      <span class="wbTitle">Whiteboard</span>
-      <IconButton label="Close whiteboard" ghost @click="onClose">
-        <template #icon><AppIcon name="close" /></template>
-      </IconButton>
-    </div>
-    <div ref="surfaceRef" class="wbSurface">
-      <button
-        v-if="features.canClearWhiteboard"
-        type="button"
-        class="wbClear"
-        @click="clearWhiteboard"
+  <div ref="shellRef" class="wbShell" :style="shellStyle" @wheel.stop>
+    <div class="wbOverlay" :style="overlayStyle" @pointerdown.stop>
+      <div
+        class="wbChrome"
+        :class="{ draggable: canDrag }"
+        @pointerdown="onDragDown"
+        @pointermove="onDragMove"
+        @pointerup="onDragUp"
+        @pointercancel="onDragCancel"
       >
-        Clear
-      </button>
-      <canvas
-        ref="canvasRef"
-        class="wbCanvas"
-        :class="{ readonly: !canDraw }"
-        aria-label="Collaborative whiteboard"
-        @pointerdown="onCanvasDown"
-        @pointermove="onCanvasMove"
-        @pointerup="onCanvasUp"
-        @pointercancel="onCanvasUp"
+        <span class="wbTitle">Whiteboard</span>
+        <IconButton label="Close whiteboard" ghost @click="onClose">
+          <template #icon><AppIcon name="close" /></template>
+        </IconButton>
+      </div>
+      <div ref="surfaceRef" class="wbSurface">
+        <WhiteboardPenToolbar
+          v-if="canDraw"
+          v-model:pen-color="penColor"
+          v-model:pen-width="penWidth"
+        />
+        <button
+          v-if="features.canClearWhiteboard"
+          type="button"
+          class="wbClear"
+          @click="clearWhiteboard"
+        >
+          Clear
+        </button>
+        <div
+          v-if="features.canModerate && pendingWhiteboardChanges.length > 0"
+          class="wbModQueue"
+          data-testid="wb-mod-queue"
+        >
+          <div
+            v-for="item in pendingWhiteboardChanges"
+            :key="item.id"
+            class="wbModRow"
+          >
+            <span class="wbModText">Stroke from {{ item.authorName }} (15s auto-approve)</span>
+            <div class="wbModActions">
+              <button
+                type="button"
+                class="btnAccept"
+                @click="features.approveModerationChange(item.id, engine)"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                class="btnReject"
+                @click="features.rejectModerationChange(item.id, engine)"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        </div>
+        <canvas
+          ref="canvasRef"
+          class="wbCanvas"
+          :class="{ readonly: !canDraw }"
+          aria-label="Collaborative whiteboard"
+          @pointerdown="onCanvasDown"
+          @pointermove="onCanvasMove"
+          @pointerup="onCanvasUp"
+          @pointercancel="onCanvasUp"
+        />
+      </div>
+      <div
+        class="wbResize"
+        role="separator"
+        :aria-orientation="'both' as any"
+        aria-label="Resize whiteboard"
+        title="Drag to resize"
+        @pointerdown="onResizeDown"
+        @pointermove="onResizeMove"
+        @pointerup="onResizeUp"
+        @pointercancel="onResizeCancel"
       />
     </div>
   </div>
 </template>
 
 <style scoped>
-.wbOverlay {
+.wbShell {
   position: fixed;
   z-index: 4500;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+@media (max-width: 768px) {
+  .wbShell {
+    top: 56px !important;
+    right: 8px !important;
+    bottom: 112px !important;
+    left: 8px !important;
+  }
+}
+.wbOverlay {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   box-sizing: border-box;
   pointer-events: auto;
 }
@@ -81,6 +172,13 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
   gap: 12px;
   flex-shrink: 0;
   padding: 0 4px;
+  touch-action: none;
+}
+.wbChrome.draggable {
+  cursor: grab;
+}
+.wbChrome.draggable:active {
+  cursor: grabbing;
 }
 .wbTitle {
   font-weight: var(--fw-medium);
@@ -124,5 +222,97 @@ watch(canvasRef, (el) => bindCanvas(el), { immediate: true });
 .wbCanvas.readonly {
   cursor: default;
   pointer-events: none;
+}
+.wbResize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  cursor: nwse-resize;
+  touch-action: none;
+  z-index: 3;
+  border-bottom-right-radius: var(--radius-sm);
+  background: linear-gradient(
+    135deg,
+    transparent 0 42%,
+    rgba(0, 0, 0, 0.06) 42% 100%
+  );
+}
+.wbResize::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 12px;
+  height: 12px;
+  opacity: 0.75;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--color-mono50),
+    var(--color-mono50) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+.wbResize:hover::after {
+  opacity: 1;
+}
+.wbModQueue {
+  position: absolute;
+  top: 12px;
+  left: 60px;
+  right: 80px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+.wbModRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+.wbModText {
+  font-size: var(--fs-small, 12px);
+  color: var(--color-text-default);
+  font-weight: var(--fw-medium, 500);
+}
+.wbModActions {
+  display: flex;
+  gap: 6px;
+}
+.btnAccept {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnAccept:hover {
+  background: #059669;
+}
+.btnReject {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btnReject:hover {
+  background: #dc2626;
 }
 </style>

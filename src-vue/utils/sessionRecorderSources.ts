@@ -2,8 +2,8 @@ import type { JitsiTrack } from '@/types/jitsi';
 import { collectMediaStreamTracks } from '@/utils/disposeJitsiTrack';
 import type { RecordingVideoSource, SessionRecorderSources } from '@/composables/useSessionRecorder';
 
-type LocalAudioSource = { audio?: JitsiTrack };
-type UsersSource = { users: Record<string, { audio?: JitsiTrack } | undefined> };
+export type LocalAudioSource = { audio?: JitsiTrack };
+export type UsersSource = { users: Record<string, { audio?: JitsiTrack } | undefined> };
 
 export function collectSessionVideoSources(): RecordingVideoSource[] {
   return Array.from(document.querySelectorAll<HTMLVideoElement>('.sessionRoot .userContainer video'))

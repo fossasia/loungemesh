@@ -75,7 +75,11 @@ export function classifySessionError(
   if (/focus|jicofo|conference_error|bridge|colibri|service-unavailable|unavailable/.test(d)) {
     return SESSION_ERROR_CODES.SESSION_UNAVAILABLE;
   }
-  if (/disconnect|connection lost|disconnected/.test(d)) {
+  if (
+    /disconnect|connection lost|disconnected|xml parsing|prefix not bound|not well-formed|namespace/.test(
+      d,
+    )
+  ) {
     return SESSION_ERROR_CODES.CONNECTION_LOST;
   }
   if (context === 'join' || (/join|room join/.test(d) && !/connection failed/.test(d))) {

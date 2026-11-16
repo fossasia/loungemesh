@@ -1,10 +1,11 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import type { SessionRecorder } from '@/composables/useSessionRecorder';
+import { ensureRecordingMp4 } from '@/utils/recordingToMp4';
 
 export type SessionRecordingControls = {
   recordingBlob: Ref<Blob | null>;
   hasRecording: ComputedRef<boolean>;
-  toggleRecording: () => Promise<void>;
+  toggleRecording: (quality?: '720p' | '480p') => Promise<void>;
   stopIfRecording: () => Promise<void>;
   downloadRecording: () => Promise<void>;
 };
@@ -26,17 +27,25 @@ export function useSessionRecording(
     }
   }
 
-  async function toggleRecording(): Promise<void> {
+  async function toggleRecording(quality?: '720p' | '480p'): Promise<void> {
     if (recorder.isRecording.value) {
       await stopIfRecording();
     } else {
-      recorder.start();
+      recorder.start(quality);
     }
   }
 
   async function downloadRecording(): Promise<void> {
     await stopIfRecording();
-    if (recordingBlob.value) exportRecording(recordingBlob.value);
+    const blob = recordingBlob.value;
+    if (!blob?.size) return;
+    try {
+      const mp4Blob = await ensureRecordingMp4(blob);
+      exportRecording(mp4Blob);
+    } catch (error) {
+      console.error('Failed to export session recording as MP4', error);
+      window.alert('Could not export the recording as MP4. Please try again.');
+    }
   }
 
   const hasRecording = computed(() => !!recordingBlob.value || recorder.isRecording.value);

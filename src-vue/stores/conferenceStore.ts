@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
-import { markRaw } from 'vue';
+import { markRaw, toRaw } from 'vue';
+import { isDesktopShareTrack } from '@/utils/screenshareCapture';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
 import { useLocalStore } from '@/stores/localStore';
 import { useSessionFeaturesStore } from '@/stores/sessionFeaturesStore';
@@ -8,6 +9,7 @@ import { spreadInitialUserPosition } from '@/constants/pan';
 import { mediaDebug } from '@/utils/mediaDebug';
 import { conferenceNameDefault } from '@/config/jitsiOptions';
 import { applyChatEdit, createChatMessage } from '@/utils/chatMessage';
+import { decodeChatWireText } from '@/utils/chatWireFormat';
 import { displayNameFromParticipant } from '@/utils/jitsiParticipant';
 
 export type Vector2 = { x: number; y: number };
@@ -20,10 +22,15 @@ export type RemoteUser = {
   pos: Vector2;
   audio?: JitsiTrack;
   video?: JitsiTrack;
+  screenshare?: JitsiTrack;
+  screenshareAudio?: JitsiTrack;
   videoType?: 'camera' | 'desktop';
   properties: Record<string, unknown>;
   /** Plain display-name snapshot — never store a Jitsi participant object. */
   user?: { _displayName?: string };
+  email?: string;
+  userKey?: string;
+  lastSeen?: number;
 };
 
 export type ChatMessage = {
@@ -75,10 +82,12 @@ export const useConferenceStore = defineStore('conference', {
       this.users = { ...this.users, [id]: { ...user, ...patch } };
       if (bumpEpoch) this.usersEpoch += 1;
     },
-    addUser(id: string, participant?: unknown) {
+    addUser(id: string, participant?: unknown, userKey?: string) {
       const displayName = displayNameFromParticipant(participant);
       if (this.users[id]) {
         if (displayName) this.updateUserDisplayName(id, displayName);
+        if (userKey) this.patchUser(id, { userKey }, false);
+        this.recordUserHeartbeat(id);
         return;
       }
       const local = useLocalStore();
@@ -96,33 +105,110 @@ export const useConferenceStore = defineStore('conference', {
           pos: spreadInitialUserPosition(existing),
           properties: {},
           ...(displayName ? { user: { _displayName: displayName } } : {}),
+          userKey,
+          lastSeen: Date.now(),
         },
       });
     },
-    setUserTrack(id: string, kind: 'audio' | 'video', track: JitsiTrack) {
+    dedupeUserByKey(newId: string, userKey: string) {
+      if (!userKey) return;
+      for (const [id, user] of Object.entries(this.users)) {
+        if (id !== newId && user.userKey === userKey) {
+          const next = { ...this.users };
+          delete next[id];
+          this.commitUsers(next);
+          break;
+        }
+      }
+    },
+    recordUserHeartbeat(id: string) {
+      if (this.users[id]) {
+        this.users[id].lastSeen = Date.now();
+      }
+    },
+    reconcileUsers(liveParticipantIds: string[]) {
+      const set = new Set(liveParticipantIds);
+      let changed = false;
+      const next = { ...this.users };
+      for (const id of Object.keys(this.users)) {
+        if (!set.has(id)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.commitUsers(next);
+      }
+    },
+    pruneStaleUsers(timeoutMs = 45000, preserveIds: string[] = []) {
+      const now = Date.now();
+      const preserveSet = new Set(preserveIds);
+      let changed = false;
+      const next = { ...this.users };
+      for (const [id, user] of Object.entries(this.users)) {
+        if (!preserveSet.has(id) && user.lastSeen && now - user.lastSeen > timeoutMs) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.commitUsers(next);
+      }
+    },
+    setUserTrack(id: string, kind: 'audio' | 'video' | 'screenshareAudio', track: JitsiTrack) {
       if (!this.users[id]) {
         mediaDebug('conferenceStore', 'setUserTrack:skipped', { id, kind, reason: 'unknown-user' });
         return;
       }
       if (kind === 'audio') {
         this.patchUser(id, { audio: markRaw(track), mute: track.isMuted() });
+      } else if (kind === 'screenshareAudio') {
+        this.patchUser(id, { screenshareAudio: markRaw(track) });
+      } else if (track.isMuted?.()) {
+        const current = this.users[id];
+        if (
+          isDesktopShareTrack(track) ||
+          Boolean(current.screenshare && toRaw(current.screenshare) === toRaw(track))
+        ) {
+          this.clearUserTrack(id, 'screenshare');
+        } else {
+          this.clearUserTrack(id, 'video');
+        }
       } else {
-        this.patchUser(id, {
-          video: markRaw(track),
-          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
-        });
+        const current = this.users[id];
+        if (isDesktopShareTrack(track)) {
+          const movedFromCamera = Boolean(current.video && toRaw(current.video) === toRaw(track));
+          this.patchUser(id, {
+            screenshare: markRaw(track),
+            ...(movedFromCamera ? { video: undefined, videoType: undefined } : {}),
+          });
+        } else {
+          const movedFromScreen = Boolean(
+            current.screenshare && toRaw(current.screenshare) === toRaw(track),
+          );
+          this.patchUser(id, {
+            video: markRaw(track),
+            videoType: 'camera',
+            ...(movedFromScreen ? { screenshare: undefined } : {}),
+          });
+        }
         mediaDebug('conferenceStore', 'setUserTrack:video', {
           id,
           muted: track.isMuted?.(),
-          videoType: track.videoType === 'desktop' ? 'desktop' : 'camera',
+          videoType: isDesktopShareTrack(track) ? 'desktop' : 'camera',
           usersEpoch: this.usersEpoch,
         });
       }
     },
-    clearUserTrack(id: string, kind: 'audio' | 'video') {
+    clearUserTrack(id: string, kind: 'audio' | 'video' | 'screenshare' | 'screenshareAudio') {
       if (!this.users[id]) return;
       if (kind === 'audio') {
         this.patchUser(id, { audio: undefined, mute: false });
+      } else if (kind === 'screenshareAudio') {
+        this.patchUser(id, { screenshareAudio: undefined });
+      } else if (kind === 'screenshare') {
+        this.patchUser(id, { screenshare: undefined });
+        mediaDebug('conferenceStore', 'clearUserTrack:screenshare', { id, usersEpoch: this.usersEpoch });
       } else {
         this.patchUser(id, { video: undefined, videoType: undefined });
         mediaDebug('conferenceStore', 'clearUserTrack:video', { id, usersEpoch: this.usersEpoch });
@@ -155,30 +241,70 @@ export const useConferenceStore = defineStore('conference', {
       this.messages = [...this.messages, msg];
     },
     ingestChatMessage(id: string, text: string, nr: number) {
-      if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === text)) {
+      const { messageId: wireId, text: displayText } = decodeChatWireText(text);
+      if (wireId) {
+        const existing = this.messages.findIndex((m) => m.messageId === wireId);
+        if (existing >= 0) {
+          if (this.messages[existing].nr < 0 && nr >= 0) {
+            const next = [...this.messages];
+            next[existing] = { ...next[existing], id, nr };
+            this.messages = next;
+          }
+          return;
+        }
+      }
+      if (this.messages.some((m) => m.nr === nr && m.id === id && m.text === displayText)) {
         return;
       }
       const pending = this.messages.findIndex(
-        (m) => m.id === id && m.text === text && m.nr < 0,
+        (m) => m.id === id && m.text === displayText && m.nr < 0,
       );
       if (pending >= 0) {
         const next = [...this.messages];
         const prev = next[pending];
-        next[pending] = { ...prev, id, text, nr };
+        next[pending] = {
+          ...prev,
+          id,
+          text: displayText,
+          nr,
+          messageId: wireId ?? prev.messageId,
+        };
         this.messages = next;
         return;
       }
-      this.messages = [...this.messages, createChatMessage(id, text, nr)];
+      this.messages = [...this.messages, createChatMessage(id, displayText, nr, wireId)];
     },
-    editChatMessage(messageId: string, text: string, editedAt: number) {
-      this.messages = applyChatEdit(this.messages, messageId, text, editedAt);
+    editChatMessage(
+      messageId: string,
+      text: string,
+      editedAt: number,
+      nr?: number,
+      authorId?: string,
+    ) {
+      this.messages = applyChatEdit(
+        this.messages,
+        { messageId, nr, authorId },
+        text,
+        editedAt,
+      );
     },
-    leaveConference() {
+    removeChatMessage(messageId: string, nr?: number) {
+      this.messages = this.messages.filter((m) => {
+        if (messageId && m.messageId === messageId) return false;
+        if (nr !== undefined && m.nr === nr) return false;
+        return true;
+      });
+    },
+    /** Drop Jitsi join state without clearing session features (transient reconnect). */
+    clearJoinState() {
       this.conferenceObject = undefined;
       this.isJoined = false;
       this.isJoining = false;
       this.users = {};
       this.usersEpoch += 1;
+    },
+    leaveConference() {
+      this.clearJoinState();
       this.messages = [];
       this.error = undefined;
       useSessionFeaturesStore().resetForLeave();
