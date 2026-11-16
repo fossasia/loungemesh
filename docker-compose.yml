@@ -29,6 +29,8 @@ services:
         condition: service_started
       server:
         condition: service_started
+    environment:
+      NGINX_ALLOW_IFRAME_FROM: ${NGINX_ALLOW_IFRAME_FROM:-http://localhost:* http://127.0.0.1:* http://localhost:8000 http://127.0.0.1:8000 http://localhost:8880 https://eventyay.com https://*.eventyay.com http://*.eventyay.com}
     restart: unless-stopped
     # Join the jitsi network so nginx can proxy /libs/ to the jitsi-web container
     # (lib-jitsi-meet is served from there, never bundled as a static file).
@@ -48,6 +50,12 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - ALLOWED_OAUTH_ORIGINS=${ALLOWED_OAUTH_ORIGINS}
+      - LOUNGEMESH_PUBLIC_URL=${LOUNGEMESH_PUBLIC_URL:-}
+      - AUTO_MIGRATE=${AUTO_MIGRATE:-true}
+      - NODE_ENV=${NODE_ENV:-production}
+      - EVENTYAY_SERVICE_SECRET=${EVENTYAY_SERVICE_SECRET:-${JWT_SECRET}}
+      - EVENTYAY_OAUTH_CLIENT_ID=${EVENTYAY_OAUTH_CLIENT_ID:-eventyay}
+      - EVENTYAY_OAUTH_CLIENT_SECRET=${EVENTYAY_OAUTH_CLIENT_SECRET:-${JWT_SECRET}}
     depends_on:
       postgres:
         condition: service_started

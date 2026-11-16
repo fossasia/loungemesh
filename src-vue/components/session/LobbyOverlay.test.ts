@@ -34,9 +34,11 @@ describe('LobbyOverlay', () => {
     local.setMyID('local-id');
     const features = useSessionFeaturesStore();
     features.setHost('some-other-host-id');
+    features.configLoaded = true;
   });
 
   it('hides when not blocked', async () => {
+    useSessionFeaturesStore().lobbyEnabled = false;
     const { wrapper } = await mountWithApp(LobbyOverlay);
     expect(wrapper.find('.lobby').exists()).toBe(false);
     wrapper.unmount();
@@ -45,11 +47,25 @@ describe('LobbyOverlay', () => {
   it('shows waiting message when lobby blocks guest', async () => {
     const features = useSessionFeaturesStore();
     const conference = useConferenceStore();
+    const local = useLocalStore();
     conference.setDisplayName('Guest');
     features.lobbyEnabled = true;
     features.localLobbyPending = true;
     const { wrapper } = await mountWithApp(LobbyOverlay);
     expect(wrapper.text()).toContain('Asking to join...');
+
+    // Test device preview buttons
+    const deviceBtns = wrapper.findAll('.deviceBtn');
+    expect(deviceBtns.length).toBe(2);
+    expect(deviceBtns[0].text()).toContain('Mic On');
+    expect(deviceBtns[1].text()).toContain('Camera On');
+
+    await deviceBtns[0].trigger('click');
+    expect(local.mute).toBe(true);
+
+    await deviceBtns[1].trigger('click');
+    expect(local.cameraOff).toBe(true);
+
     wrapper.unmount();
   });
 
@@ -69,22 +85,19 @@ describe('LobbyOverlay', () => {
     const { wrapper } = await mountWithApp(LobbyOverlay);
 
     // Tab buttons
-    const tabs = wrapper.findAll('.tab');
-    expect(tabs.length).toBe(3);
-
-    // Default guest join active
+    expect(wrapper.findAll('.authSwitch')).toHaveLength(1);
     expect(wrapper.find('form').text()).toContain('Request Entry');
 
-    // Click Sign In
-    await tabs[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
     expect(wrapper.find('form').text()).toContain('Sign In to Account');
 
-    // Click Register
-    await tabs[2].trigger('click');
+    await wrapper.findAll('.authSwitch')[1].trigger('click');
     expect(wrapper.find('form').text()).toContain('Create an Account');
 
-    // Click Guest Join
-    await tabs[0].trigger('click');
+    await wrapper.findAll('.authSwitch')[1].trigger('click');
+    expect(wrapper.find('form').text()).toContain('Sign In to Account');
+
+    await wrapper.findAll('.authSwitch')[0].trigger('click');
     expect(wrapper.find('form').text()).toContain('Request Entry');
 
     wrapper.unmount();
@@ -93,6 +106,7 @@ describe('LobbyOverlay', () => {
   it('handles guest join validations and submission', async () => {
     const features = useSessionFeaturesStore();
     features.lobbyEnabled = true;
+    features.lobbyForm = 'details';
     features.localLobbyPending = false;
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
@@ -102,6 +116,10 @@ describe('LobbyOverlay', () => {
     await wrapper.find('form').trigger('submit');
     expect(wrapper.find('.errorAlert').exists()).toBe(true);
     expect(wrapper.find('.errorAlert').text()).toBe('Please enter your name.');
+
+    await wrapper.find('#lobbyGuestName').setValue('Test Guest');
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.find('.errorAlert').text()).toBe('Please enter your email.');
 
     // Fill valid name, email, and reason
     await wrapper.find('#lobbyGuestName').setValue('Test Guest');
@@ -178,7 +196,7 @@ describe('LobbyOverlay', () => {
     const { wrapper } = await mountWithApp(LobbyOverlay);
 
     // Switch to Sign In tab
-    await wrapper.findAll('.tab')[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
 
     // Submit empty fields
     await wrapper.find('form').trigger('submit');
@@ -199,7 +217,7 @@ describe('LobbyOverlay', () => {
     loginMock.mockRejectedValueOnce(new Error('Invalid credentials'));
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
-    await wrapper.findAll('.tab')[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
 
     await wrapper.find('#lobbyAuthEmail').setValue('user@example.com');
     await wrapper.find('#lobbyAuthPassword').setValue('password123');
@@ -229,7 +247,7 @@ describe('LobbyOverlay', () => {
     loginMock.mockRejectedValueOnce({});
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
-    await wrapper.findAll('.tab')[1].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
 
     await wrapper.find('#lobbyAuthEmail').setValue('user@example.com');
     await wrapper.find('#lobbyAuthPassword').setValue('password123');
@@ -252,7 +270,8 @@ describe('LobbyOverlay', () => {
     signupMock.mockRejectedValueOnce(new Error('Email already in use'));
 
     const { wrapper } = await mountWithApp(LobbyOverlay);
-    await wrapper.findAll('.tab')[2].trigger('click');
+    await wrapper.find('.authSwitch').trigger('click');
+    await wrapper.findAll('.authSwitch')[1].trigger('click');
 
     await wrapper.find('#lobbyAuthName').setValue('New User');
     await wrapper.find('#lobbyAuthEmail').setValue('new@example.com');
@@ -293,8 +312,50 @@ describe('LobbyOverlay', () => {
     expect(mockLeaveRoom).toHaveBeenCalled();
     expect(leaveConfSpy).toHaveBeenCalled();
     expect(mockDisconnect).toHaveBeenCalled();
+    expect(mockSendCommand).toHaveBeenCalledWith(
+      'lobby',
+      JSON.stringify({ action: 'cancel', id: 'local-id' }),
+    );
     expect(routerSpy).toHaveBeenCalledWith('/');
 
+    wrapper.unmount();
+  });
+
+  it('posts message to parent window on exit when inside an iframe', async () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.localLobbyPending = true;
+
+    const postMessageSpy = vi.fn();
+    const parentMock = { postMessage: postMessageSpy };
+    const originalParent = window.parent;
+    Object.defineProperty(window, 'parent', { value: parentMock, writable: true, configurable: true });
+
+    try {
+      const { wrapper } = await mountWithApp(LobbyOverlay);
+      await wrapper.find('.btnCancel').trigger('click');
+      await flushPromises();
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        { source: 'loungemesh', action: 'leave', event: 'hangup', type: 'hangup' },
+        '*'
+      );
+      wrapper.unmount();
+    } finally {
+      Object.defineProperty(window, 'parent', { value: originalParent, writable: true, configurable: true });
+    }
+  });
+
+  it('leaves the lobby without a cancel command before a conference id exists', async () => {
+    const features = useSessionFeaturesStore();
+    features.lobbyEnabled = true;
+    features.localLobbyPending = true;
+    useLocalStore().setMyID('');
+
+    const { wrapper } = await mountWithApp(LobbyOverlay);
+    await wrapper.find('.btnCancel').trigger('click');
+    await flushPromises();
+    expect(mockSendCommand).not.toHaveBeenCalled();
+    expect(mockLeaveRoom).toHaveBeenCalled();
     wrapper.unmount();
   });
 });

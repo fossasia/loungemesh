@@ -202,8 +202,9 @@ describe('conferenceStore', () => {
   it('addUser refreshes display name when user already exists', () => {
     const store = useConferenceStore();
     store.addUser('u2', { _displayName: 'Alice' });
-    store.addUser('u2', { _displayName: 'Carol' });
+    store.addUser('u2', { _displayName: 'Carol' }, 'uk_readded');
     expect(store.users.u2.user?._displayName).toBe('Carol');
+    expect(store.users.u2.userKey).toBe('uk_readded');
     expect(Object.keys(store.users)).toHaveLength(1);
   });
 
@@ -239,12 +240,24 @@ describe('conferenceStore', () => {
     const store = useConferenceStore();
     const { encodeChatWireText } = await import('@/utils/chatWireFormat');
     store.ingestChatMessage('peer', encodeChatWireText('shared-id', 'hello'), 7);
+    store.ingestChatMessage('peer', encodeChatWireText('shared-id', 'hello'), 8);
+    expect(store.messages).toHaveLength(1);
     expect(store.messages[0]).toMatchObject({
       id: 'peer',
       text: 'hello',
       nr: 7,
       messageId: 'shared-id',
     });
+    store.appendChatMessage({
+      id: 'me',
+      text: 'queued',
+      nr: -5,
+      messageId: 'local-wire',
+      history: [],
+    });
+    store.ingestChatMessage('me', encodeChatWireText('local-wire', 'queued'), 11);
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[1]).toMatchObject({ nr: 11, text: 'queued' });
   });
 
   it('leaveConference resets state', () => {
@@ -267,5 +280,156 @@ describe('conferenceStore', () => {
 
     store.clearUserTrack('u_test', 'screenshareAudio');
     expect(store.users['u_test'].screenshareAudio).toBeUndefined();
+  });
+
+  it('removes chat messages by messageId and nr', () => {
+    const store = useConferenceStore();
+    store.messages = [
+      { id: 'u1', text: 'm1', nr: 1, messageId: 'msg-1' },
+      { id: 'u2', text: 'm2', nr: 2, messageId: 'msg-2' },
+      { id: 'u3', text: 'm3', nr: 3, messageId: 'msg-3' },
+    ];
+    store.removeChatMessage('msg-1');
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[0].messageId).toBe('msg-2');
+
+    store.removeChatMessage('', 2);
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].messageId).toBe('msg-3');
+
+    store.removeChatMessage('non-existent');
+    expect(store.messages).toHaveLength(1);
+  });
+
+  it('deduplicates users by session userKey', () => {
+    const store = useConferenceStore();
+    store.dedupeUserByKey('new_u', '');
+    store.addUser('old_u', { _displayName: 'Bob' }, 'uk_123');
+    expect(store.users['old_u']).toBeDefined();
+
+    store.dedupeUserByKey('new_u', 'uk_999');
+    expect(store.users['old_u']).toBeDefined();
+
+    store.dedupeUserByKey('new_u', 'uk_123');
+    expect(store.users['old_u']).toBeUndefined();
+  });
+
+  it('records user heartbeats', () => {
+    const store = useConferenceStore();
+    store.addUser('u_hb');
+    const before = store.users['u_hb'].lastSeen ?? 0;
+    store.recordUserHeartbeat('non_existent');
+    store.recordUserHeartbeat('u_hb');
+    expect(store.users['u_hb'].lastSeen).toBeGreaterThanOrEqual(before);
+  });
+
+  it('reconciles users against live participant list', () => {
+    const store = useConferenceStore();
+    store.addUser('u_live');
+    store.addUser('u_dead');
+    store.reconcileUsers(['u_live']);
+    expect(store.users['u_live']).toBeDefined();
+    expect(store.users['u_dead']).toBeUndefined();
+    store.reconcileUsers(['u_live']);
+    expect(store.users['u_live']).toBeDefined();
+  });
+
+  it('prunes stale users past the heartbeat timeout', () => {
+    const store = useConferenceStore();
+    store.addUser('u_fresh');
+    store.addUser('u_stale');
+    store.users['u_stale'].lastSeen = Date.now() - 60000;
+    store.pruneStaleUsers(30000);
+    expect(store.users['u_fresh']).toBeDefined();
+    expect(store.users['u_stale']).toBeUndefined();
+    store.pruneStaleUsers(30000);
+    expect(store.users['u_fresh']).toBeDefined();
+
+    store.addUser('u_stale_preserved');
+    store.users['u_stale_preserved'].lastSeen = Date.now() - 60000;
+    store.pruneStaleUsers(30000, ['u_stale_preserved']);
+    expect(store.users['u_stale_preserved']).toBeDefined();
+  });
+
+  it('moves a track cleanly when videoType transitions between camera and desktop without clobbering separate tracks', () => {
+    const store = useConferenceStore();
+    store.addUser('u-transition');
+
+    const morphTrack = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera' as 'camera' | 'desktop',
+      getSourceName: () => 'u-transition-v0',
+    };
+    store.setUserTrack('u-transition', 'video', morphTrack as never);
+    expect(store.users['u-transition'].video).toBe(morphTrack);
+    expect(store.users['u-transition'].screenshare).toBeUndefined();
+
+    // Same track updates from camera -> desktop (e.g. XMPP SourceInfo arrived)
+    morphTrack.videoType = 'desktop';
+    store.setUserTrack('u-transition', 'video', morphTrack as never);
+    expect(store.users['u-transition'].screenshare).toBe(morphTrack);
+    expect(store.users['u-transition'].video).toBeUndefined();
+
+    // Separate camera track added alongside active screenshare keeps both
+    const separateCam = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera' as const,
+      getSourceName: () => 'u-transition-v0',
+    };
+    store.setUserTrack('u-transition', 'video', separateCam as never);
+    expect(store.users['u-transition'].video).toBe(separateCam);
+    expect(store.users['u-transition'].screenshare).toBe(morphTrack);
+
+    // Muting separateCam while screenshare is active clears video, not screenshare
+    store.setUserTrack(
+      'u-transition',
+      'video',
+      Object.assign(separateCam, { isMuted: () => true }) as never,
+    );
+    expect(store.users['u-transition'].video).toBeUndefined();
+    expect(store.users['u-transition'].screenshare).toBe(morphTrack);
+
+    // Separate desktop track added while separateCam is active keeps separateCam
+    const freshCam = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'camera' as const,
+      getSourceName: () => 'u-transition-v0',
+    };
+    const separateDesktop = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop' as const,
+      getSourceName: () => 'u-transition-v1',
+    };
+    store.clearUserTrack('u-transition', 'screenshare');
+    store.setUserTrack('u-transition', 'video', freshCam as never);
+    store.setUserTrack('u-transition', 'video', separateDesktop as never);
+    expect(store.users['u-transition'].video).toBe(freshCam);
+    expect(store.users['u-transition'].screenshare).toBe(separateDesktop);
+
+    // Same track morphing from desktop -> camera clears screenshare
+    store.clearUserTrack('u-transition', 'video');
+    const revertTrack = {
+      getType: () => 'video',
+      isMuted: () => false,
+      videoType: 'desktop' as 'camera' | 'desktop',
+      getSourceName: () => 'u-transition-v0',
+    };
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    revertTrack.videoType = 'camera';
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    expect(store.users['u-transition'].video).toBe(revertTrack);
+    expect(store.users['u-transition'].screenshare).toBeUndefined();
+
+    // Muting screenshare whose videoType reverted still clears screenshare via identity check
+    revertTrack.videoType = 'desktop';
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    revertTrack.videoType = 'camera';
+    revertTrack.isMuted = () => true;
+    store.setUserTrack('u-transition', 'video', revertTrack as never);
+    expect(store.users['u-transition'].screenshare).toBeUndefined();
   });
 });

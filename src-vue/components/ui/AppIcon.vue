@@ -36,6 +36,16 @@ import {
   Settings,
   AlertTriangle,
   Download,
+  Check,
+  Clock,
+  Award,
+  Shield,
+  SendHorizontal,
+  Lock,
+  LockOpen,
+  UserPlus,
+  Share2,
+  Copy,
 } from '@lucide/vue';
 
 const props = withDefaults(
@@ -82,7 +92,17 @@ export type IconName =
   | 'info'
   | 'settings'
   | 'alert-triangle'
-  | 'download';
+  | 'download'
+  | 'check'
+  | 'clock'
+  | 'award'
+  | 'shield'
+  | 'send'
+  | 'lock'
+  | 'unlock'
+  | 'user-plus'
+  | 'share'
+  | 'copy';
 
 const registry: Record<IconName, Component> = {
   'arrow-right': ArrowRight,
@@ -120,6 +140,16 @@ const registry: Record<IconName, Component> = {
   settings: Settings,
   'alert-triangle': AlertTriangle,
   download: Download,
+  check: Check,
+  clock: Clock,
+  award: Award,
+  shield: Shield,
+  send: SendHorizontal,
+  lock: Lock,
+  unlock: LockOpen,
+  'user-plus': UserPlus,
+  share: Share2,
+  copy: Copy,
 };
 
 const icon = computed(() => registry[props.name]);
