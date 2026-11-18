@@ -32,7 +32,7 @@ LoungeMesh (Express + Vue SPA)
    - Eventyay issues a short-lived `HS256` JWT grant signed with `EVENTYAY_SERVICE_SECRET`.
    - The user opens `https://loungemesh.example.com/join/<jitsiRoom>?grant=<token>`.
    - LoungeMesh exchanges the grant via `POST /api/integration/exchange`.
-   - LoungeMesh sets the `lm_access` session cookie, maps roles (`host`, `moderator`, `attendee`), and connects to Jitsi with JWT credentials.
+   - LoungeMesh sets the `lm_access` session cookie and returns the grant role (`host`, `moderator`, `attendee`, as well as `reviewer`, `speaker`, `guest`). Privileged roles (`host` and `moderator`) bypass PIN and room capacity checks and receive the Jitsi moderator flag.
 
 
 ## iframe embedding
@@ -62,59 +62,31 @@ The `VITE_ALLOW_IFRAME_FROM` build arg is used by the SPA's `postMessage` bridge
 VITE_ALLOW_IFRAME_FROM=https://eventyay.com,https://video.eventyay.com
 ```
 
-## eventyay-loungemesh plugin setup
-
-Install the plugin in your Eventyay deployment:
-
-```bash
-pip install eventyay-loungemesh
-```
-
-Then, in the Eventyay admin or event settings, configure each room:
-
-| Field | Example |
-|---|---|
-| Event | `fossasia-2026` |
-| Slug | `hallway` |
-| Jitsi room | *(auto-derived: `lms-fossasia-2026-hallway`)* |
-| LoungeMesh URL | `https://loungemesh.fossasia.org` |
-| Allow guests | Off (ticket required) |
-
-Set the Jitsi secure-domain credentials in Eventyay's plugin settings:
-
-```
-loungemesh_jitsi_app_id = myapp
-loungemesh_jitsi_app_secret = shared-secret-matching-jitsi-server
-```
-
-## JWT token lifecycle
+## JWT grant lifecycle
 
 ```
 User clicks lounge button in Eventyay
-  → plugin issues opaque token (2h TTL)
-  → redirect to /join/<room>?token=<opaque>
-  → LoungeMesh exchanges token for Jitsi JWT
-  → LoungeMesh stores JWT in sessionStorage
-  → JitsiAdapter connects with JWT
-  → On AUTHENTICATION_REQUIRED: calls token refresh endpoint
-  → fresh JWT injected without page reload
+  → Eventyay issues signed grant JWT (2h TTL, HS256 with EVENTYAY_SERVICE_SECRET)
+  → redirect/embed loads /join/<room>?grant=<signed_grant>
+  → LoungeMesh exchanges grant via POST /api/integration/exchange
+  → LoungeMesh sets lm_access cookie and issues Jitsi JWT
+  → JitsiAdapter connects with JWT credentials
+  → On page reload: access cookie re-used via GET /api/integration/session
 ```
 
 ## Local development with Eventyay on localhost
 
 To test the full integration on your machine:
 
-1. **Start Eventyay** on port 8000 with the plugin installed:
+1. **Start Eventyay** on port 8000:
    ```bash
    cd /path/to/eventyay
-   pip install -e plugins/eventyay-loungemesh
    python manage.py runserver 8000
    ```
 
-2. **Configure LoungeMesh** in `.env` (after `npm run setup`, uncomment Eventyay vars):
-   ```
-   VITE_EVENTYAY_API_BASE=http://localhost:8000
-   VITE_EVENTYAY_JWT_ENDPOINT=http://localhost:8000/api/v1/loungemesh/token/
+2. **Configure LoungeMesh** in `.env`:
+   ```bash
+   EVENTYAY_SERVICE_SECRET="your-matching-eventyay-service-secret"
    VITE_ALLOW_IFRAME_FROM=http://localhost:8000
    ```
 
@@ -123,24 +95,18 @@ To test the full integration on your machine:
    npm run dev   # http://localhost:5173
    ```
 
-4. In Eventyay, navigate to your event → plugin settings → LoungeMesh rooms.
-   Create a room, set `loungemesh_url = http://localhost:5173`.
+4. In Eventyay admin (`/control/admin/video/loungemesh/`), pair your server `http://localhost:5173` with the matching `EVENTYAY_SERVICE_SECRET`.
+   The admin connectivity test will call `GET /api/integration/verify` with header `x-service-secret`.
 
-5. Open the embed URL: `http://localhost:8000/loungemesh/<event>/<room>/`
-   — the iframe loads LoungeMesh; the "Open in new tab" button opens `http://localhost:5173`.
-
-> **Note:** The Jitsi JWT integration requires a running Jitsi instance with a matching `app_secret`.
-> For UI development without Jitsi, leave `VITE_EVENTYAY_JWT_ENDPOINT` unset (open mode).
-
-## Session names and the "not-available" block
+## Session names and access guard
 
 When Eventyay creates a LoungeMesh room, the Jitsi room name is derived as
 `lms-<event-slug>-<room-slug>`. The `secureConferenceName` utility on the
 LoungeMesh side normalises and re-prefixes the name to prevent collisions with
 other Jitsi rooms on the same server.
 
-Rooms owned by Eventyay are not directly joinable via URL without a valid token.
-Anyone navigating to `/join/<room>` without `?token=` receives the
-`AccessDeniedPage` with reason `no_token`.
+Rooms owned by Eventyay are not directly joinable via URL without a valid grant.
+Anyone navigating to `/join/<room>` without `?grant=` or a valid session cookie
+receives the `AccessDeniedPage` with reason `no_token`.
 
 
