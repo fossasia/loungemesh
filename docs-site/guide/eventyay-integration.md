@@ -84,11 +84,15 @@ To test the full integration on your machine:
    python manage.py runserver 8000
    ```
 
-2. **Configure LoungeMesh** in `.env`:
-   ```bash
-   EVENTYAY_SERVICE_SECRET="your-matching-eventyay-service-secret"
-   VITE_ALLOW_IFRAME_FROM=http://localhost:8000
-   ```
+2. **Configure LoungeMesh**:
+   - In `server/.env` (read by backend):
+     ```bash
+     EVENTYAY_SERVICE_SECRET="your-matching-eventyay-service-secret"
+     ```
+   - In repository root `.env` (read by Vite frontend):
+     ```bash
+     VITE_ALLOW_IFRAME_FROM=http://localhost:8000
+     ```
 
 3. **Start LoungeMesh backend and frontend**:
    - In terminal 1, start the backend API server (listens on `http://localhost:5000` by default):
@@ -120,7 +124,7 @@ The client access guard (`useAccessGuard`) enforces room access according to env
    - In open standalone mode (when `VITE_EVENTYAY_API_BASE` is unset and no grant or token is provided), `useAccessGuard` permits open access for development and testing.
 
 2. **Signed grant flow**:
-   - When `?grant=` is provided, `useAccessGuard` exchanges the signed grant at `/api/integration/exchange`. Access is granted only if the grant signature, expiration, and event/room claims are valid and verified against `EVENTYAY_SERVICE_SECRET`.
+   - When `?grant=` is provided, `useAccessGuard` exchanges the signed grant at `/api/integration/exchange`. Access is granted only if the grant signature, numeric expiration (`exp`), and event/room claims are valid and verified against `EVENTYAY_SERVICE_SECRET` (falling back to `JWT_SECRET` when `EVENTYAY_SERVICE_SECRET` is unset).
 
 3. **Legacy token fallback**:
    - If a legacy `?token=` parameter is provided, it is forwarded to `VITE_EVENTYAY_JWT_ENDPOINT` for verification. Note that if `VITE_EVENTYAY_JWT_ENDPOINT` is unset, legacy tokens are accepted without remote validation. For secure production gating, configure `VITE_EVENTYAY_API_BASE` and use signed grants.
