@@ -105,8 +105,18 @@ When Eventyay creates a LoungeMesh room, the Jitsi room name is derived as
 LoungeMesh side normalises and re-prefixes the name to prevent collisions with
 other Jitsi rooms on the same server.
 
-Rooms owned by Eventyay are not directly joinable via URL without a valid grant.
-Anyone navigating to `/join/<room>` without `?grant=` or a valid session cookie
-receives the `AccessDeniedPage` with reason `no_token`.
+### Access control configuration and behavior
+
+The client access guard (`useAccessGuard`) enforces room access according to environment configuration:
+
+1. **Gated access enforcement**:
+   - To enforce gated access for Eventyay rooms, `VITE_EVENTYAY_API_BASE` must be set in the frontend environment. When set, navigating to `/join/<room>` without a valid grant, session, or token directs the user to `AccessDeniedPage` with reason `no_token`.
+   - In open standalone mode (when `VITE_EVENTYAY_API_BASE` is unset and no grant or token is provided), `useAccessGuard` permits open access for development and testing.
+
+2. **Signed grant flow**:
+   - When `?grant=` is provided, `useAccessGuard` exchanges the signed grant at `/api/integration/exchange`. Access is granted only if the grant signature, expiration, and event/room claims are valid and verified against `EVENTYAY_SERVICE_SECRET`.
+
+3. **Legacy token fallback**:
+   - If a legacy `?token=` parameter is provided, it is forwarded to `VITE_EVENTYAY_JWT_ENDPOINT` for verification. Note that if `VITE_EVENTYAY_JWT_ENDPOINT` is unset, legacy tokens are accepted without remote validation. For secure production gating, configure `VITE_EVENTYAY_API_BASE` and use signed grants.
 
 
