@@ -298,3 +298,11 @@ export async function publicMeet(req: Request, res: Response) {
     pin_required: Boolean(meeting.joinPin),
   });
 }
+
+/**
+ * GET /api/integration/verify (Eventyay server → LoungeMesh, service secret verification).
+ */
+export function verifyIntegration(_req: Request, res: Response) {
+  return res.json({ ok: true, service: 'loungemesh' });
+}
+

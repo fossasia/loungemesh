@@ -6,32 +6,34 @@ LoungeMesh is deployed as a **standalone application** and integrates with Event
 
 ```
 Eventyay (Django)
-  └── eventyay-loungemesh plugin
-        ├── LoungeMeshRoom model  — per-event room configuration
-        ├── /api/v1/loungemesh/token/  — opaque → Jitsi JWT exchange
-        ├── /api/v1/loungemesh/token/refresh/  — JWT renewal
-        └── /loungemesh/<event>/<room>/  — iframe embed page
+  ├── LoungeMeshServer model  — server registry & service secret
+  ├── Live LoungeMeshModule   — generates signed grants & manages event servers
+  └── /join/<room>?grant=<signed_grant>  — iframe embed / new-tab join URL
 
-LoungeMesh (Vue SPA)  ←  deployed separately
-  ├── /join/:jitsiRoom?token=<opaque>  — Eventyay entry point
-  ├── /session/:jitsiRoom  — spatial lounge
-  └── useAccessGuard  — validates token, stores JWT in sessionStorage
+LoungeMesh (Express + Vue SPA)
+  ├── GET /api/integration/verify     — verifies EVENTYAY_SERVICE_SECRET and reachability
+  ├── POST /api/integration/exchange  — verifies signed grant & sets access session
+  ├── /join/:jitsiRoom?grant=<grant>  — entry point exchanged via useAccessGuard
+  └── /session/:jitsiRoom             — spatial lounge
 ```
 
-## Access control
+## Access control & Verification
 
-When `VITE_EVENTYAY_API_BASE` and `VITE_EVENTYAY_JWT_ENDPOINT` are set, LoungeMesh operates in **restricted mode**:
-
-1. Eventyay generates a short-lived opaque token for authenticated users (ticket holders).
-2. The `eventyay-loungemesh` plugin redirects the user to:
+1. **Server Verification**:
+   When pairing or testing a LoungeMesh server in Eventyay, Eventyay sends:
+   ```http
+   GET /api/integration/verify
+   x-service-secret: <EVENTYAY_SERVICE_SECRET>
    ```
-   https://loungemesh.example.com/join/<jitsiRoom>?token=<opaque>&event=<slug>&room=<slug>
-   ```
-3. LoungeMesh exchanges the token for a signed **Jitsi JWT** via `POST /api/v1/loungemesh/token/`.
-4. The JWT is forwarded to `lib-jitsi-meet` — Jitsi validates it against the shared app secret.
-5. Users without a valid token see the **"Lounge not available"** page.
+   LoungeMesh validates the secret using constant-time comparison and returns `{"ok": true, "service": "loungemesh"}`.
 
-When these variables are **not set**, LoungeMesh runs in open mode (suitable for self-hosted or development deployments).
+2. **Signed Grant Exchange**:
+   When an authenticated user enters a lounge:
+   - Eventyay issues a short-lived `HS256` JWT grant signed with `EVENTYAY_SERVICE_SECRET`.
+   - The user opens `https://loungemesh.example.com/join/<jitsiRoom>?grant=<token>`.
+   - LoungeMesh exchanges the grant via `POST /api/integration/exchange`.
+   - LoungeMesh sets the `lm_access` session cookie, maps roles (`host`, `moderator`, `attendee`), and connects to Jitsi with JWT credentials.
+
 
 ## iframe embedding
 

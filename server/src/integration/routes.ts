@@ -8,9 +8,13 @@ import {
   requireOAuthOwner,
   requireServiceSecret,
   upsertMeet,
+  verifyIntegration,
 } from './controller.js';
 
 const router = Router();
+
+// Server-to-server connection verification
+router.get('/verify', requireServiceSecret, verifyIntegration);
 
 // Browser exchange flow
 router.post('/exchange', exchangeGrant);
