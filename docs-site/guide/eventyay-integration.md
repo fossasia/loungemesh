@@ -124,7 +124,8 @@ The client access guard (`useAccessGuard`) enforces room access according to env
    - In open standalone mode (when `VITE_EVENTYAY_API_BASE` is unset and no grant or token is provided), `useAccessGuard` permits open access for development and testing.
 
 2. **Signed grant flow**:
-   - When `?grant=` is provided, `useAccessGuard` exchanges the signed grant at `/api/integration/exchange`. Access is granted only if the grant signature, numeric expiration (`exp`), and event/room claims are valid and verified against `EVENTYAY_SERVICE_SECRET` (falling back to `JWT_SECRET` when `EVENTYAY_SERVICE_SECRET` is unset).
+   - Stored session precedence: If `sessionStorage` already contains valid cached access for the matching `jitsiRoom`, `useAccessGuard` reuses the active session credentials, role, and capabilities without a redundant exchange roundtrip. The stored access remains in effect in that tab until the session is cleared.
+   - Initial grant exchange: When navigating with `?grant=` without an existing stored session for that room, `useAccessGuard` exchanges the signed grant at `/api/integration/exchange`. Access is granted only if the grant signature, numeric expiration (`exp`), and event/room claims are valid and verified against `EVENTYAY_SERVICE_SECRET` (falling back to `JWT_SECRET` when `EVENTYAY_SERVICE_SECRET` is unset).
 
 3. **Legacy token fallback**:
    - If a legacy `?token=` parameter is provided, it is forwarded to `VITE_EVENTYAY_JWT_ENDPOINT` for verification. Note that if `VITE_EVENTYAY_JWT_ENDPOINT` is unset, legacy tokens are accepted without remote validation. For secure production gating, configure `VITE_EVENTYAY_API_BASE` and use signed grants.
