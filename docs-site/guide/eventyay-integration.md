@@ -90,10 +90,16 @@ To test the full integration on your machine:
    VITE_ALLOW_IFRAME_FROM=http://localhost:8000
    ```
 
-3. **Start LoungeMesh**:
-   ```bash
-   npm run dev   # http://localhost:5173
-   ```
+3. **Start LoungeMesh backend and frontend**:
+   - In terminal 1, start the backend API server (listens on `http://localhost:5000` by default):
+     ```bash
+     npm --prefix server run dev
+     ```
+   - In terminal 2, start the Vite client frontend (`http://localhost:5173`):
+     ```bash
+     npm run dev
+     ```
+   *(Note: The Vite dev server proxies `/api` requests to `http://localhost:5000` or the origin specified by `VITE_API_ORIGIN`.)*
 
 4. In Eventyay admin (`/control/admin/video/loungemesh/`), pair your server `http://localhost:5173` with the matching `EVENTYAY_SERVICE_SECRET`.
    The admin connectivity test will call `GET /api/integration/verify` with header `x-service-secret`.
