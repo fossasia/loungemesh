@@ -33,6 +33,8 @@ const PASSWORD_KEYS = new Set([
   'JIBRI_XMPP_PASSWORD',
   'JWT_SECRET',
   'ENCRYPTION_KEY',
+  'EVENTYAY_SERVICE_SECRET',
+  'EVENTYAY_OAUTH_CLIENT_SECRET',
 ]);
 
 const PRODUCTION_URL_KEYS = new Set([
@@ -142,7 +144,12 @@ function applyProductionPlaceholders(text, { appHost, publicIp }) {
 }
 
 function passwordValue(key, current, templateValue, { forcePasswords }) {
-  const bytes = key === 'JWT_SECRET' || key === 'ENCRYPTION_KEY' ? 32 : 16;
+  const bytes = (
+    key === 'JWT_SECRET' ||
+    key === 'ENCRYPTION_KEY' ||
+    key === 'EVENTYAY_SERVICE_SECRET' ||
+    key === 'EVENTYAY_OAUTH_CLIENT_SECRET'
+  ) ? 32 : 16;
   if (forcePasswords) return rand(bytes);
   if (!isPlaceholder(current) && current !== undefined) return current;
   if (isPlaceholder(templateValue)) return rand(bytes);
