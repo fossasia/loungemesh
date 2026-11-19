@@ -52,8 +52,8 @@ export function isOriginAllowed(origin: string, extraList: string[] = allowedOri
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === 'host.docker.internal') {
       return true;
     }
-    // Allow eventyay.com, dev.eventyay.com, and any *.eventyay.com subdomain
-    if (hostname === 'eventyay.com' || hostname.endsWith('.eventyay.com')) {
+    // Allow eventyay.com, dev.eventyay.com, and any *.eventyay.com subdomain or trycloudflare.com tunnel
+    if (hostname === 'eventyay.com' || hostname.endsWith('.eventyay.com') || hostname.endsWith('.trycloudflare.com')) {
       return true;
     }
     for (const pat of extraList) {
