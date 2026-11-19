@@ -33,6 +33,9 @@ const PASSWORD_KEYS = new Set([
   'JIBRI_XMPP_PASSWORD',
   'JWT_SECRET',
   'ENCRYPTION_KEY',
+]);
+
+const INTEGRATION_KEYS = new Set([
   'EVENTYAY_SERVICE_SECRET',
   'EVENTYAY_OAUTH_CLIENT_SECRET',
 ]);
@@ -144,12 +147,7 @@ function applyProductionPlaceholders(text, { appHost, publicIp }) {
 }
 
 function passwordValue(key, current, templateValue, { forcePasswords }) {
-  const bytes = (
-    key === 'JWT_SECRET' ||
-    key === 'ENCRYPTION_KEY' ||
-    key === 'EVENTYAY_SERVICE_SECRET' ||
-    key === 'EVENTYAY_OAUTH_CLIENT_SECRET'
-  ) ? 32 : 16;
+  const bytes = key === 'JWT_SECRET' || key === 'ENCRYPTION_KEY' ? 32 : 16;
   if (forcePasswords) return rand(bytes);
   if (!isPlaceholder(current) && current !== undefined) return current;
   if (isPlaceholder(templateValue)) return rand(bytes);
@@ -177,6 +175,21 @@ function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, p
       } else if (next !== current) {
         out.set(key, next);
         summary.updated.push(`${key} (generated)`);
+      } else {
+        summary.preservedSecrets.push(key);
+      }
+      continue;
+    }
+
+    if (INTEGRATION_KEYS.has(key)) {
+      if (!hadKey || isPlaceholder(current)) {
+        const next = rand(32);
+        out.set(key, next);
+        if (!hadKey) {
+          summary.added.push(key);
+        } else {
+          summary.updated.push(`${key} (generated)`);
+        }
       } else {
         summary.preservedSecrets.push(key);
       }
@@ -288,6 +301,12 @@ if (args.rotateOnly) {
   for (const key of PASSWORD_KEYS) {
     if (isPlaceholder(map.get(key))) {
       map.set(key, rand());
+      rotated += 1;
+    }
+  }
+  for (const key of INTEGRATION_KEYS) {
+    if (isPlaceholder(map.get(key))) {
+      map.set(key, rand(32));
       rotated += 1;
     }
   }

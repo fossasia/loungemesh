@@ -49,7 +49,7 @@ services:
   loungemesh:
     image: loungemesh:latest
     environment:
-      NGINX_ALLOW_IFRAME_FROM: "https://eventyay.com https://video.eventyay.com"
+      NGINX_ALLOW_IFRAME_FROM: "https://eventyay.com https://*.eventyay.com https://dev.eventyay.com https://wikimedia.eventyay.com"
 ```
 
 This sets the `Content-Security-Policy: frame-ancestors` header at runtime (no rebuild required).
