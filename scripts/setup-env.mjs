@@ -183,7 +183,10 @@ function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, p
 
     if (INTEGRATION_KEYS.has(key)) {
       if (!hadKey || isPlaceholder(current)) {
-        const next = rand(32);
+        const existingJwt = existing.get('JWT_SECRET');
+        const next = (existingJwt && !isPlaceholder(existingJwt))
+          ? existingJwt
+          : rand(32);
         out.set(key, next);
         if (!hadKey) {
           summary.added.push(key);
@@ -266,7 +269,9 @@ function ensureJitsiDirs() {
 }
 
 function writeEnv(text) {
-  fs.writeFileSync(target, text.endsWith('\n') ? text : `${text}\n`);
+  const tmp = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, text.endsWith('\n') ? text : `${text}\n`);
+  fs.renameSync(tmp, target);
   secureEnvFilePermissions();
 }
 
@@ -306,7 +311,11 @@ if (args.rotateOnly) {
   }
   for (const key of INTEGRATION_KEYS) {
     if (isPlaceholder(map.get(key))) {
-      map.set(key, rand(32));
+      const existingJwt = map.get('JWT_SECRET');
+      const next = (existingJwt && !isPlaceholder(existingJwt))
+        ? existingJwt
+        : rand(32);
+      map.set(key, next);
       rotated += 1;
     }
   }
