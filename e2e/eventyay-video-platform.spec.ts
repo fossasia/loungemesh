@@ -1,9 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const EVENTYAY_BASE_URL = 'http://localhost:8000';
-const ATTENDEE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhbnkiLCJhdWQiOiJldmVudHlheSIsImlhdCI6MTc5NTA4OTYyMSwiZXhwIjoxNzk1MTc2MDIxLCJ1aWQiOiJhdHRlbmRlZS1hbGljZSIsInRyYWl0cyI6WyJhdHRlbmRlZSJdfQ.jW4NuvPKhlxa9Clokbh92HlRJvSRZ8cvYk93DqWB5z4';
-const SMILE_ATTENDEE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhbnkiLCJhdWQiOiJldmVudHlheSIsImlhdCI6MTc5NTA5MDcwNSwiZXhwIjoxODI2NjI2NzA1LCJ1aWQiOiJhdHRlbmRlZS1ib2IiLCJ0cmFpdHMiOlsiYXR0ZW5kZWUiXX0.fBzDFnjov5whS-1o33aAaTQRtX8OmvUK7apBok2T9cI';
-const FUTURE_ATTENDEE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhbnkiLCJhdWQiOiJldmVudHlheSIsImlhdCI6MTc5NTA5MDczMywiZXhwIjoxODI2NjI2NzMzLCJ1aWQiOiJhdHRlbmRlZS1jaGFybGllIiwidHJhaXRzIjpbImF0dGVuZGVlIl19.eWl9QZ_FJKmpPJeRJWakbD7Uj1kUQTQUbW7ghViWQmc';
+const EVENTYAY_BASE_URL = process.env.EVENTYAY_BASE_URL || 'http://localhost:8000';
+const ATTENDEE_TOKEN = process.env.TEST_ATTENDEE_TOKEN || 'test-attendee-token';
+const SMILE_ATTENDEE_TOKEN = process.env.TEST_SMILE_ATTENDEE_TOKEN || 'test-smile-attendee-token';
+const FUTURE_ATTENDEE_TOKEN = process.env.TEST_FUTURE_ATTENDEE_TOKEN || 'test-future-attendee-token';
 
 async function handleProfileGreeting(page: Page, name = 'Attendee') {
   while (true) {
@@ -103,9 +103,11 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
     await context.grantPermissions(['camera', 'microphone']);
 
     // Log in as organizer
+    const adminEmail = process.env.EVENTYAY_ADMIN_EMAIL || 'admin@eventyay.com';
+    const adminPassword = process.env.EVENTYAY_ADMIN_PASSWORD || 'test-admin-password';
     await page.goto(`${EVENTYAY_BASE_URL}/login/?next=/video/event/demo-org/perf-summit-2026/rooms/20`);
-    await page.locator('#id_email').fill('admin@eventyay.com');
-    await page.locator('#id_password').fill('AdminPass123!');
+    await page.locator('#id_email').fill(adminEmail);
+    await page.locator('#id_password').fill(adminPassword);
     await page.locator('button[type="submit"]').click();
 
     // Handle sudo mode prompt if required
@@ -250,9 +252,11 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
 
   test('4. Event Timing Access Control: Host Retains Full Access Anytime', async ({ page }) => {
     // Log in as organizer and visit past event 'smile' under organizer 'evil-dead' room 12
+    const adminEmail = process.env.EVENTYAY_ADMIN_EMAIL || 'admin@eventyay.com';
+    const adminPassword = process.env.EVENTYAY_ADMIN_PASSWORD || 'test-admin-password';
     await page.goto(`${EVENTYAY_BASE_URL}/login/?next=/video/event/evil-dead/smile/rooms/12`);
-    await page.locator('#id_email').fill('admin@eventyay.com');
-    await page.locator('#id_password').fill('AdminPass123!');
+    await page.locator('#id_email').fill(adminEmail);
+    await page.locator('#id_password').fill(adminPassword);
     await page.locator('button[type="submit"]').click();
 
     const startSessionBtn = page.locator('button:has-text("Start session"), [name="action"][value="start"]');

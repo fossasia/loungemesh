@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 // Direct and Tunnel URLs
-const EVENTYAY_BASE_URL = 'http://localhost:8000';
-const LOUNGEMESH_DIRECT_URL = 'http://localhost:8780';
-const LOUNGEMESH_TUNNEL_URL = 'https://recipients-procurement-proceeds-clause.trycloudflare.com';
-const SERVICE_SECRET = '9f53a6cabe817870266f7f03422864b302d1bd021b448e7b3f6cbf70361337c5';
+const EVENTYAY_BASE_URL = process.env.EVENTYAY_BASE_URL || 'http://localhost:8000';
+const LOUNGEMESH_DIRECT_URL = process.env.LOUNGEMESH_DIRECT_URL || 'http://localhost:8780';
+const LOUNGEMESH_TUNNEL_URL = process.env.LOUNGEMESH_TUNNEL_URL || LOUNGEMESH_DIRECT_URL;
+const SERVICE_SECRET = process.env.EVENTYAY_SERVICE_SECRET || process.env.TEST_SERVICE_SECRET || 'test-service-secret';
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -61,9 +61,11 @@ test.describe('End-to-End Live UI and Permissions Verification', () => {
 
   test('1. Eventyay Admin: Test LoungeMesh Server Connection via Cloudflare Tunnel', async ({ page }) => {
     // Navigate to Eventyay login
+    const adminEmail = process.env.EVENTYAY_ADMIN_EMAIL || 'admin@eventyay.com';
+    const adminPassword = process.env.EVENTYAY_ADMIN_PASSWORD || 'test-admin-password';
     await page.goto(`${EVENTYAY_BASE_URL}/login/?next=/admin/video/loungemesh/new/`);
-    await page.locator('#id_email').fill('admin@eventyay.com');
-    await page.locator('#id_password').fill('AdminPass123!');
+    await page.locator('#id_email').fill(adminEmail);
+    await page.locator('#id_password').fill(adminPassword);
     await page.locator('button[type="submit"]').click();
 
     // Wait for either the form #id_url or the "Start session" admin mode button
