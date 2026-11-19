@@ -106,6 +106,6 @@ The reverse proxy configuration (`nginx/default.conf.template`) includes:
 - **Rate Limiting**: `50r/s burst=100` protecting API and media signaling from abuse.
 - **CSP Frame Ancestors**: Configured via `NGINX_ALLOW_IFRAME_FROM` to allow embedding within Eventyay portals:
   ```bash
-  NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://video.eventyay.com"
+  NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://*.eventyay.com https://dev.eventyay.com https://wikimedia.eventyay.com"
   ```
 - **Static Asset Caching**: 1-year immutable cache headers for hashed Vite chunks and pre-compressed `.br` / `.gz` files.

@@ -35,6 +35,11 @@ const PASSWORD_KEYS = new Set([
   'ENCRYPTION_KEY',
 ]);
 
+const INTEGRATION_KEYS = new Set([
+  'EVENTYAY_SERVICE_SECRET',
+  'EVENTYAY_OAUTH_CLIENT_SECRET',
+]);
+
 const PRODUCTION_URL_KEYS = new Set([
   'PUBLIC_URL',
   'VITE_JITSI_PUBLIC_URL',
@@ -176,6 +181,24 @@ function mergeMaps(existing, template, { force, forcePasswords, mode, appHost, p
       continue;
     }
 
+    if (INTEGRATION_KEYS.has(key)) {
+      if (!hadKey || isPlaceholder(current)) {
+        const existingJwt = existing.get('JWT_SECRET');
+        const next = (existingJwt && !isPlaceholder(existingJwt))
+          ? existingJwt
+          : rand(32);
+        out.set(key, next);
+        if (!hadKey) {
+          summary.added.push(key);
+        } else {
+          summary.updated.push(`${key} (generated)`);
+        }
+      } else {
+        summary.preservedSecrets.push(key);
+      }
+      continue;
+    }
+
     if (mode === 'production' && PRODUCTION_URL_KEYS.has(key) && cliUrls) {
       let next = current;
       if (key === 'DOCKER_HOST_ADDRESS') next = publicIp;
@@ -246,7 +269,9 @@ function ensureJitsiDirs() {
 }
 
 function writeEnv(text) {
-  fs.writeFileSync(target, text.endsWith('\n') ? text : `${text}\n`);
+  const tmp = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, text.endsWith('\n') ? text : `${text}\n`);
+  fs.renameSync(tmp, target);
   secureEnvFilePermissions();
 }
 
@@ -281,6 +306,16 @@ if (args.rotateOnly) {
   for (const key of PASSWORD_KEYS) {
     if (isPlaceholder(map.get(key))) {
       map.set(key, rand());
+      rotated += 1;
+    }
+  }
+  for (const key of INTEGRATION_KEYS) {
+    if (isPlaceholder(map.get(key))) {
+      const existingJwt = map.get('JWT_SECRET');
+      const next = (existingJwt && !isPlaceholder(existingJwt))
+        ? existingJwt
+        : rand(32);
+      map.set(key, next);
       rotated += 1;
     }
   }

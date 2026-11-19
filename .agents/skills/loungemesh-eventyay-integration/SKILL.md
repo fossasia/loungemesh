@@ -79,7 +79,7 @@ When entering via Eventyay, `sessionFeaturesStore` initializes:
 Configured via environment variables:
 - `NGINX_ALLOW_IFRAME_FROM`: Configures `Content-Security-Policy: frame-ancestors` header at Docker runtime:
   ```env
-  NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://video.eventyay.com"
+  NGINX_ALLOW_IFRAME_FROM="https://eventyay.com https://*.eventyay.com https://dev.eventyay.com https://wikimedia.eventyay.com"
   ```
 - `VITE_ALLOW_IFRAME_FROM`: Whitelisted parent origins for `src-vue/composables/useEventyayBridge.ts`:
   ```env
