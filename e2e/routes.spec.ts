@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { setupE2EMocks } from './mockJitsi';
 
 async function stubOpenRoomInit(page: Page) {
   await page.route('**/api/meetings/state/*/init', async (route) => {
@@ -23,7 +24,30 @@ async function stubOpenRoomInit(page: Page) {
 }
 
 test.describe('Routes and navigation', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupE2EMocks(page);
+  });
+
   test('default uninvited room shows In lobby header status and lobby entry form', async ({ page }) => {
+    await page.route('**/api/meetings/state/lobby-default-room/init', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          role: { role: 'attendee', hostId: 'host-1', isInvited: false },
+          config: {
+            lobbyEnabled: true,
+            stagePromotionEnabled: true,
+            allowParticipantRecording: false,
+            notesTemplate: '',
+            lobbyForm: 'name',
+          },
+          access: {
+            enabledFeatures: { chat: false, notes: false, whiteboard: false, poll: false, stage: false },
+          },
+        }),
+      });
+    });
     await page.goto('/session/lobby-default-room');
     await expect(page.getByTestId('header-role-badge')).toContainText('In lobby');
     await expect(page.getByRole('heading', { name: 'Request Entry' })).toBeVisible();

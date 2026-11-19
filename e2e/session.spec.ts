@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { setupE2EMocks } from './mockJitsi';
 
 /**
  * Session UI smoke tests.
@@ -8,6 +9,28 @@ import { test, expect } from '@playwright/test';
  * (no real Jitsi server in CI).
  */
 test.describe('Session shell', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupE2EMocks(page);
+    await page.route('**/api/meetings/state/*/init', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          role: { role: 'attendee', hostId: 'host-1', isInvited: true },
+          config: {
+            lobbyEnabled: false,
+            stagePromotionEnabled: true,
+            allowParticipantRecording: false,
+            notesTemplate: '',
+            lobbyForm: 'name',
+          },
+          access: {
+            enabledFeatures: { chat: true, notes: true, whiteboard: true, poll: true, stage: true },
+          },
+        }),
+      });
+    });
+  });
   test('session page renders footer controls when navigated directly', async ({ page }) => {
     await page.goto('/session/e2e-test');
     // Footer bar should be visible even without a live Jitsi connection
