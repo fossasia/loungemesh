@@ -15,29 +15,31 @@ This skill explains how LoungeMesh integrates with Eventyay via the `eventyay-lo
 
 LoungeMesh is deployed as an independent SPA service and connects to Eventyay through two primary channels:
 
-1. **Token Authentication Bridge**:
+1. **Signed Grant & Verification Bridge**:
    - Eventyay acts as the identity provider for ticketed events.
-   - Ticket holders entering a lounge receive an opaque one-time token.
-   - LoungeMesh exchanges this token for a cryptographically signed Jitsi JWT.
+   - Server connectivity & secret validity are verified via `GET /api/integration/verify` with header `x-service-secret`.
+   - Participants entering a lounge receive a signed `HS256` grant containing event, room, role, and user identity.
+   - LoungeMesh exchanges this grant at `POST /api/integration/exchange` for an authenticated session and Jitsi JWT.
 2. **Iframe Embed `postMessage` Bridge**:
    - Eventyay embeds LoungeMesh in event schedule pages.
    - An origin-validated `postMessage` bridge communicates user actions, full-screen expansion, and session events.
 
 ---
 
-## 2. Token Exchange & JWT Lifecycle
+## 2. Signed Grant Exchange Lifecycle
 
 ```
 User clicks "Enter Lounge" in Eventyay event portal
   ↓
-eventyay-loungemesh issues an opaque token (TTL: 2 hours)
+Eventyay core issues signed HS256 grant (TTL: 2 hours)
   ↓
-Redirect to: /join/<roomName>?token=<opaqueToken>&event=<eventSlug>&room=<roomSlug>
+Redirect or iframe: /join/<roomName>?grant=<signedGrant>
   ↓
 useAccessGuard (src-vue/composables/useAccessGuard.ts):
-  POST <VITE_EVENTYAY_JWT_ENDPOINT> with body { token: opaqueToken }
+  POST /api/integration/exchange with body { grant: signedGrant }
   ↓
-Eventyay returns signed Jitsi JWT + user capabilities + display name + avatar
+LoungeMesh verifies signature against EVENTYAY_SERVICE_SECRET, sets lm_access cookie,
+returns signed Jitsi JWT + user capabilities + display name + avatar
   ↓
 JWT stored in browser sessionStorage
   ↓

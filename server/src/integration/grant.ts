@@ -41,6 +41,9 @@ export function verifyGrant(token: string, secret = process.env.EVENTYAY_SERVICE
     !payload.event ||
     !payload.room ||
     !payload.jitsi_room ||
+    !payload.exp ||
+    typeof payload.exp !== 'number' ||
+    Number.isNaN(payload.exp) ||
     !isEventyayRole(payload.role)
   ) {
     throw new GrantError('grant_invalid');

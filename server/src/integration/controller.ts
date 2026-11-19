@@ -20,7 +20,7 @@ function safeEqual(a: string, b: string): boolean {
 
 /** Server-to-server calls from Eventyay must carry the shared service secret. */
 export function requireServiceSecret(req: Request, res: Response, next: () => void) {
-  const secret = process.env.EVENTYAY_SERVICE_SECRET || process.env.JWT_SECRET || '';
+  const secret = process.env.EVENTYAY_SERVICE_SECRET || '';
   const given = String(req.headers['x-service-secret'] || '');
   if (!secret || !given || !safeEqual(secret, given)) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -298,3 +298,11 @@ export async function publicMeet(req: Request, res: Response) {
     pin_required: Boolean(meeting.joinPin),
   });
 }
+
+/**
+ * GET /api/integration/verify (Eventyay server → LoungeMesh, service secret verification).
+ */
+export function verifyIntegration(_req: Request, res: Response) {
+  return res.json({ ok: true, service: 'loungemesh' });
+}
+

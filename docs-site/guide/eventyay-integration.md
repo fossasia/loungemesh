@@ -6,32 +6,34 @@ LoungeMesh is deployed as a **standalone application** and integrates with Event
 
 ```
 Eventyay (Django)
-  └── eventyay-loungemesh plugin
-        ├── LoungeMeshRoom model  — per-event room configuration
-        ├── /api/v1/loungemesh/token/  — opaque → Jitsi JWT exchange
-        ├── /api/v1/loungemesh/token/refresh/  — JWT renewal
-        └── /loungemesh/<event>/<room>/  — iframe embed page
+  ├── LoungeMeshServer model  — server registry & service secret
+  ├── Live LoungeMeshModule   — generates signed grants & manages event servers
+  └── /join/<room>?grant=<signed_grant>  — iframe embed / new-tab join URL
 
-LoungeMesh (Vue SPA)  ←  deployed separately
-  ├── /join/:jitsiRoom?token=<opaque>  — Eventyay entry point
-  ├── /session/:jitsiRoom  — spatial lounge
-  └── useAccessGuard  — validates token, stores JWT in sessionStorage
+LoungeMesh (Express + Vue SPA)
+  ├── GET /api/integration/verify     — verifies EVENTYAY_SERVICE_SECRET and reachability
+  ├── POST /api/integration/exchange  — verifies signed grant & sets access session
+  ├── /join/:jitsiRoom?grant=<grant>  — entry point exchanged via useAccessGuard
+  └── /session/:jitsiRoom             — spatial lounge
 ```
 
-## Access control
+## Access control & Verification
 
-When `VITE_EVENTYAY_API_BASE` and `VITE_EVENTYAY_JWT_ENDPOINT` are set, LoungeMesh operates in **restricted mode**:
-
-1. Eventyay generates a short-lived opaque token for authenticated users (ticket holders).
-2. The `eventyay-loungemesh` plugin redirects the user to:
+1. **Server Verification**:
+   When pairing or testing a LoungeMesh server in Eventyay, Eventyay sends:
+   ```http
+   GET /api/integration/verify
+   x-service-secret: <EVENTYAY_SERVICE_SECRET>
    ```
-   https://loungemesh.example.com/join/<jitsiRoom>?token=<opaque>&event=<slug>&room=<slug>
-   ```
-3. LoungeMesh exchanges the token for a signed **Jitsi JWT** via `POST /api/v1/loungemesh/token/`.
-4. The JWT is forwarded to `lib-jitsi-meet` — Jitsi validates it against the shared app secret.
-5. Users without a valid token see the **"Lounge not available"** page.
+   LoungeMesh validates the secret using constant-time comparison and returns `{"ok": true, "service": "loungemesh"}`.
 
-When these variables are **not set**, LoungeMesh runs in open mode (suitable for self-hosted or development deployments).
+2. **Signed Grant Exchange**:
+   When an authenticated user enters a lounge:
+   - Eventyay issues a short-lived `HS256` JWT grant signed with `EVENTYAY_SERVICE_SECRET`.
+   - The user opens `https://loungemesh.example.com/join/<jitsiRoom>?grant=<token>`.
+   - LoungeMesh exchanges the grant via `POST /api/integration/exchange`.
+   - LoungeMesh sets the `lm_access` session cookie and returns the grant role (`host`, `moderator`, `attendee`, as well as `reviewer`, `speaker`, `guest`). Privileged roles (`host` and `moderator`) bypass PIN and room capacity checks and receive the Jitsi moderator flag.
+
 
 ## iframe embedding
 
@@ -60,85 +62,72 @@ The `VITE_ALLOW_IFRAME_FROM` build arg is used by the SPA's `postMessage` bridge
 VITE_ALLOW_IFRAME_FROM=https://eventyay.com,https://video.eventyay.com
 ```
 
-## eventyay-loungemesh plugin setup
-
-Install the plugin in your Eventyay deployment:
-
-```bash
-pip install eventyay-loungemesh
-```
-
-Then, in the Eventyay admin or event settings, configure each room:
-
-| Field | Example |
-|---|---|
-| Event | `fossasia-2026` |
-| Slug | `hallway` |
-| Jitsi room | *(auto-derived: `lms-fossasia-2026-hallway`)* |
-| LoungeMesh URL | `https://loungemesh.fossasia.org` |
-| Allow guests | Off (ticket required) |
-
-Set the Jitsi secure-domain credentials in Eventyay's plugin settings:
-
-```
-loungemesh_jitsi_app_id = myapp
-loungemesh_jitsi_app_secret = shared-secret-matching-jitsi-server
-```
-
-## JWT token lifecycle
+## JWT grant lifecycle
 
 ```
 User clicks lounge button in Eventyay
-  → plugin issues opaque token (2h TTL)
-  → redirect to /join/<room>?token=<opaque>
-  → LoungeMesh exchanges token for Jitsi JWT
-  → LoungeMesh stores JWT in sessionStorage
-  → JitsiAdapter connects with JWT
-  → On AUTHENTICATION_REQUIRED: calls token refresh endpoint
-  → fresh JWT injected without page reload
+  → Eventyay issues signed grant JWT (2h TTL, HS256 with EVENTYAY_SERVICE_SECRET)
+  → redirect/embed loads /join/<room>?grant=<signed_grant>
+  → LoungeMesh exchanges grant via POST /api/integration/exchange
+  → LoungeMesh sets lm_access cookie and issues Jitsi JWT
+  → JitsiAdapter connects with JWT credentials
+  → On page reload: access cookie re-used via GET /api/integration/session
 ```
 
 ## Local development with Eventyay on localhost
 
 To test the full integration on your machine:
 
-1. **Start Eventyay** on port 8000 with the plugin installed:
+1. **Start Eventyay** on port 8000:
    ```bash
    cd /path/to/eventyay
-   pip install -e plugins/eventyay-loungemesh
    python manage.py runserver 8000
    ```
 
-2. **Configure LoungeMesh** in `.env` (after `npm run setup`, uncomment Eventyay vars):
-   ```
-   VITE_EVENTYAY_API_BASE=http://localhost:8000
-   VITE_EVENTYAY_JWT_ENDPOINT=http://localhost:8000/api/v1/loungemesh/token/
-   VITE_ALLOW_IFRAME_FROM=http://localhost:8000
-   ```
+2. **Configure LoungeMesh**:
+   - In `server/.env` (read by backend):
+     ```bash
+     EVENTYAY_SERVICE_SECRET="your-matching-eventyay-service-secret"
+     ```
+   - In repository root `.env` (read by Vite frontend):
+     ```bash
+     VITE_ALLOW_IFRAME_FROM=http://localhost:8000
+     ```
 
-3. **Start LoungeMesh**:
-   ```bash
-   npm run dev   # http://localhost:5173
-   ```
+3. **Start LoungeMesh backend and frontend**:
+   - In terminal 1, start the backend API server (listens on `http://localhost:5000` by default):
+     ```bash
+     npm --prefix server run dev
+     ```
+   - In terminal 2, start the Vite client frontend (`http://localhost:5173`):
+     ```bash
+     npm run dev
+     ```
+   *(Note: The Vite dev server proxies `/api` requests to `http://localhost:5000` or the origin specified by `VITE_API_ORIGIN`.)*
 
-4. In Eventyay, navigate to your event → plugin settings → LoungeMesh rooms.
-   Create a room, set `loungemesh_url = http://localhost:5173`.
+4. In Eventyay admin (`/control/admin/video/loungemesh/`), pair your server `http://localhost:5173` with the matching `EVENTYAY_SERVICE_SECRET`.
+   The admin connectivity test will call `GET /api/integration/verify` with header `x-service-secret`.
 
-5. Open the embed URL: `http://localhost:8000/loungemesh/<event>/<room>/`
-   — the iframe loads LoungeMesh; the "Open in new tab" button opens `http://localhost:5173`.
-
-> **Note:** The Jitsi JWT integration requires a running Jitsi instance with a matching `app_secret`.
-> For UI development without Jitsi, leave `VITE_EVENTYAY_JWT_ENDPOINT` unset (open mode).
-
-## Session names and the "not-available" block
+## Session names and access guard
 
 When Eventyay creates a LoungeMesh room, the Jitsi room name is derived as
 `lms-<event-slug>-<room-slug>`. The `secureConferenceName` utility on the
 LoungeMesh side normalises and re-prefixes the name to prevent collisions with
 other Jitsi rooms on the same server.
 
-Rooms owned by Eventyay are not directly joinable via URL without a valid token.
-Anyone navigating to `/join/<room>` without `?token=` receives the
-`AccessDeniedPage` with reason `no_token`.
+### Access control configuration and behavior
+
+The client access guard (`useAccessGuard`) enforces room access according to environment configuration:
+
+1. **Gated access enforcement**:
+   - To enforce gated access for Eventyay rooms, `VITE_EVENTYAY_API_BASE` must be set in the frontend environment. When set, navigating to `/join/<room>` without a valid grant, session, or token directs the user to `AccessDeniedPage` with reason `no_token`.
+   - In open standalone mode (when `VITE_EVENTYAY_API_BASE` is unset and no grant or token is provided), `useAccessGuard` permits open access for development and testing.
+
+2. **Signed grant flow**:
+   - Stored session precedence: If `sessionStorage` already contains valid cached access for the matching `jitsiRoom`, `useAccessGuard` reuses the active session credentials, role, and capabilities without a redundant exchange roundtrip. The stored access remains in effect in that tab until the session is cleared.
+   - Initial grant exchange: When navigating with `?grant=` without an existing stored session for that room, `useAccessGuard` exchanges the signed grant at `/api/integration/exchange`. Access is granted only if the grant signature, numeric expiration (`exp`), and event/room claims are valid and verified against `EVENTYAY_SERVICE_SECRET` (falling back to `JWT_SECRET` when `EVENTYAY_SERVICE_SECRET` is unset).
+
+3. **Legacy token fallback**:
+   - If a legacy `?token=` parameter is provided, it is forwarded to `VITE_EVENTYAY_JWT_ENDPOINT` for verification. Note that if `VITE_EVENTYAY_JWT_ENDPOINT` is unset, legacy tokens are accepted without remote validation. For secure production gating, configure `VITE_EVENTYAY_API_BASE` and use signed grants.
 
 

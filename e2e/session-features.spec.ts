@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { setupE2EMocks } from './mockJitsi';
 
 test.describe('Session feature controls', () => {
   test.beforeEach(async ({ page }) => {
+    await setupE2EMocks(page);
     await page.route('**/api/meetings/state/*/init', async (route) => {
       await route.fulfill({
         status: 200,

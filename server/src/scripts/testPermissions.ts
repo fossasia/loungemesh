@@ -143,6 +143,21 @@ async function runTests() {
   const missingFieldToken = makeGrantToken({ jti: undefined });
   assert.throws(() => verifyGrant(missingFieldToken, TEST_SECRET), (err: any) => err instanceof GrantError && err.code === 'grant_invalid');
 
+  // Missing or non-numeric exp
+  const noExpToken = jwt.sign({
+    iss: 'eventyay',
+    aud: 'loungemesh',
+    jti: 'grant-uuid-123',
+    sub: 'usr-123',
+    name: 'Test Participant',
+    event: 'test-event',
+    room: 'room-456',
+    jitsi_room: 'lms-test-event-room-456',
+    role: 'attendee',
+    allowed: true,
+  }, TEST_SECRET, { algorithm: 'HS256' });
+  assert.throws(() => verifyGrant(noExpToken, TEST_SECRET), (err: any) => err instanceof GrantError && err.code === 'grant_invalid');
+
   console.log('✅ Grant Verification and Security Rejection passed!\n');
 
   // ==========================================
