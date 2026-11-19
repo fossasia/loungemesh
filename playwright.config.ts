@@ -3,6 +3,9 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: 'e2e',
   timeout: 30_000,
+  testIgnore: process.env.CI
+    ? ['**/live-ui-verification.spec.ts', '**/eventyay-video-platform.spec.ts']
+    : [],
   webServer: {
     command: 'npm run build && npm run preview',
     port: 4173,

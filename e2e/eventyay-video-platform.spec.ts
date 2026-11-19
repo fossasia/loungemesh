@@ -1,11 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const EVENTYAY_BASE_URL = 'http://localhost:8000';
 const ATTENDEE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhbnkiLCJhdWQiOiJldmVudHlheSIsImlhdCI6MTc5NTA4OTYyMSwiZXhwIjoxNzk1MTc2MDIxLCJ1aWQiOiJhdHRlbmRlZS1hbGljZSIsInRyYWl0cyI6WyJhdHRlbmRlZSJdfQ.jW4NuvPKhlxa9Clokbh92HlRJvSRZ8cvYk93DqWB5z4';
 const SMILE_ATTENDEE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhbnkiLCJhdWQiOiJldmVudHlheSIsImlhdCI6MTc5NTA5MDcwNSwiZXhwIjoxODI2NjI2NzA1LCJ1aWQiOiJhdHRlbmRlZS1ib2IiLCJ0cmFpdHMiOlsiYXR0ZW5kZWUiXX0.fBzDFnjov5whS-1o33aAaTQRtX8OmvUK7apBok2T9cI';
 const FUTURE_ATTENDEE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhbnkiLCJhdWQiOiJldmVudHlheSIsImlhdCI6MTc5NTA5MDczMywiZXhwIjoxODI2NjI2NzMzLCJ1aWQiOiJhdHRlbmRlZS1jaGFybGllIiwidHJhaXRzIjpbImF0dGVuZGVlIl19.eWl9QZ_FJKmpPJeRJWakbD7Uj1kUQTQUbW7ghViWQmc';
 
-async function handleProfileGreeting(page, name = 'Attendee') {
+async function handleProfileGreeting(page: Page, name = 'Attendee') {
   while (true) {
     const greetingPrompt = page.locator('.c-profile-greeting-prompt');
     if (!await greetingPrompt.isVisible()) break;
@@ -55,7 +55,7 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
     if (await loungeLink.count() > 0 && await loungeLink.first().isVisible()) {
       await loungeLink.first().click();
     } else {
-      await page.evaluate(() => window.vapp.$router.push('/rooms/20'));
+      await page.evaluate(() => (window as any).vapp?.$router?.push('/rooms/20'));
     }
 
     // Verify LoungeMesh iframe is created in DOM
@@ -178,7 +178,7 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
     if (await loungeLinkSmile.count() > 0 && await loungeLinkSmile.first().isVisible()) {
       await loungeLinkSmile.first().click();
     } else {
-      await page.evaluate(() => window.vapp.$router.push('/rooms/12'));
+      await page.evaluate(() => (window as any).vapp?.$router?.push('/rooms/12'));
     }
 
     // Verify in UI: Error state is displayed and iframe is NOT loaded
@@ -191,13 +191,15 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
 
     // Also verify directly via API
     const pastResult = await page.evaluate(async () => {
-      const api = window.api || window.__eventyay_api;
-      if (!api) return { error: 'no_api' };
+      const win = window as any;
+      const api = win.api || win.__eventyay_api;
+      if (!api) return { error: 'no_api', success: false, code: '', message: '' };
       try {
         await api.call('loungemesh.room_url', { room: 12 });
-        return { success: true };
-      } catch (err) {
-        return { success: false, code: err.apiError?.code || '', message: err.message || '' };
+        return { success: true, code: '', message: '' };
+      } catch (err: unknown) {
+        const error = err as any;
+        return { success: false, code: error.apiError?.code || '', message: error.message || '' };
       }
     });
     console.log('Past event timing access result for attendee:', pastResult);
@@ -217,7 +219,7 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
     if (await loungeLinkFuture.count() > 0 && await loungeLinkFuture.first().isVisible()) {
       await loungeLinkFuture.first().click();
     } else {
-      await page.evaluate(() => window.vapp.$router.push('/rooms/22'));
+      await page.evaluate(() => (window as any).vapp?.$router?.push('/rooms/22'));
     }
 
     const futureErrorCard = page.locator('.iframe-error .error-card, .c-iframe-call-frame .error-state');
@@ -226,13 +228,15 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
     await expect(page.locator('iframe.call-iframe, iframe.iframe-media-source')).not.toBeVisible();
 
     const futureResult = await page.evaluate(async () => {
-      const api = window.api || window.__eventyay_api;
-      if (!api) return { error: 'no_api' };
+      const win = window as any;
+      const api = win.api || win.__eventyay_api;
+      if (!api) return { error: 'no_api', success: false, code: '', message: '' };
       try {
         await api.call('loungemesh.room_url', { room: 22 });
-        return { success: true };
-      } catch (err) {
-        return { success: false, code: err.apiError?.code || '', message: err.message || '' };
+        return { success: true, code: '', message: '' };
+      } catch (err: unknown) {
+        const error = err as any;
+        return { success: false, code: error.apiError?.code || '', message: error.message || '' };
       }
     });
     console.log('Future event timing access result for attendee:', futureResult);
@@ -277,13 +281,15 @@ test.describe('Eventyay Video Platform Embedded LoungeMesh Suite', () => {
 
     // Verify via direct API call as well
     const hostResult = await page.evaluate(async () => {
-      const api = window.api || window.__eventyay_api;
-      if (!api) return { error: 'no_api' };
+      const win = window as any;
+      const api = win.api || win.__eventyay_api;
+      if (!api) return { error: 'no_api', success: false, role: '', url: '' };
       try {
         const res = await api.call('loungemesh.room_url', { room: 12 });
         return { success: true, role: res.role, url: res.url };
-      } catch (err) {
-        return { success: false, code: err.code || err.message };
+      } catch (err: unknown) {
+        const error = err as any;
+        return { success: false, code: error.code || error.message, role: '', url: '' };
       }
     });
     console.log('Past event host access result:', hostResult);

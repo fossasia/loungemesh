@@ -8,7 +8,12 @@ const SERVICE_SECRET = '9f53a6cabe817870266f7f03422864b302d1bd021b448e7b3f6cbf70
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const jwt = require('../server/node_modules/jsonwebtoken');
+let jwt: any;
+try {
+  jwt = require('../server/node_modules/jsonwebtoken');
+} catch {
+  // Optional in environments where server dependencies are not installed
+}
 
 function makeGrant(options: {
   role: 'host' | 'moderator' | 'attendee';
