@@ -198,4 +198,41 @@ describe('useAccessGuard — signed grant flow', () => {
       expect(result.displayName).toBe('Cached Attendee');
     }
   });
+
+  it('applies feature toggles from grant exchange to sessionFeaturesStore', async () => {
+    const fakeExchangeResponse = {
+      status: 'granted',
+      role: 'attendee',
+      capabilities: ['speak'],
+      features: {
+        notes: false,
+        whiteboard: false,
+        spatial_chat: false,
+      },
+      display_name: 'Bob',
+      jwt: 'mock-jwt-token',
+      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => fakeExchangeResponse,
+      }),
+    );
+
+    const result = await withRouter('/join/room-features?grant=features-grant', (guard) =>
+      guard.check('room-features'),
+    );
+
+    expect(result.status).toBe('granted');
+    const sessionStore = useSessionFeaturesStore();
+    expect(sessionStore.enabledFeatures.notes).toBe(false);
+    expect(sessionStore.enabledFeatures.whiteboard).toBe(false);
+    expect(sessionStore.enabledFeatures.chat).toBe(false);
+    expect(sessionStore.canUseNotes).toBe(false);
+    expect(sessionStore.canUseWhiteboard).toBe(false);
+    expect(sessionStore.canUseChat).toBe(false);
+  });
 });

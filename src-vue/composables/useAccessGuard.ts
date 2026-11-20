@@ -35,6 +35,11 @@ export interface StoredAccess {
   jitsiRoom: string;
   role?: string;
   capabilities?: string[];
+  features?: {
+    notes?: boolean;
+    whiteboard?: boolean;
+    spatial_chat?: boolean;
+  };
   expiresAt: string;
   opaqueToken?: string;
   grant?: string;
@@ -135,7 +140,7 @@ export function useAccessGuard() {
     if (stored && stored.jitsiRoom === jitsiRoom) {
       if (!grant || stored.grant === grant) {
         if (stored.role && stored.capabilities) {
-          useSessionFeaturesStore().setIntegrationAccess(stored.role, stored.capabilities);
+          useSessionFeaturesStore().setIntegrationAccess(stored.role, stored.capabilities, stored.features);
         }
         const granted: AccessState = {
           status: 'granted',
@@ -175,10 +180,11 @@ export function useAccessGuard() {
         const displayName: string = data.display_name || '';
         const role: string = data.role || 'attendee';
         const capabilities: string[] = data.capabilities || [];
+        const features = data.features;
         const expiresAt: string = data.expires_at || new Date(Date.now() + 7200_000).toISOString();
 
-        storeAccess({ jwt, displayName, jitsiRoom, role, capabilities, expiresAt, grant });
-        useSessionFeaturesStore().setIntegrationAccess(role, capabilities);
+        storeAccess({ jwt, displayName, jitsiRoom, role, capabilities, features, expiresAt, grant });
+        useSessionFeaturesStore().setIntegrationAccess(role, capabilities, features);
 
         const granted: AccessState = {
           status: 'granted',

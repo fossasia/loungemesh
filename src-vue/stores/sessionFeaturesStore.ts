@@ -946,13 +946,22 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     setVerifiedHost(verified: boolean) {
       this.isVerifiedHost = verified;
     },
-    setIntegrationAccess(role: string, capabilities: string[]) {
+    setIntegrationAccess(
+      role: string,
+      capabilities: string[],
+      features?: { notes?: boolean; whiteboard?: boolean; spatial_chat?: boolean },
+    ) {
       this.eventyayMeet = true;
       this.eventyayRole = role;
       this.capabilities = capabilities;
       this.isVerifiedHost = role === 'host';
       this.isVerifiedModerator = role === 'moderator';
       this.isInvited = true;
+      if (features) {
+        if (features.notes !== undefined) this.enabledFeatures.notes = Boolean(features.notes);
+        if (features.whiteboard !== undefined) this.enabledFeatures.whiteboard = Boolean(features.whiteboard);
+        if (features.spatial_chat !== undefined) this.enabledFeatures.chat = Boolean(features.spatial_chat);
+      }
     },
     setAllowParticipantRecording(value: boolean) {
       this.allowParticipantRecording = value;

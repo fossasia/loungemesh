@@ -172,18 +172,23 @@ export async function exchangeGrant(req: Request, res: Response) {
     } catch {
       /* ignore malformed defaults */
     }
-    const caps = capabilitiesFor(grant.role, defaults);
+    let caps = capabilitiesFor(grant.role, defaults);
+    if (grant.features) {
+      if (grant.features.notes === false) caps = caps.filter((c) => c !== 'notes');
+      if (grant.features.whiteboard === false) caps = caps.filter((c) => c !== 'whiteboard');
+    }
     await touch(grant.jitsiRoom, grant.sub);
 
     res.cookie(
       ACCESS_COOKIE,
-      signAccess({ sub: grant.sub, name: grant.name, room: grant.jitsiRoom, role: grant.role, caps }, SESSION_SECONDS),
+      signAccess({ sub: grant.sub, name: grant.name, room: grant.jitsiRoom, role: grant.role, caps, features: grant.features }, SESSION_SECONDS),
       cookieOptions(SESSION_SECONDS * 1000),
     );
     return res.json({
       status: 'granted',
       role: grant.role,
       capabilities: caps,
+      features: grant.features,
       display_name: grant.name,
       avatar: grant.avatar || '',
       jitsi_room: grant.jitsiRoom,
@@ -201,7 +206,13 @@ export async function exchangeGrant(req: Request, res: Response) {
 /** GET /api/integration/session — current access claims (used on reload). */
 export function currentSession(req: Request, res: Response) {
   if (!req.access) return res.status(401).json({ error: 'no_session' });
-  return res.json({ role: req.access.role, capabilities: req.access.caps, room: req.access.room, name: req.access.name });
+  return res.json({
+    role: req.access.role,
+    capabilities: req.access.caps,
+    features: req.access.features,
+    room: req.access.room,
+    name: req.access.name,
+  });
 }
 
 /** POST /api/integration/heartbeat — keeps the occupancy slot alive. */
