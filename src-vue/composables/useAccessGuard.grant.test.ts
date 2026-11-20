@@ -161,5 +161,41 @@ describe('useAccessGuard — signed grant flow', () => {
     expect(sessionStore.isHost).toBe(false);
     expect(sessionStore.isModerator).toBe(false);
     expect(sessionStore.eventyayRole).toBe('attendee');
+
+    const updatedStored = JSON.parse(sessionStorage.getItem('loungemesh:access') || '{}');
+    expect(updatedStored.role).toBe('attendee');
+    expect(updatedStored.displayName).toBe('Attendee Bob');
+    expect(updatedStored.jwt).toBe('attendee-jwt-token');
+    expect(updatedStored.capabilities).toEqual(['notes', 'speak']);
+    expect(updatedStored.grant).toBe('attendee-grant');
+  });
+
+  it('reuses stored access without network fetch when the same grant is reopened', async () => {
+    sessionStorage.setItem(
+      'loungemesh:access',
+      JSON.stringify({
+        jwt: 'cached-jwt',
+        displayName: 'Cached Attendee',
+        jitsiRoom: 'room-cached',
+        role: 'attendee',
+        capabilities: ['notes', 'speak'],
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        grant: 'same-grant-string',
+      }),
+    );
+
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await withRouter('/join/room-cached?grant=same-grant-string', (guard) =>
+      guard.check('room-cached'),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.status).toBe('granted');
+    if (result.status === 'granted') {
+      expect(result.role).toBe('attendee');
+      expect(result.displayName).toBe('Cached Attendee');
+    }
   });
 });
