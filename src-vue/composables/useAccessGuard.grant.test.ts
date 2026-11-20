@@ -115,4 +115,51 @@ describe('useAccessGuard — signed grant flow', () => {
 
     expect(result).toEqual({ status: 'denied', reason: 'not_allowed' });
   });
+
+  it('overwrites previous stored host session when an attendee grant is received', async () => {
+    sessionStorage.setItem(
+      'loungemesh:access',
+      JSON.stringify({
+        jwt: 'old-host-jwt',
+        displayName: 'Host User',
+        jitsiRoom: 'room-abc',
+        role: 'host',
+        capabilities: ['notes', 'whiteboard', 'moderate'],
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+    );
+
+    const fakeExchangeResponse = {
+      status: 'granted',
+      role: 'attendee',
+      capabilities: ['notes', 'speak'],
+      display_name: 'Attendee Bob',
+      jwt: 'attendee-jwt-token',
+      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => fakeExchangeResponse,
+      }),
+    );
+
+    const result = await withRouter('/join/room-abc?grant=attendee-grant', (guard) =>
+      guard.check('room-abc'),
+    );
+
+    expect(result.status).toBe('granted');
+    if (result.status === 'granted') {
+      expect(result.role).toBe('attendee');
+      expect(result.displayName).toBe('Attendee Bob');
+      expect(result.jwt).toBe('attendee-jwt-token');
+    }
+
+    const sessionStore = useSessionFeaturesStore();
+    expect(sessionStore.isHost).toBe(false);
+    expect(sessionStore.isModerator).toBe(false);
+    expect(sessionStore.eventyayRole).toBe('attendee');
+  });
 });
