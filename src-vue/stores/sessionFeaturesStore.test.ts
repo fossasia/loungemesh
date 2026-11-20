@@ -1247,4 +1247,80 @@ describe('sessionFeaturesStore', () => {
     expect(features.peopleActionPane).toBe('');
     expect(features.guestEmails).toEqual([]);
   });
+
+  it('preserves eventyay integration role when fetchRoomConfigAndRole resolves room state', async () => {
+    setActivePinia(createPinia());
+    const features = useSessionFeaturesStore();
+
+    // User joined via Eventyay as attendee
+    features.setIntegrationAccess('attendee', ['notes', 'speak']);
+    expect(features.eventyayMeet).toBe(true);
+    expect(features.isVerifiedHost).toBe(false);
+    expect(features.isVerifiedModerator).toBe(false);
+
+    // Mock /api/meetings/state/:room/init returning host role from an internal meeting owner
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          role: {
+            role: 'host',
+            hostId: 'internal-host-id',
+            hostEmail: 'host@example.com',
+            isInvited: true,
+          },
+          config: {
+            allowParticipantRecording: false,
+            lobbyEnabled: false,
+          },
+        }),
+      }),
+    );
+
+    await features.fetchRoomConfigAndRole('test-room');
+
+    // Role MUST remain attendee and not get elevated to host
+    expect(features.isVerifiedHost).toBe(false);
+    expect(features.isVerifiedModerator).toBe(false);
+    expect(features.isHost).toBe(false);
+    expect(features.hostId).toBe('internal-host-id');
+  });
+
+  it('preserves eventyay integration role during fallback endpoint fetch', async () => {
+    setActivePinia(createPinia());
+    const features = useSessionFeaturesStore();
+
+    features.setIntegrationAccess('attendee', ['notes', 'speak']);
+
+    // Mock init failure, then individual endpoints succeed
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes('/init')) {
+          return { ok: false };
+        }
+        if (url.includes('/role/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              role: 'host',
+              hostId: 'internal-host-id',
+              hostEmail: 'host@example.com',
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({}),
+        };
+      }),
+    );
+
+    await features.fetchRoomConfigAndRole('test-room');
+
+    expect(features.isVerifiedHost).toBe(false);
+    expect(features.isVerifiedModerator).toBe(false);
+    expect(features.isHost).toBe(false);
+  });
 });

@@ -1066,8 +1066,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           if (initRes.ok) {
             const data = await initRes.json();
             if (data && data.role) {
-              this.isVerifiedHost = data.role.role === 'host';
-              this.isVerifiedModerator = data.role.role === 'moderator';
+              if (!this.eventyayMeet) {
+                this.isVerifiedHost = data.role.role === 'host';
+                this.isVerifiedModerator = data.role.role === 'moderator';
+              }
               this.isInvited = !!data.role.isInvited;
               if (data.role.hostId) {
                 this.hostId = data.role.hostId;
@@ -1123,8 +1125,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
 
           if (roleRes.ok) {
             const data = await roleRes.json();
-            this.isVerifiedHost = data.role === 'host';
-            this.isVerifiedModerator = data.role === 'moderator';
+            if (!this.eventyayMeet) {
+              this.isVerifiedHost = data.role === 'host';
+              this.isVerifiedModerator = data.role === 'moderator';
+            }
             this.isInvited = !!data.isInvited;
             if (data.hostId) {
               this.hostId = data.hostId;
