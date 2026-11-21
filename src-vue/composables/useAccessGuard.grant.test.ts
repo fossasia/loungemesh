@@ -115,4 +115,124 @@ describe('useAccessGuard — signed grant flow', () => {
 
     expect(result).toEqual({ status: 'denied', reason: 'not_allowed' });
   });
+
+  it('overwrites previous stored host session when an attendee grant is received', async () => {
+    sessionStorage.setItem(
+      'loungemesh:access',
+      JSON.stringify({
+        jwt: 'old-host-jwt',
+        displayName: 'Host User',
+        jitsiRoom: 'room-abc',
+        role: 'host',
+        capabilities: ['notes', 'whiteboard', 'moderate'],
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+    );
+
+    const fakeExchangeResponse = {
+      status: 'granted',
+      role: 'attendee',
+      capabilities: ['notes', 'speak'],
+      display_name: 'Attendee Bob',
+      jwt: 'attendee-jwt-token',
+      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => fakeExchangeResponse,
+      }),
+    );
+
+    const result = await withRouter('/join/room-abc?grant=attendee-grant', (guard) =>
+      guard.check('room-abc'),
+    );
+
+    expect(result.status).toBe('granted');
+    if (result.status === 'granted') {
+      expect(result.role).toBe('attendee');
+      expect(result.displayName).toBe('Attendee Bob');
+      expect(result.jwt).toBe('attendee-jwt-token');
+    }
+
+    const sessionStore = useSessionFeaturesStore();
+    expect(sessionStore.isHost).toBe(false);
+    expect(sessionStore.isModerator).toBe(false);
+    expect(sessionStore.eventyayRole).toBe('attendee');
+
+    const updatedStored = JSON.parse(sessionStorage.getItem('loungemesh:access') || '{}');
+    expect(updatedStored.role).toBe('attendee');
+    expect(updatedStored.displayName).toBe('Attendee Bob');
+    expect(updatedStored.jwt).toBe('attendee-jwt-token');
+    expect(updatedStored.capabilities).toEqual(['notes', 'speak']);
+    expect(updatedStored.grant).toBe('attendee-grant');
+  });
+
+  it('reuses stored access without network fetch when the same grant is reopened', async () => {
+    sessionStorage.setItem(
+      'loungemesh:access',
+      JSON.stringify({
+        jwt: 'cached-jwt',
+        displayName: 'Cached Attendee',
+        jitsiRoom: 'room-cached',
+        role: 'attendee',
+        capabilities: ['notes', 'speak'],
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        grant: 'same-grant-string',
+      }),
+    );
+
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await withRouter('/join/room-cached?grant=same-grant-string', (guard) =>
+      guard.check('room-cached'),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.status).toBe('granted');
+    if (result.status === 'granted') {
+      expect(result.role).toBe('attendee');
+      expect(result.displayName).toBe('Cached Attendee');
+    }
+  });
+
+  it('applies feature toggles from grant exchange to sessionFeaturesStore', async () => {
+    const fakeExchangeResponse = {
+      status: 'granted',
+      role: 'attendee',
+      capabilities: ['speak'],
+      features: {
+        notes: false,
+        whiteboard: false,
+        spatial_chat: false,
+      },
+      display_name: 'Bob',
+      jwt: 'mock-jwt-token',
+      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => fakeExchangeResponse,
+      }),
+    );
+
+    const result = await withRouter('/join/room-features?grant=features-grant', (guard) =>
+      guard.check('room-features'),
+    );
+
+    expect(result.status).toBe('granted');
+    const sessionStore = useSessionFeaturesStore();
+    expect(sessionStore.enabledFeatures.notes).toBe(false);
+    expect(sessionStore.enabledFeatures.whiteboard).toBe(false);
+    expect(sessionStore.enabledFeatures.chat).toBe(false);
+    expect(sessionStore.canUseNotes).toBe(false);
+    expect(sessionStore.canUseWhiteboard).toBe(false);
+    expect(sessionStore.canUseChat).toBe(false);
+  });
 });

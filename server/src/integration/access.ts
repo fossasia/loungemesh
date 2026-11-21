@@ -12,6 +12,11 @@ export interface AccessClaims {
   room: string; // LoungeMesh roomName (== jitsi room)
   role: EventyayRole;
   caps: Capability[];
+  features?: {
+    notes?: boolean;
+    whiteboard?: boolean;
+    spatial_chat?: boolean;
+  };
 }
 
 declare global {
@@ -32,7 +37,7 @@ export function parseAccessSession(req: Request, _res: Response, next: NextFunct
   try {
     const d = jwt.verify(token, JWT_SECRET, { audience: 'lm-access' }) as any;
     if (isEventyayRole(d.role) && Array.isArray(d.caps)) {
-      req.access = { sub: d.sub, name: d.name, room: d.room, role: d.role, caps: d.caps };
+      req.access = { sub: d.sub, name: d.name, room: d.room, role: d.role, caps: d.caps, features: d.features };
     }
   } catch {
     /* expired or invalid: treated as no access session */

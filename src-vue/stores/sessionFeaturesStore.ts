@@ -946,13 +946,22 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     setVerifiedHost(verified: boolean) {
       this.isVerifiedHost = verified;
     },
-    setIntegrationAccess(role: string, capabilities: string[]) {
+    setIntegrationAccess(
+      role: string,
+      capabilities: string[],
+      features?: { notes?: boolean; whiteboard?: boolean; spatial_chat?: boolean },
+    ) {
       this.eventyayMeet = true;
       this.eventyayRole = role;
       this.capabilities = capabilities;
       this.isVerifiedHost = role === 'host';
       this.isVerifiedModerator = role === 'moderator';
       this.isInvited = true;
+      if (features) {
+        if (features.notes !== undefined) this.enabledFeatures.notes = Boolean(features.notes);
+        if (features.whiteboard !== undefined) this.enabledFeatures.whiteboard = Boolean(features.whiteboard);
+        if (features.spatial_chat !== undefined) this.enabledFeatures.chat = Boolean(features.spatial_chat);
+      }
     },
     setAllowParticipantRecording(value: boolean) {
       this.allowParticipantRecording = value;
@@ -1066,8 +1075,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
           if (initRes.ok) {
             const data = await initRes.json();
             if (data && data.role) {
-              this.isVerifiedHost = data.role.role === 'host';
-              this.isVerifiedModerator = data.role.role === 'moderator';
+              if (!this.eventyayMeet) {
+                this.isVerifiedHost = data.role.role === 'host';
+                this.isVerifiedModerator = data.role.role === 'moderator';
+              }
               this.isInvited = !!data.role.isInvited;
               if (data.role.hostId) {
                 this.hostId = data.role.hostId;
@@ -1123,8 +1134,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
 
           if (roleRes.ok) {
             const data = await roleRes.json();
-            this.isVerifiedHost = data.role === 'host';
-            this.isVerifiedModerator = data.role === 'moderator';
+            if (!this.eventyayMeet) {
+              this.isVerifiedHost = data.role === 'host';
+              this.isVerifiedModerator = data.role === 'moderator';
+            }
             this.isInvited = !!data.isInvited;
             if (data.hostId) {
               this.hostId = data.hostId;

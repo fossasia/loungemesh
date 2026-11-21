@@ -14,6 +14,11 @@ export interface EventyayGrant {
   exp: number;
   pin?: string;
   singleUser?: boolean;
+  features?: {
+    notes?: boolean;
+    whiteboard?: boolean;
+    spatial_chat?: boolean;
+  };
 }
 
 export class GrantError extends Error {
@@ -61,5 +66,10 @@ export function verifyGrant(token: string, secret = process.env.EVENTYAY_SERVICE
     exp: Number(payload.exp),
     pin: payload.pin ? String(payload.pin) : undefined,
     singleUser: payload.single_user !== false,
+    features: payload.features && typeof payload.features === 'object' ? {
+      notes: payload.features.notes !== false,
+      whiteboard: payload.features.whiteboard !== false,
+      spatial_chat: payload.features.spatial_chat !== false,
+    } : undefined,
   };
 }

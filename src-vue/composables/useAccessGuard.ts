@@ -35,8 +35,14 @@ export interface StoredAccess {
   jitsiRoom: string;
   role?: string;
   capabilities?: string[];
+  features?: {
+    notes?: boolean;
+    whiteboard?: boolean;
+    spatial_chat?: boolean;
+  };
   expiresAt: string;
   opaqueToken?: string;
+  grant?: string;
 }
 
 function getStoredAccess(): StoredAccess | null {
@@ -124,29 +130,33 @@ export function useAccessGuard() {
   async function check(jitsiRoom: string, userPin?: string): Promise<AccessState> {
     state.value = { status: 'loading' };
 
-    // Check sessionStorage first
-    const stored = getStoredAccess();
-    if (stored && stored.jitsiRoom === jitsiRoom) {
-      if (stored.role && stored.capabilities) {
-        useSessionFeaturesStore().setIntegrationAccess(stored.role, stored.capabilities);
-      }
-      const granted: AccessState = {
-        status: 'granted',
-        jwt: stored.jwt,
-        displayName: stored.displayName,
-        jitsiRoom,
-        role: stored.role,
-        capabilities: stored.capabilities,
-      };
-      state.value = granted;
-      return granted;
-    }
-
     const grant = String(route.query.grant ?? '').trim();
     const token = String(route.query.token ?? '').trim();
     const pin = userPin?.trim() || String(route.query.pin ?? '').trim();
 
+    // Check sessionStorage: reuse cached session if no new grant was supplied, or if the
+    // supplied grant matches the one previously exchanged for this room.
+    const stored = getStoredAccess();
+    if (stored && stored.jitsiRoom === jitsiRoom) {
+      if (!grant || stored.grant === grant) {
+        if (stored.role && stored.capabilities) {
+          useSessionFeaturesStore().setIntegrationAccess(stored.role, stored.capabilities, stored.features);
+        }
+        const granted: AccessState = {
+          status: 'granted',
+          jwt: stored.jwt,
+          displayName: stored.displayName,
+          jitsiRoom,
+          role: stored.role,
+          capabilities: stored.capabilities,
+        };
+        state.value = granted;
+        return granted;
+      }
+    }
+
     // 1. Signed Grant flow (modern Eventyay integration)
+    // When a new or different grant query param is provided, exchange it immediately rather than using stale stored access.
     if (grant) {
       try {
         const res = await fetch('/api/integration/exchange', {
@@ -170,10 +180,11 @@ export function useAccessGuard() {
         const displayName: string = data.display_name || '';
         const role: string = data.role || 'attendee';
         const capabilities: string[] = data.capabilities || [];
+        const features = data.features;
         const expiresAt: string = data.expires_at || new Date(Date.now() + 7200_000).toISOString();
 
-        storeAccess({ jwt, displayName, jitsiRoom, role, capabilities, expiresAt });
-        useSessionFeaturesStore().setIntegrationAccess(role, capabilities);
+        storeAccess({ jwt, displayName, jitsiRoom, role, capabilities, features, expiresAt, grant });
+        useSessionFeaturesStore().setIntegrationAccess(role, capabilities, features);
 
         const granted: AccessState = {
           status: 'granted',
