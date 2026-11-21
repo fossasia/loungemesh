@@ -20,6 +20,7 @@ export function throttle<A extends unknown[]>(
     const now = Date.now();
     const remaining = waitMs - (now - last);
     if (remaining <= 0) {
+      clearTimeout(timeout);
       pendingArgs = args;
       run();
       return;
