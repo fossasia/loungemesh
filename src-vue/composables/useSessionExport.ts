@@ -32,9 +32,8 @@ export function useSessionExport(getSessionId: () => string) {
     for (let i = 0; i < features.whiteboardSnapshots.length; i++) {
       const snapCanvas = renderWhiteboardToCanvas(features.whiteboardSnapshots[i]);
       const snapBlob = await canvasToPngBlob(snapCanvas);
-      /* v8 ignore next 3 */
       if (snapBlob) {
-        downloadBlob(snapBlob, exportFileName(`whiteboard-snapshot-${i + 1}` as any, getSessionId()));
+        downloadBlob(snapBlob, exportFileName('whiteboard', `${getSessionId()}-snapshot-${i + 1}`));
       }
     }
   }
