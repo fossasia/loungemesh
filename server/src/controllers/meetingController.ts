@@ -619,6 +619,57 @@ function mergeEmailLists(...lists: Array<string[] | null | undefined>): string[]
   return out;
 }
 
+// ── Read authorization for meeting state (security) ──────────────────────────
+//
+// The /api/meetings/role, /state/* and /init endpoints are intentionally
+// unauthenticated so the client can render a lobby before a user is admitted.
+// Two helpers below keep that behaviour while closing the data leaks it caused:
+//
+//  - contactView(): the invite roster (host email + moderator/guest email
+//    lists) must never reach a plain attendee. Anyone holding a shareable
+//    /session/:roomName link resolves to `attendee`, so returning the lists to
+//    them lets a link be used to harvest every invitee's email address. Only a
+//    resolved host or moderator receives the real lists; everyone else gets
+//    empty values.
+//
+//  - mayReadRoomContent(): shared content (notes, whiteboard, polls,
+//    background) must not be readable by someone who has not entered the room.
+//    For Eventyay-linked rooms the server can prove admission from the signed
+//    access session, so a valid session for THIS room is required. Standalone
+//    rooms admit name-only guests that carry no server-side session, so they
+//    stay open for now (documented gap — proper fix needs a server-side
+//    admission record). A non-existent room has no content to leak either way.
+
+interface MeetingContacts {
+  hostEmail: string | null;
+  moderatorEmails: string[];
+  guestEmails: string[];
+}
+
+function contactView(role: LoungeMeshRole, data: MeetingContacts): MeetingContacts {
+  if (role === 'host' || role === 'moderator') return data;
+  return { hostEmail: null, moderatorEmails: [], guestEmails: [] };
+}
+
+async function mayReadRoomContent(req: Request, roomName: string): Promise<boolean> {
+  const meeting = await prisma.meeting.findUnique({
+    where: { roomName },
+    select: { eventyayEventSlug: true },
+  });
+  if (!meeting) return true; // nothing to leak
+  if (meeting.eventyayEventSlug) {
+    return Boolean(req.access && req.access.room === roomName);
+  }
+  return true; // standalone rooms: no server-side admission record yet
+}
+
+const EMPTY_ROOM_CONTENT = {
+  whiteboard: { strokes: [] as unknown[] },
+  notes: { notes: '' },
+  poll: { poll: null as unknown },
+  background: { gridBackgroundUrl: '' },
+};
+
 export async function getMeetingRole(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   try {
@@ -638,37 +689,43 @@ export async function getMeetingRole(req: Request, res: Response) {
     const runtimeInvites: string[] = rawRuntimeInvites ? JSON.parse(rawRuntimeInvites) : [];
     if (!meeting) {
       const isAdHocInvited = emailInList(runtimeInvites, req.user?.email);
+      // No meeting row: caller is always an attendee, so no roster is exposed.
       return res.json({
         role: 'attendee',
         hostId: null,
-        hostEmail: null,
         isInvited: isAdHocInvited,
-        moderatorEmails: [],
-        guestEmails: mergeEmailLists(runtimeInvites),
+        ...contactView('attendee', {
+          hostEmail: null,
+          moderatorEmails: [],
+          guestEmails: mergeEmailLists(runtimeInvites),
+        }),
       });
     }
 
     const mergedGuestEmails = mergeEmailLists(meeting.guestEmails, runtimeInvites);
 
     // For Eventyay-linked meets, role is determined solely by the validated grant session
+    const contacts: MeetingContacts = {
+      hostEmail: meeting.host?.email || null,
+      moderatorEmails: meeting.moderatorEmails,
+      guestEmails: mergedGuestEmails,
+    };
+
     if (meeting.eventyayEventSlug) {
       if (req.access && req.access.room === roomName) {
+        const eventyayRole = normalizeRole(req.access.role);
         return res.json({
-          role: normalizeRole(req.access.role),
+          role: eventyayRole,
           hostId: meeting.hostId,
-          hostEmail: meeting.host?.email || null,
           isInvited: !req.access.sub?.startsWith('guest:'),
-          moderatorEmails: meeting.moderatorEmails,
-          guestEmails: mergedGuestEmails,
+          ...contactView(eventyayRole, contacts),
         });
       }
       return res.json({
         role: 'attendee',
         hostId: meeting.hostId,
-        hostEmail: meeting.host?.email || null,
         isInvited: false,
-        moderatorEmails: meeting.moderatorEmails,
-        guestEmails: mergedGuestEmails,
+        ...contactView('attendee', contacts),
       });
     }
 
@@ -680,10 +737,8 @@ export async function getMeetingRole(req: Request, res: Response) {
     return res.json({
       role,
       hostId: meeting.hostId,
-      hostEmail: meeting.host?.email || null,
       isInvited,
-      moderatorEmails: meeting.moderatorEmails,
-      guestEmails: mergedGuestEmails,
+      ...contactView(role, contacts),
     });
   } catch (err) {
     console.error('Get meeting role error:', err);
@@ -808,6 +863,9 @@ export async function getWhiteboardState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   const cacheKey = `meeting:state:${roomName}:whiteboard`;
   try {
+    if (!(await mayReadRoomContent(req, roomName))) {
+      return res.json(EMPTY_ROOM_CONTENT.whiteboard);
+    }
     const rawStrokes = await redisClient.get(cacheKey);
     const strokes = rawStrokes ? JSON.parse(rawStrokes) : [];
     return res.json({ strokes });
@@ -852,6 +910,9 @@ export async function getNotesState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   const cacheKey = `meeting:state:${roomName}:notes`;
   try {
+    if (!(await mayReadRoomContent(req, roomName))) {
+      return res.json(EMPTY_ROOM_CONTENT.notes);
+    }
     let notes = await redisClient.get(cacheKey);
     if (notes === null) {
       const meeting = await prisma.meeting.findUnique({
@@ -1133,6 +1194,9 @@ export async function getPollState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   const cacheKey = `meeting:state:${roomName}:poll`;
   try {
+    if (!(await mayReadRoomContent(req, roomName))) {
+      return res.json(EMPTY_ROOM_CONTENT.poll);
+    }
     const raw = await redisClient.get(cacheKey);
     if (raw) {
       return res.json({ poll: JSON.parse(raw) });
@@ -1200,6 +1264,9 @@ export async function getBackgroundState(req: Request, res: Response) {
   const roomName = req.params.roomName as string;
   const cacheKey = `meeting:state:${roomName}:background`;
   try {
+    if (!(await mayReadRoomContent(req, roomName))) {
+      return res.json(EMPTY_ROOM_CONTENT.background);
+    }
     const cached = await redisClient.get(cacheKey);
     if (cached !== null) {
       return res.json({ gridBackgroundUrl: cached });
@@ -1468,6 +1535,16 @@ export async function getRoomInitialState(req: Request, res: Response) {
       isInvited = emailInList(mergedGuestEmails, req.user?.email);
     }
 
+    // Content (notes/whiteboard/poll/background) is only returned to callers
+    // allowed to read the room. Eventyay-linked rooms require a valid access
+    // session for this room; standalone rooms stay open (no server-side
+    // admission record yet); a missing room has no content anyway.
+    const mayReadContent = !meeting
+      ? true
+      : meeting.eventyayEventSlug
+      ? Boolean(req.access && req.access.room === roomName)
+      : true;
+
     const config = sanitizeMeetingConfig(meeting?.configs);
     const strokes = rawWb ? JSON.parse(rawWb) : [];
     let notes = rawNotes;
@@ -1511,13 +1588,22 @@ export async function getRoomInitialState(req: Request, res: Response) {
       rawBg !== null ? rawBg : meeting?.configs?.gridBackgroundUrl || '';
 
     return res.json({
-      role: { role, hostId, hostEmail, isInvited, moderatorEmails: meeting?.moderatorEmails ?? [], guestEmails: mergedGuestEmails },
+      role: {
+        role,
+        hostId,
+        isInvited,
+        ...contactView(role, {
+          hostEmail,
+          moderatorEmails: meeting?.moderatorEmails ?? [],
+          guestEmails: mergedGuestEmails,
+        }),
+      },
       config,
-      whiteboard: { strokes },
-      notes: { notes },
+      whiteboard: mayReadContent ? { strokes } : EMPTY_ROOM_CONTENT.whiteboard,
+      notes: mayReadContent ? { notes } : EMPTY_ROOM_CONTENT.notes,
       access,
-      poll: { poll },
-      background: { gridBackgroundUrl },
+      poll: mayReadContent ? { poll } : EMPTY_ROOM_CONTENT.poll,
+      background: mayReadContent ? { gridBackgroundUrl } : EMPTY_ROOM_CONTENT.background,
     });
   } catch (err) {
     console.error('getRoomInitialState error:', err);
