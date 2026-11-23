@@ -777,7 +777,9 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
  
 @media (max-width: 820px) {
   .dashboardGrid {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr) lets the single column shrink below its content width;
+       a bare 1fr is minmax(auto, 1fr) and would overflow narrow screens. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 28px;
   }
 }
