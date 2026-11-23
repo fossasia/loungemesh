@@ -46,6 +46,12 @@ function sanitizeMeetingConfig(configs: any) {
 - **Feature revoke**: Room-wide tools are the host's switch. A moderator can revoke or restore one person, not change the room-wide switch. Apply an access or config command only from the host, a moderator grant, a moderator email, or the matching host email. Ignore a command from anyone else.
 - **Lobby media**: Until a person is admitted, do not publish their camera or microphone, and do not play or show their tracks to people already in the room. The client treats the lobby as on until room config says otherwise.
 
+### Read authorization for meeting-state endpoints
+The `role`, `state/*` and `state/:roomName/init` endpoints are intentionally unauthenticated (the client needs them to render a lobby before admission), so they must minimize what they return rather than rely on a login:
+- **Roster minimization** (`contactView` in `meetingController.ts`): never return `guestEmails` (the invited list) to a caller who resolves to `attendee` — anyone with a `/session/:roomName` link is an attendee, so the list would be harvestable. Only `host`/`moderator` receive it. `hostEmail` and `moderatorEmails` are kept because the client matches them against participant emails to recognize host/moderators when the Jitsi role property is absent (`isParticipantModerator` / `isParticipantHost`); redacting them would break standalone-room moderation. Fully hiding them needs a non-email moderator-identity signal (follow-up).
+- **Content gating** (`mayReadRoomContent`): notes/whiteboard/poll/background (and the content inside `/init`) are returned only to a caller allowed to read the room. Eventyay-linked rooms require a valid access session for that room; standalone rooms stay open (name-only guests carry no server session — a known gap). On a DB lookup failure, fail closed (empty content), never 500.
+- **Deleted rooms**: `cancelMeeting` must delete every `meeting:state:<roomName>:*` Redis key (not just the config key), otherwise a deleted Eventyay room's cached content stays readable until the keys expire.
+
 ---
 
 ## 3. Token & Secret Encryption

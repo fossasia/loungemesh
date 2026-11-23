@@ -533,8 +533,18 @@ export async function cancelMeeting(req: Request, res: Response) {
       await deleteGoogleCalendarEvent(meeting.hostId, meeting.googleEventId, req);
     }
 
-    // Clear configs cache
-    await redisClient.del(`meeting:config:${meeting.roomName}`);
+    // Clear cached config and all room state keys so a deleted room's content
+    // (notes, whiteboard, poll, background, access, invites) cannot be read
+    // from Redis after the row is gone — see mayReadRoomContent.
+    await redisClient.del([
+      `meeting:config:${meeting.roomName}`,
+      `meeting:state:${meeting.roomName}:whiteboard`,
+      `meeting:state:${meeting.roomName}:notes`,
+      `meeting:state:${meeting.roomName}:poll`,
+      `meeting:state:${meeting.roomName}:background`,
+      `meeting:state:${meeting.roomName}:access`,
+      `meeting:state:${meeting.roomName}:invites`,
+    ]);
 
     // Delete from database
     await prisma.meeting.delete({
@@ -625,12 +635,17 @@ function mergeEmailLists(...lists: Array<string[] | null | undefined>): string[]
 // unauthenticated so the client can render a lobby before a user is admitted.
 // Two helpers below keep that behaviour while closing the data leaks it caused:
 //
-//  - contactView(): the invite roster (host email + moderator/guest email
-//    lists) must never reach a plain attendee. Anyone holding a shareable
-//    /session/:roomName link resolves to `attendee`, so returning the lists to
-//    them lets a link be used to harvest every invitee's email address. Only a
-//    resolved host or moderator receives the real lists; everyone else gets
-//    empty values.
+//  - contactView(): the invited-guest roster must never reach a plain attendee.
+//    Anyone holding a shareable /session/:roomName link resolves to `attendee`,
+//    so returning `guestEmails` lets a link be used to harvest every invitee's
+//    email address. Only a resolved host or moderator receives it; everyone
+//    else gets an empty list. `hostEmail` and `moderatorEmails` are deliberately
+//    kept: the client identifies a room's host/moderators by matching these
+//    against each participant's email when the Jitsi role property is absent
+//    (sessionFeaturesStore.isParticipantModerator / isParticipantHost), which
+//    standalone rooms rely on. Redacting them would stop attendees recognizing
+//    moderators and honoring their room-control messages. Hiding these two as
+//    well needs a non-email moderator-identity signal — tracked as follow-up.
 //
 //  - mayReadRoomContent(): shared content (notes, whiteboard, polls,
 //    background) must not be readable by someone who has not entered the room.
@@ -638,7 +653,10 @@ function mergeEmailLists(...lists: Array<string[] | null | undefined>): string[]
 //    access session, so a valid session for THIS room is required. Standalone
 //    rooms admit name-only guests that carry no server-side session, so they
 //    stay open for now (documented gap — proper fix needs a server-side
-//    admission record). A non-existent room has no content to leak either way.
+//    admission record). A room with no row is an ad-hoc standalone room (rows
+//    are only created for scheduled meetings), so it stays readable; orphaned
+//    content from a *deleted* room is handled by clearing its Redis state keys
+//    on cancellation (see cancelMeeting), not by denying the read here.
 
 interface MeetingContacts {
   hostEmail: string | null;
@@ -648,15 +666,24 @@ interface MeetingContacts {
 
 function contactView(role: LoungeMeshRole, data: MeetingContacts): MeetingContacts {
   if (role === 'host' || role === 'moderator') return data;
-  return { hostEmail: null, moderatorEmails: [], guestEmails: [] };
+  // Keep host/moderator identity (used client-side for role recognition);
+  // redact only the invited-guest list, which attendees never need client-side.
+  return { hostEmail: data.hostEmail, moderatorEmails: data.moderatorEmails, guestEmails: [] };
 }
 
 async function mayReadRoomContent(req: Request, roomName: string): Promise<boolean> {
-  const meeting = await prisma.meeting.findUnique({
-    where: { roomName },
-    select: { eventyayEventSlug: true },
-  });
-  if (!meeting) return true; // nothing to leak
+  let meeting: { eventyayEventSlug: string | null } | null;
+  try {
+    meeting = await prisma.meeting.findUnique({
+      where: { roomName },
+      select: { eventyayEventSlug: true },
+    });
+  } catch (err) {
+    // DB unavailable: fail closed (deny content) rather than 500 or leaking.
+    console.error('mayReadRoomContent lookup failed:', err);
+    return false;
+  }
+  if (!meeting) return true; // ad-hoc standalone room (no row); nothing protected
   if (meeting.eventyayEventSlug) {
     return Boolean(req.access && req.access.room === roomName);
   }
