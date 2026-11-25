@@ -1323,4 +1323,25 @@ describe('sessionFeaturesStore', () => {
     expect(features.isVerifiedModerator).toBe(false);
     expect(features.isHost).toBe(false);
   });
+
+  it('disables native LoungeMesh chat and polls for Eventyay instances by default', () => {
+    setActivePinia(createPinia());
+    const features = useSessionFeaturesStore();
+
+    features.setIntegrationAccess('host', ['moderate', 'notes', 'whiteboard']);
+    expect(features.eventyayMeet).toBe(true);
+    expect(features.enabledFeatures.chat).toBe(false);
+    expect(features.enabledFeatures.poll).toBe(false);
+    expect(features.canUseChat).toBe(false);
+    expect(features.canAccessPoll).toBe(false);
+    expect(features.canRequestPoll).toBe(false);
+    expect(features.canManagePoll).toBe(false);
+
+    // Explicit feature overrides from grant
+    features.setIntegrationAccess('attendee', ['speak'], { chat: true, poll: true });
+    expect(features.enabledFeatures.chat).toBe(true);
+    expect(features.enabledFeatures.poll).toBe(true);
+    expect(features.canUseChat).toBe(true);
+    expect(features.canAccessPoll).toBe(true);
+  });
 });
