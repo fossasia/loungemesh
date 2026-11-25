@@ -195,4 +195,12 @@ describe('SessionTools', () => {
     expect(useSessionFeaturesStore().handRaised).toBe(true);
     wrapper.unmount();
   });
+
+  it('hides poll button when eventyayMeet is true', async () => {
+    const features = useSessionFeaturesStore();
+    features.setIntegrationAccess('host', ['moderate']);
+    const { wrapper } = await mountWithApp(SessionTools);
+    expect(wrapper.find('[aria-label="Poll"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });

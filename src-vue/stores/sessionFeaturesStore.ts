@@ -160,6 +160,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     isFetchingConfig: false,
     eventyayMeet: false,
     eventyayRole: '' as string,
+    eventyayFeatures: null as { notes?: boolean; whiteboard?: boolean; spatial_chat?: boolean; chat?: boolean; poll?: boolean } | null,
     capabilities: [] as string[],
     pendingModerationChanges: [] as ModerationChange[],
     enabledFeatures: { ...DEFAULT_ENABLED_FEATURES } as Record<GatedFeatureKey, boolean>,
@@ -220,15 +221,16 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return gatedFeatureAllowed(this, 'poll', 'poll_manage');
     },
     canUseChat(): boolean {
+      if (this.eventyayMeet && !this.enabledFeatures.chat) return false;
       return gatedFeatureAllowed(this, 'chat');
     },
     canRequestPoll(): boolean {
-      if (this.enabledFeatures.poll === false) return false;
+      if (this.enabledFeatures.poll === false || (this.eventyayMeet && !this.enabledFeatures.poll)) return false;
       if (this.isHost || this.isModerator) return false;
       return this.canUsePoll || this.eventyayMeet;
     },
     canManagePoll(): boolean {
-      if (this.enabledFeatures.poll === false) return false;
+      if (this.enabledFeatures.poll === false || (this.eventyayMeet && !this.enabledFeatures.poll)) return false;
       if (this.isHost || this.isModerator) return true;
       if (
         this.eventyayMeet &&
@@ -239,7 +241,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return false;
     },
     canAccessPoll(): boolean {
-      if (this.enabledFeatures.poll === false) return false;
+      if (this.enabledFeatures.poll === false || (this.eventyayMeet && !this.enabledFeatures.poll)) return false;
       return this.canUsePoll || this.isHost || this.isModerator || this.eventyayMeet;
     },
     myPendingPollRequest(): PollRequest | undefined {
@@ -690,6 +692,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return true;
     },
     setRoomDefault(key: FeatureKey, value: boolean) {
+      if (this.eventyayMeet && (key === 'chat' || key === 'poll')) {
+        return;
+      }
       this.roomDefaults = { ...this.roomDefaults, [key]: value };
       /* v8 ignore start */
       const roomName = window.location.pathname.split('/').pop();
@@ -703,6 +708,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       /* v8 ignore stop */
     },
     setUserGrant(userId: string, key: FeatureKey, value: boolean) {
+      if (this.eventyayMeet && (key === 'chat' || key === 'poll')) {
+        return;
+      }
       const current = this.userGrants[userId] ?? {};
       this.userGrants[userId] = { ...current, [key]: value };
       /* v8 ignore start */
@@ -772,6 +780,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (opening && name === 'poll') this.markPollSeen();
     },
     async setFeatureEnabled(feature: GatedFeatureKey, enabled: boolean, engine?: any) {
+      if (this.eventyayMeet && (feature === 'chat' || feature === 'poll')) {
+        return;
+      }
       this.enabledFeatures = { ...this.enabledFeatures, [feature]: enabled };
       if (!enabled) {
         if (this.panel === feature) this.panel = '';
@@ -814,6 +825,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       }
       if (data.enabledFeatures) {
         this.enabledFeatures = { ...this.enabledFeatures, ...data.enabledFeatures };
+        if (this.eventyayMeet) {
+          this.enabledFeatures.chat = this.eventyayFeatures?.chat ?? false;
+          this.enabledFeatures.poll = this.eventyayFeatures?.poll ?? false;
+        }
         if (this.panel === 'notes' && !this.canUseNotes) this.panel = '';
         if (this.panel === 'whiteboard' && !this.canUseWhiteboard) this.panel = '';
         if (this.panel === 'poll' && !this.canAccessPoll) this.panel = '';
@@ -885,6 +900,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.isFetchingConfig = false;
       this.eventyayMeet = false;
       this.eventyayRole = '';
+      this.eventyayFeatures = null;
       this.capabilities = [];
       this.isInvited = false;
       this.clearAllModerationTimers();
@@ -949,7 +965,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     setIntegrationAccess(
       role: string,
       capabilities: string[],
-      features?: { notes?: boolean; whiteboard?: boolean; spatial_chat?: boolean },
+      features?: { notes?: boolean; whiteboard?: boolean; spatial_chat?: boolean; chat?: boolean; poll?: boolean },
     ) {
       this.eventyayMeet = true;
       this.eventyayRole = role;
@@ -957,10 +973,23 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.isVerifiedHost = role === 'host';
       this.isVerifiedModerator = role === 'moderator';
       this.isInvited = true;
+      this.enabledFeatures.chat = false;
+      this.enabledFeatures.poll = false;
+      this.roomDefaults.chat = false;
+      this.roomDefaults.poll = false;
       if (features) {
+        const ef = { ...features };
         if (features.notes !== undefined) this.enabledFeatures.notes = Boolean(features.notes);
         if (features.whiteboard !== undefined) this.enabledFeatures.whiteboard = Boolean(features.whiteboard);
-        if (features.spatial_chat !== undefined) this.enabledFeatures.chat = Boolean(features.spatial_chat);
+        if (features.chat !== undefined) this.enabledFeatures.chat = Boolean(features.chat);
+        if (features.poll !== undefined) this.enabledFeatures.poll = Boolean(features.poll);
+        if (features.chat === undefined && features.spatial_chat !== undefined) {
+          this.enabledFeatures.chat = Boolean(features.spatial_chat);
+          ef.chat = Boolean(features.spatial_chat);
+        }
+        this.eventyayFeatures = ef;
+      } else {
+        this.eventyayFeatures = null;
       }
     },
     setAllowParticipantRecording(value: boolean) {
@@ -1105,6 +1134,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
                 if (data.access.grants) this.userGrants = data.access.grants;
                 if (data.access.enabledFeatures) {
                   this.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...data.access.enabledFeatures };
+                  if (this.eventyayMeet) {
+                    this.enabledFeatures.chat = this.eventyayFeatures?.chat ?? false;
+                    this.enabledFeatures.poll = this.eventyayFeatures?.poll ?? false;
+                  }
                 }
               }
               if (data.poll && data.poll.poll) {
@@ -1171,6 +1204,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
             if (accessData.grants) this.userGrants = accessData.grants;
             if (accessData.enabledFeatures) {
               this.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...accessData.enabledFeatures };
+              if (this.eventyayMeet) {
+                this.enabledFeatures.chat = this.eventyayFeatures?.chat ?? false;
+                this.enabledFeatures.poll = this.eventyayFeatures?.poll ?? false;
+              }
             }
           }
           if (pollRes.ok) {

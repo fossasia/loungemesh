@@ -1323,4 +1323,55 @@ describe('sessionFeaturesStore', () => {
     expect(features.isVerifiedModerator).toBe(false);
     expect(features.isHost).toBe(false);
   });
+
+  it('disables native LoungeMesh chat and polls for Eventyay instances by default', async () => {
+    setActivePinia(createPinia());
+    const features = useSessionFeaturesStore();
+
+    features.setIntegrationAccess('host', ['moderate', 'notes', 'whiteboard']);
+    expect(features.eventyayMeet).toBe(true);
+    expect(features.enabledFeatures.chat).toBe(false);
+    expect(features.enabledFeatures.poll).toBe(false);
+    expect(features.canUseChat).toBe(false);
+    expect(features.canAccessPoll).toBe(false);
+    expect(features.canRequestPoll).toBe(false);
+    expect(features.canManagePoll).toBe(false);
+
+    // Explicit feature overrides from grant
+    features.setIntegrationAccess('attendee', ['speak'], { chat: true, poll: true });
+    expect(features.enabledFeatures.chat).toBe(true);
+    expect(features.enabledFeatures.poll).toBe(true);
+    expect(features.canUseChat).toBe(true);
+    expect(features.canAccessPoll).toBe(true);
+
+    // In eventyayMeet, hosts and moderators cannot toggle or enable chat/poll
+    features.setIntegrationAccess('host', ['moderate']);
+    await features.setFeatureEnabled('chat', true);
+    expect(features.enabledFeatures.chat).toBe(false);
+    await features.setFeatureEnabled('poll', true);
+    expect(features.enabledFeatures.poll).toBe(false);
+
+    features.setRoomDefault('chat', true);
+    expect(features.roomDefaults.chat).not.toBe(true);
+    features.setRoomDefault('poll', true);
+    expect(features.roomDefaults.poll).not.toBe(true);
+
+    features.setUserGrant('u1', 'chat', true);
+    expect(features.userGrants['u1']?.chat).not.toBe(true);
+    features.setUserGrant('u1', 'poll', true);
+    expect(features.userGrants['u1']?.poll).not.toBe(true);
+
+    // Config update preserves explicit overrides or default suppression
+    features.applyConfigUpdate({ enabledFeatures: { chat: true, poll: true } });
+    expect(features.enabledFeatures.chat).toBe(false);
+    expect(features.enabledFeatures.poll).toBe(false);
+
+    features.setIntegrationAccess('attendee', ['speak'], { chat: true, poll: true });
+    features.applyConfigUpdate({ enabledFeatures: { chat: false, poll: false } });
+    expect(features.enabledFeatures.chat).toBe(true);
+    expect(features.enabledFeatures.poll).toBe(true);
+
+    features.resetForLeave();
+    expect(features.eventyayFeatures).toBeNull();
+  });
 });
