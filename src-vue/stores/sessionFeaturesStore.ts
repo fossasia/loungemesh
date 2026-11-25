@@ -691,6 +691,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return true;
     },
     setRoomDefault(key: FeatureKey, value: boolean) {
+      if (this.eventyayMeet && (key === 'chat' || key === 'poll')) {
+        return;
+      }
       this.roomDefaults = { ...this.roomDefaults, [key]: value };
       /* v8 ignore start */
       const roomName = window.location.pathname.split('/').pop();
@@ -704,6 +707,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       /* v8 ignore stop */
     },
     setUserGrant(userId: string, key: FeatureKey, value: boolean) {
+      if (this.eventyayMeet && (key === 'chat' || key === 'poll')) {
+        return;
+      }
       const current = this.userGrants[userId] ?? {};
       this.userGrants[userId] = { ...current, [key]: value };
       /* v8 ignore start */
@@ -773,6 +779,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (opening && name === 'poll') this.markPollSeen();
     },
     async setFeatureEnabled(feature: GatedFeatureKey, enabled: boolean, engine?: any) {
+      if (this.eventyayMeet && (feature === 'chat' || feature === 'poll')) {
+        return;
+      }
       this.enabledFeatures = { ...this.enabledFeatures, [feature]: enabled };
       if (!enabled) {
         if (this.panel === feature) this.panel = '';
@@ -960,6 +969,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.isInvited = true;
       this.enabledFeatures.chat = false;
       this.enabledFeatures.poll = false;
+      this.roomDefaults.chat = false;
+      this.roomDefaults.poll = false;
       if (features) {
         if (features.notes !== undefined) this.enabledFeatures.notes = Boolean(features.notes);
         if (features.whiteboard !== undefined) this.enabledFeatures.whiteboard = Boolean(features.whiteboard);

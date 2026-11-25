@@ -780,5 +780,21 @@ describe('SessionFeaturePanels', () => {
     vi.unstubAllGlobals();
     wrapper.unmount();
   });
+
+  it('hides chat and poll from default and participant permission chips when eventyayMeet is true', async () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    local.setMyID('host');
+    features.setIntegrationAccess('host', ['moderate', 'notes', 'whiteboard']);
+    features.panel = 'moderator';
+    features.moderatorTab = 'room';
+    const { wrapper } = await mountPanels();
+    const chipLabels = wrapper.findAll('.chipLabel').map((el) => el.text());
+    expect(chipLabels).not.toContain('Chat');
+    expect(chipLabels).not.toContain('Polls');
+    expect(chipLabels).toContain('Notes');
+    expect(chipLabels).toContain('Board');
+    wrapper.unmount();
+  });
 });
 

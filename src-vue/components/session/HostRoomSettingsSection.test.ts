@@ -229,4 +229,19 @@ describe('HostRoomSettingsSection', () => {
     await flushPromises();
     wrapper.unmount();
   });
+
+  it('hides chat and poll toggles when eventyayMeet is true', async () => {
+    const features = useSessionFeaturesStore();
+    features.eventyayMeet = true;
+    const { wrapper } = await mountWithApp(HostRoomSettingsSection);
+    const toggleBtns = wrapper.findAll('.featureToggleBtn');
+    expect(toggleBtns.length).toBe(3);
+    const featureNames = wrapper.findAll('.featureName').map((el) => el.text());
+    expect(featureNames).not.toContain('Public Chat');
+    expect(featureNames).not.toContain('Polls');
+    expect(featureNames).toContain('Shared Notes');
+    expect(featureNames).toContain('Whiteboard');
+    expect(featureNames).toContain('Stage Spotlight');
+    wrapper.unmount();
+  });
 });

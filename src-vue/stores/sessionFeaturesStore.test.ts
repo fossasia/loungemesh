@@ -1324,7 +1324,7 @@ describe('sessionFeaturesStore', () => {
     expect(features.isHost).toBe(false);
   });
 
-  it('disables native LoungeMesh chat and polls for Eventyay instances by default', () => {
+  it('disables native LoungeMesh chat and polls for Eventyay instances by default', async () => {
     setActivePinia(createPinia());
     const features = useSessionFeaturesStore();
 
@@ -1343,5 +1343,22 @@ describe('sessionFeaturesStore', () => {
     expect(features.enabledFeatures.poll).toBe(true);
     expect(features.canUseChat).toBe(true);
     expect(features.canAccessPoll).toBe(true);
+
+    // In eventyayMeet, hosts and moderators cannot toggle or enable chat/poll
+    features.setIntegrationAccess('host', ['moderate']);
+    await features.setFeatureEnabled('chat', true);
+    expect(features.enabledFeatures.chat).toBe(false);
+    await features.setFeatureEnabled('poll', true);
+    expect(features.enabledFeatures.poll).toBe(false);
+
+    features.setRoomDefault('chat', true);
+    expect(features.roomDefaults.chat).not.toBe(true);
+    features.setRoomDefault('poll', true);
+    expect(features.roomDefaults.poll).not.toBe(true);
+
+    features.setUserGrant('u1', 'chat', true);
+    expect(features.userGrants['u1']?.chat).not.toBe(true);
+    features.setUserGrant('u1', 'poll', true);
+    expect(features.userGrants['u1']?.poll).not.toBe(true);
   });
 });
