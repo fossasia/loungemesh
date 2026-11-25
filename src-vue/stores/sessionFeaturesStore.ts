@@ -983,10 +983,6 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         if (features.whiteboard !== undefined) this.enabledFeatures.whiteboard = Boolean(features.whiteboard);
         if (features.chat !== undefined) this.enabledFeatures.chat = Boolean(features.chat);
         if (features.poll !== undefined) this.enabledFeatures.poll = Boolean(features.poll);
-        if (features.chat === undefined && features.spatial_chat !== undefined) {
-          this.enabledFeatures.chat = Boolean(features.spatial_chat);
-          ef.chat = Boolean(features.spatial_chat);
-        }
         this.eventyayFeatures = ef;
       } else {
         this.eventyayFeatures = null;

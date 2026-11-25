@@ -1337,6 +1337,14 @@ describe('sessionFeaturesStore', () => {
     expect(features.canRequestPoll).toBe(false);
     expect(features.canManagePoll).toBe(false);
 
+    // spatial_chat does NOT enable text chat
+    features.setIntegrationAccess('attendee', ['speak'], { notes: true, whiteboard: true, spatial_chat: true });
+    expect(features.enabledFeatures.chat).toBe(false);
+    expect(features.enabledFeatures.poll).toBe(false);
+    expect(features.canUseChat).toBe(false);
+    expect(features.enabledFeatures.notes).toBe(true);
+    expect(features.enabledFeatures.whiteboard).toBe(true);
+
     // Explicit feature overrides from grant
     features.setIntegrationAccess('attendee', ['speak'], { chat: true, poll: true });
     expect(features.enabledFeatures.chat).toBe(true);
