@@ -160,6 +160,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     isFetchingConfig: false,
     eventyayMeet: false,
     eventyayRole: '' as string,
+    eventyayFeatures: null as { notes?: boolean; whiteboard?: boolean; spatial_chat?: boolean; chat?: boolean; poll?: boolean } | null,
     capabilities: [] as string[],
     pendingModerationChanges: [] as ModerationChange[],
     enabledFeatures: { ...DEFAULT_ENABLED_FEATURES } as Record<GatedFeatureKey, boolean>,
@@ -824,6 +825,10 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       }
       if (data.enabledFeatures) {
         this.enabledFeatures = { ...this.enabledFeatures, ...data.enabledFeatures };
+        if (this.eventyayMeet) {
+          this.enabledFeatures.chat = this.eventyayFeatures?.chat ?? false;
+          this.enabledFeatures.poll = this.eventyayFeatures?.poll ?? false;
+        }
         if (this.panel === 'notes' && !this.canUseNotes) this.panel = '';
         if (this.panel === 'whiteboard' && !this.canUseWhiteboard) this.panel = '';
         if (this.panel === 'poll' && !this.canAccessPoll) this.panel = '';
@@ -895,6 +900,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.isFetchingConfig = false;
       this.eventyayMeet = false;
       this.eventyayRole = '';
+      this.eventyayFeatures = null;
       this.capabilities = [];
       this.isInvited = false;
       this.clearAllModerationTimers();
@@ -972,13 +978,18 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.roomDefaults.chat = false;
       this.roomDefaults.poll = false;
       if (features) {
+        const ef = { ...features };
         if (features.notes !== undefined) this.enabledFeatures.notes = Boolean(features.notes);
         if (features.whiteboard !== undefined) this.enabledFeatures.whiteboard = Boolean(features.whiteboard);
         if (features.chat !== undefined) this.enabledFeatures.chat = Boolean(features.chat);
         if (features.poll !== undefined) this.enabledFeatures.poll = Boolean(features.poll);
         if (features.chat === undefined && features.spatial_chat !== undefined) {
           this.enabledFeatures.chat = Boolean(features.spatial_chat);
+          ef.chat = Boolean(features.spatial_chat);
         }
+        this.eventyayFeatures = ef;
+      } else {
+        this.eventyayFeatures = null;
       }
     },
     setAllowParticipantRecording(value: boolean) {
@@ -1124,8 +1135,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
                 if (data.access.enabledFeatures) {
                   this.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...data.access.enabledFeatures };
                   if (this.eventyayMeet) {
-                    this.enabledFeatures.chat = false;
-                    this.enabledFeatures.poll = false;
+                    this.enabledFeatures.chat = this.eventyayFeatures?.chat ?? false;
+                    this.enabledFeatures.poll = this.eventyayFeatures?.poll ?? false;
                   }
                 }
               }
@@ -1194,8 +1205,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
             if (accessData.enabledFeatures) {
               this.enabledFeatures = { ...DEFAULT_ENABLED_FEATURES, ...accessData.enabledFeatures };
               if (this.eventyayMeet) {
-                this.enabledFeatures.chat = false;
-                this.enabledFeatures.poll = false;
+                this.enabledFeatures.chat = this.eventyayFeatures?.chat ?? false;
+                this.enabledFeatures.poll = this.eventyayFeatures?.poll ?? false;
               }
             }
           }

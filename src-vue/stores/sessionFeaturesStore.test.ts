@@ -1360,5 +1360,18 @@ describe('sessionFeaturesStore', () => {
     expect(features.userGrants['u1']?.chat).not.toBe(true);
     features.setUserGrant('u1', 'poll', true);
     expect(features.userGrants['u1']?.poll).not.toBe(true);
+
+    // Config update preserves explicit overrides or default suppression
+    features.applyConfigUpdate({ enabledFeatures: { chat: true, poll: true } });
+    expect(features.enabledFeatures.chat).toBe(false);
+    expect(features.enabledFeatures.poll).toBe(false);
+
+    features.setIntegrationAccess('attendee', ['speak'], { chat: true, poll: true });
+    features.applyConfigUpdate({ enabledFeatures: { chat: false, poll: false } });
+    expect(features.enabledFeatures.chat).toBe(true);
+    expect(features.enabledFeatures.poll).toBe(true);
+
+    features.resetForLeave();
+    expect(features.eventyayFeatures).toBeNull();
   });
 });

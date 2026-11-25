@@ -785,7 +785,15 @@ describe('SessionFeaturePanels', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
     local.setMyID('host');
-    features.setIntegrationAccess('host', ['moderate', 'notes', 'whiteboard']);
+    features.setIntegrationAccess('host', ['moderate', 'notes', 'whiteboard'], {
+      chat: true,
+      poll: true,
+      notes: true,
+      whiteboard: true,
+    });
+    expect(features.enabledFeatures.chat).toBe(true);
+    expect(features.enabledFeatures.poll).toBe(true);
+
     features.panel = 'moderator';
     features.moderatorTab = 'room';
     const { wrapper } = await mountPanels();
