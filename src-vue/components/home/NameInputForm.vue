@@ -91,7 +91,8 @@ function onSubmit(e: Event) {
 
 <style scoped>
 .form {
-  width: 340px;
+  width: 100%;
+  max-width: 340px;
   margin: auto;
   text-align: left;
 }
@@ -119,6 +120,9 @@ function onSubmit(e: Event) {
   margin: 10px 0 0;
   display: flex;
   flex-direction: row;
+  /* <fieldset> defaults to min-inline-size: min-content, which keeps the
+     input + Join button at full width and overflows the card on phones. */
+  min-width: 0;
 }
 .input-wrapper {
   position: relative;
@@ -126,6 +130,7 @@ function onSubmit(e: Event) {
 .input {
   height: 50px;
   flex: 1;
+  min-width: 0;
   background: var(--input-bg);
   color: var(--color-text-default);
   border: 1px solid var(--line-dark);
