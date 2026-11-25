@@ -32,7 +32,7 @@
     "jsdom": "^31.0.1",
     "prettier": "^3.10.1",
     "typedoc": "^0.28.20",
-    "typedoc-plugin-markdown": "^4.11.0",
+    "typedoc-plugin-markdown": "^4.14.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.4",
     "vite-plugin-compression2": "^2.5.4",
