@@ -39,6 +39,8 @@ export interface StoredAccess {
     notes?: boolean;
     whiteboard?: boolean;
     spatial_chat?: boolean;
+    chat?: boolean;
+    poll?: boolean;
   };
   expiresAt: string;
   opaqueToken?: string;

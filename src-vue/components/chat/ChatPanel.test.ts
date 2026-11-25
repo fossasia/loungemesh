@@ -839,4 +839,13 @@ describe('ChatPanel', () => {
 
     wrapper.unmount();
   });
+
+  it('hides chat panel and trigger button completely when eventyayMeet is true', async () => {
+    const features = useSessionFeaturesStore();
+    features.setIntegrationAccess('host', ['moderate']);
+    const { wrapper } = await mountWithApp(ChatPanel);
+    expect(wrapper.find('.wrap').exists()).toBe(false);
+    expect(wrapper.find('button.ibtn').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });

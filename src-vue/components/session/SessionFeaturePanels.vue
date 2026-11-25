@@ -145,6 +145,7 @@ const grantKeys = computed(() => {
   const keys = Object.keys(featureLabels) as FeatureKey[];
   return keys.filter((key) => {
     if (key === 'moderator') return features.isHost;
+    if (features.eventyayMeet && (key === 'chat' || key === 'poll')) return false;
     return features.enabledFeatures[key] !== false;
   });
 });
@@ -278,6 +279,7 @@ function syncUserGrants(userId: string) {
 }
 
 function onRoomDefaultChange(key: FeatureKey, event: Event) {
+  if (features.eventyayMeet && (key === 'chat' || key === 'poll')) return;
   const checked = (event.target as HTMLInputElement).checked;
   features.setRoomDefault(key, checked);
   for (const uid of participantIds.value) {
@@ -289,6 +291,7 @@ function onRoomDefaultChange(key: FeatureKey, event: Event) {
 }
 
 function onUserGrantChange(userId: string, key: FeatureKey, event: Event) {
+  if (features.eventyayMeet && (key === 'chat' || key === 'poll')) return;
   const checked = (event.target as HTMLInputElement).checked;
   features.setUserGrant(userId, key, checked);
   syncUserGrants(userId);

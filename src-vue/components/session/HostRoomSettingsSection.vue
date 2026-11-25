@@ -94,7 +94,7 @@ function clearTemplate() {
   features.clearNotesTemplate();
 }
 
-const availableFeatures: Array<{ key: GatedFeatureKey; label: string }> = [
+const allRoomFeatures: Array<{ key: GatedFeatureKey; label: string }> = [
   { key: 'chat', label: 'Public Chat' },
   { key: 'notes', label: 'Shared Notes' },
   { key: 'whiteboard', label: 'Whiteboard' },
@@ -102,15 +102,24 @@ const availableFeatures: Array<{ key: GatedFeatureKey; label: string }> = [
   { key: 'stage', label: 'Stage Spotlight' },
 ];
 
+const availableFeatures = computed(() => {
+  if (features.eventyayMeet) {
+    return allRoomFeatures.filter((f) => f.key !== 'chat' && f.key !== 'poll');
+  }
+  return allRoomFeatures;
+});
+
 const confirmingFeature = ref<GatedFeatureKey | null>(null);
 const targetState = ref(false);
 
 const confirmingFeatureLabel = computed(() => {
   /* v8 ignore next */
-  return availableFeatures.find((f) => f.key === confirmingFeature.value)?.label || '';
+  return allRoomFeatures.find((f) => f.key === confirmingFeature.value)?.label || '';
 });
 
 function promptToggleFeature(key: GatedFeatureKey) {
+  /* v8 ignore next */
+  if (features.eventyayMeet && (key === 'chat' || key === 'poll')) return;
   confirmingFeature.value = key;
   targetState.value = features.enabledFeatures[key] === false;
 }
