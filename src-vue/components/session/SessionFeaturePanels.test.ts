@@ -784,6 +784,7 @@ describe('SessionFeaturePanels', () => {
   it('hides chat and poll from default and participant permission chips when eventyayMeet is true', async () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
+    const conference = useConferenceStore();
     local.setMyID('host');
     features.setIntegrationAccess('host', ['moderate', 'notes', 'whiteboard'], {
       chat: true,
@@ -794,14 +795,33 @@ describe('SessionFeaturePanels', () => {
     expect(features.enabledFeatures.chat).toBe(true);
     expect(features.enabledFeatures.poll).toBe(true);
 
+    conference.addUser('attendee1', { _displayName: 'Attendee User' } as never);
+
     features.panel = 'moderator';
     features.moderatorTab = 'room';
     const { wrapper } = await mountPanels();
-    const chipLabels = wrapper.findAll('.chipLabel').map((el) => el.text());
-    expect(chipLabels).not.toContain('Chat');
-    expect(chipLabels).not.toContain('Polls');
-    expect(chipLabels).toContain('Notes');
-    expect(chipLabels).toContain('Board');
+    await flushPromises();
+
+    const defaultGroup = wrapper.find('[aria-label="Default permissions"]');
+    expect(defaultGroup.exists()).toBe(true);
+    const defaultLabels = defaultGroup.findAll('.chipLabel').map((el) => el.text());
+    expect(defaultLabels).not.toContain('Chat');
+    expect(defaultLabels).not.toContain('Polls');
+    expect(defaultLabels).toContain('Notes');
+    expect(defaultLabels).toContain('Board');
+
+    features.moderatorTab = 'people';
+    await nextTick();
+
+    const userGroup = wrapper.find('[aria-label="Permissions for Attendee User"]');
+    expect(userGroup.exists()).toBe(true);
+    const userLabels = userGroup.findAll('.chipLabel').map((el) => el.text());
+    expect(userLabels).not.toContain('Chat');
+    expect(userLabels).not.toContain('Polls');
+    expect(userLabels).toContain('Notes');
+    expect(userLabels).toContain('Board');
+
+    conference.removeUser('attendee1');
     wrapper.unmount();
   });
 });
