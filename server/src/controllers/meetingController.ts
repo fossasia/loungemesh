@@ -309,6 +309,7 @@ export async function createMeeting(req: Request, res: Response) {
 export async function getUpcomingMeetings(req: Request, res: Response) {
   const hostId = req.user!.id;
   const email = req.user!.email;
+  const now = new Date();
 
   try {
     const meetings = await prisma.meeting.findMany({
@@ -324,7 +325,8 @@ export async function getUpcomingMeetings(req: Request, res: Response) {
           },
           {
             OR: [
-              { startTime: { gte: new Date() } },
+              { endTime: { gte: now } },
+              { startTime: { gte: now } },
               { recurrence: { not: 'NONE' } },
             ],
           }
