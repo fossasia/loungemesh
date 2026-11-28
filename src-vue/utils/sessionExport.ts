@@ -87,6 +87,16 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** Escape literal text using signed UTF-16 control words for non-ASCII characters. */
+function escapeRtfText(text: string): string {
+  return text.replace(/[\\{}]|[^\x00-\x7f]/g, (character) => {
+    const code = character.charCodeAt(0);
+    if (code <= 0x7f) return `\\${character}`;
+    const signedCode = code > 0x7fff ? code - 0x10000 : code;
+    return `\\u${signedCode}?`;
+  });
+}
+
 /** Convert a Markdown document into valid RTF format to preserve rich text formatting. */
 export function markdownToRtf(md: string, title: string): string {
   const lines = md.split('\n');
@@ -106,10 +116,7 @@ export function markdownToRtf(md: string, title: string): string {
     }
 
     if (inCode) {
-      const escaped = trimmed
-        .replace(/\\/g, '\\\\')
-        .replace(/{/g, '\\{')
-        .replace(/}/g, '\\}');
+      const escaped = escapeRtfText(trimmed);
       body += `{\\f1 ${escaped}}\\par\n`;
       continue;
     }
@@ -144,20 +151,14 @@ export function markdownToRtf(md: string, title: string): string {
       }
       const indent = listMatch[1].length;
       const tabs = '\\tab '.repeat(Math.ceil(indent / 2));
-      const escapedText = listMatch[3]
-        .replace(/\\/g, '\\\\')
-        .replace(/{/g, '\\{')
-        .replace(/}/g, '\\}');
+      const escapedText = escapeRtfText(listMatch[3]);
       processed = `${tabs}\\bullet  ${escapedText}`;
     } else {
       if (inList && trimmed === '') {
         inList = false;
         body += '\\par\n';
       }
-      processed = currentLine
-        .replace(/\\/g, '\\\\')
-        .replace(/{/g, '\\{')
-        .replace(/}/g, '\\}');
+      processed = escapeRtfText(currentLine);
     }
 
     // Process inline formatting (bold, italic, links, inline code)
@@ -193,7 +194,7 @@ export function markdownToRtf(md: string, title: string): string {
 {\\colortbl ;\\red0\\green0\\blue255;}
 \\viewkind4\\uc1
 \\f0\\fs24
-\\b\\fs40 ${title}\\b0\\par
+\\b\\fs40 ${escapeRtfText(title)}\\b0\\par
 \\line
 ${body}
 }`;
