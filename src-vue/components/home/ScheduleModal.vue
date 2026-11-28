@@ -16,6 +16,10 @@ export interface ScheduledMeeting {
   configs?: {
     userGrants?: string | null;
   } | null;
+  // Role of the signed-in viewer for this meeting, resolved server-side from
+  // the host and the moderator grants. The upcoming list no longer returns
+  // the full grants map.
+  viewerRole?: 'host' | 'moderator' | null;
   description?: string | null;
 }
 

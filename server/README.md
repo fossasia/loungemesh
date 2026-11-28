@@ -129,7 +129,7 @@ DATABASE_URL="postgresql://<db_user>:<db_password>@postgres:5432/loungemesh?sche
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/meetings` | Create a new scheduled or ad-hoc room. Caches sanitized config in Redis. |
-| `GET` | `/api/meetings/upcoming` | Fetch upcoming scheduled meetings for authenticated user. In-progress meetings stay listed, a meeting is excluded once its end time has passed even with a future start time, recurring meetings are always listed, and the response never includes `joinPin`. |
+| `GET` | `/api/meetings/upcoming` | Fetch upcoming scheduled meetings for authenticated user. In-progress meetings stay listed, a meeting is excluded once its end time has passed even with a future start time, recurring meetings are always listed, and the response never includes `joinPin`. Configs are sanitized to the public fields, and each meeting carries the caller's `viewerRole` (`host`, `moderator`, or `null`). |
 | `GET` | `/api/meetings/role/:roomName` | Resolve caller's role (`host`, `moderator`, `attendee`). |
 | `GET` | `/api/meetings/config/:roomName` | Fetch sanitized room settings (`lobbyEnabled`, `lobbyForm` of `name` or `details`, `stagePromotionEnabled`, `allowParticipantRecording`, `notesTemplate`). |
 | `PUT` | `/api/meetings/config/:roomName` | Update room settings (host/moderator only). |

@@ -94,15 +94,40 @@ function sanitizeMeetingConfig(configs: any) {
 }
 
 // The upcoming list is a public listing, so never return joinPin, either on
-// the meeting row or on the nested configs object.
+// the meeting row or on the nested configs object. Configs are sanitized to
+// the same public fields every other endpoint returns, so no internal config
+// property (for example the full grants map) leaks through this listing.
 function stripJoinPinFromMeeting(meeting: {
   joinPin?: string | null;
   configs?: { joinPin?: string | null } | null;
 }) {
   const { joinPin: _meetingJoinPin, configs, ...rest } = meeting;
-  if (!configs) return { ...rest, configs };
-  const { joinPin: _configJoinPin, ...restConfigs } = configs;
-  return { ...rest, configs: restConfigs };
+  return { ...rest, configs: sanitizeMeetingConfig(configs) };
+}
+
+// Resolve the viewer's own role for one upcoming meeting, from the host and
+// the moderator grants. This mirrors exactly what the home page used to
+// derive client-side from the full grants map, so the badges and edit actions
+// stay the same without returning every user's grants to every viewer.
+// Moderator-by-email is deliberately not included here: updateMeeting and
+// cancelMeeting only grant edit rights to the host and to grant moderators.
+function viewerRoleForMeeting(
+  meeting: {
+    hostId: string;
+    configs?: { userGrants?: string | null } | null;
+  },
+  viewerId: string,
+): 'host' | 'moderator' | null {
+  if (meeting.hostId === viewerId) return 'host';
+  if (meeting.configs?.userGrants) {
+    try {
+      const grants = JSON.parse(meeting.configs.userGrants);
+      if (grants[viewerId]?.moderator) return 'moderator';
+    } catch (err) {
+      console.error('Error parsing userGrants in viewerRoleForMeeting:', err);
+    }
+  }
+  return null;
 }
 
 // Helper: Sync Event to Google Calendar (Create or Update)
@@ -357,7 +382,12 @@ export async function getUpcomingMeetings(req: Request, res: Response) {
       },
     });
 
-    return res.json(meetings.map(stripJoinPinFromMeeting));
+    return res.json(
+      meetings.map((meeting) => ({
+        ...stripJoinPinFromMeeting(meeting),
+        viewerRole: viewerRoleForMeeting(meeting, hostId),
+      })),
+    );
   } catch (err) {
     console.error('Get upcoming meetings error:', err);
     return res.status(500).json({ error: 'Internal server error' });

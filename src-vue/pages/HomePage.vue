@@ -109,11 +109,19 @@ onMounted(() => {
 // Reactively watch for auth state changes to fetch/clear upcoming meetings
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let upcomingRequestId = 0;
+// Id of the last poll response actually applied to the list. A response only
+// replaces the list when its id is newer, so a slow response is never starved
+// just because a newer poll started while it was in flight, and a response
+// that finishes after a newer one can never overwrite it.
+let lastAppliedUpcomingRequestId = 0;
+// Bumped on every auth change so an in-flight fetch can never refill the
+// list after logout, or leak the previous session's list after login.
+let upcomingAuthGeneration = 0;
 watch(
   () => auth.isAuthenticated,
   (isAuthenticated) => {
     // Invalidate any in-flight fetch so it cannot refill the list after logout.
-    upcomingRequestId++;
+    upcomingAuthGeneration++;
     if (pollInterval) {
       clearInterval(pollInterval);
       pollInterval = null;
@@ -138,12 +146,17 @@ onUnmounted(() => {
 
 async function fetchUpcoming() {
   const requestId = ++upcomingRequestId;
+  const authGeneration = upcomingAuthGeneration;
   try {
     const response = await fetch('/api/meetings/upcoming');
-    // Ignore stale responses: a newer poll may already have replaced the list.
-    if (requestId !== upcomingRequestId) return;
     if (response.ok) {
-      upcomingMeetings.value = await response.json();
+      const meetings = await response.json();
+      // Ignore stale responses: a logout may have cleared the list while
+      // this fetch was in flight, or a newer poll may already have applied.
+      if (authGeneration !== upcomingAuthGeneration) return;
+      if (requestId <= lastAppliedUpcomingRequestId) return;
+      lastAppliedUpcomingRequestId = requestId;
+      upcomingMeetings.value = meetings;
     }
   } catch (err) {
     console.error('Failed to fetch upcoming meetings:', err);
@@ -275,33 +288,13 @@ function formatMeetingDate(dateStr: string | null): string {
 function canEditMeeting(meet: ScheduledMeeting): boolean {
   if (!auth.user?.id) return false;
   if (meet.hostId === auth.user.id) return true;
-  if (meet.configs?.userGrants) {
-    try {
-      const grants = JSON.parse(meet.configs.userGrants);
-      if (grants[auth.user.id]?.moderator) {
-        return true;
-      }
-    } catch (err) {
-      console.error('Error parsing userGrants in client:', err);
-    }
-  }
-  return false;
+  return meet.viewerRole === 'moderator';
 }
 
 function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
   if (!auth.user?.id) return null;
   if (meet.hostId === auth.user.id) return 'host';
-  if (meet.configs?.userGrants) {
-    try {
-      const grants = JSON.parse(meet.configs.userGrants);
-      if (grants[auth.user.id]?.moderator) {
-        return 'moderator';
-      }
-    } catch (err) {
-      // ignore
-    }
-  }
-  return null;
+  return meet.viewerRole === 'moderator' ? 'moderator' : null;
 }
 </script>
 

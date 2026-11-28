@@ -43,7 +43,16 @@ type MeetingRow = {
   endTime: Date | null
   recurrence: string | null
   joinPin?: string | null
-  configs?: { joinPin?: string | null } | null
+  configs?: {
+    joinPin?: string | null
+    userGrants?: string | null
+    lobbyEnabled?: boolean
+    lobbyForm?: string
+    stagePromotionEnabled?: boolean
+    allowParticipantRecording?: boolean
+    notesTemplate?: string
+    internalFlag?: boolean
+  } | null
 }
 
 const minutesFromNow = (n: number): Date => new Date(NOW.getTime() + n * MIN)
@@ -110,6 +119,49 @@ const FIXTURES: MeetingRow[] = [
     endTime: minutesFromNow(30),
     joinPin: "1234",
     configs: { joinPin: "5678" },
+  }),
+  base({
+    id: "with-public-config",
+    startTime: minutesFromNow(60),
+    endTime: minutesFromNow(120),
+    configs: {
+      joinPin: "9999",
+      userGrants: JSON.stringify({ "host-1": { moderator: true } }),
+      lobbyEnabled: true,
+      lobbyForm: "details",
+      stagePromotionEnabled: false,
+      allowParticipantRecording: true,
+      notesTemplate: "Be on time",
+      internalFlag: true,
+    },
+  }),
+  base({
+    id: "moderator-via-grants",
+    hostId: "someone-else",
+    guestEmails: ["host@example.com"],
+    startTime: minutesFromNow(60),
+    endTime: minutesFromNow(120),
+    configs: {
+      userGrants: JSON.stringify({ "host-1": { moderator: true } }),
+    },
+  }),
+  base({
+    id: "guest-only",
+    hostId: "someone-else",
+    guestEmails: ["host@example.com"],
+    startTime: minutesFromNow(60),
+    endTime: minutesFromNow(120),
+    configs: {
+      userGrants: JSON.stringify({ "other-user": { moderator: true } }),
+    },
+  }),
+  base({
+    id: "malformed-grants",
+    hostId: "someone-else",
+    guestEmails: ["host@example.com"],
+    startTime: minutesFromNow(60),
+    endTime: minutesFromNow(120),
+    configs: { userGrants: "{not json" },
   }),
 ]
 
@@ -211,5 +263,38 @@ describe("getUpcomingMeetings", () => {
     expect(pinned).toBeDefined()
     expect(pinned).not.toHaveProperty("joinPin")
     expect(pinned.configs).not.toHaveProperty("joinPin")
+  })
+
+  it("returns only the public config fields for a meeting", async () => {
+    const rows = await callUpcomingRows()
+    const row = rows.find((m) => m.id === "with-public-config")
+    expect(row).toBeDefined()
+    expect(row.configs).toEqual({
+      lobbyEnabled: true,
+      lobbyForm: "details",
+      stagePromotionEnabled: false,
+      allowParticipantRecording: true,
+      notesTemplate: "Be on time",
+    })
+  })
+
+  it("reports viewerRole host for a meeting the caller hosts", async () => {
+    const rows = await callUpcomingRows()
+    expect(rows.find((m) => m.id === "not-started")?.viewerRole).toBe("host")
+  })
+
+  it("reports viewerRole moderator for a grant moderator", async () => {
+    const rows = await callUpcomingRows()
+    expect(rows.find((m) => m.id === "moderator-via-grants")?.viewerRole).toBe("moderator")
+  })
+
+  it("reports viewerRole null for a guest with no moderator grant", async () => {
+    const rows = await callUpcomingRows()
+    expect(rows.find((m) => m.id === "guest-only")?.viewerRole).toBeNull()
+  })
+
+  it("reports viewerRole null when the grants value is malformed", async () => {
+    const rows = await callUpcomingRows()
+    expect(rows.find((m) => m.id === "malformed-grants")?.viewerRole).toBeNull()
   })
 })

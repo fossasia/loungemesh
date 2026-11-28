@@ -132,7 +132,7 @@ Hosts can open the **Room Settings Modal** to configure:
 3. Add participant email addresses for automatic calendar invites.
 4. If connected to Google Calendar, the meeting synchronizes two-way with AES-256 encrypted OAuth credentials.
 
-The home page upcoming list keeps in-progress meetings listed. A meeting is excluded once its end time has passed, even if its start time is still in the future. Recurring meetings are always listed. The listing never returns the join PIN.
+The home page upcoming list keeps in-progress meetings listed. A meeting is excluded once its end time has passed, even if its start time is still in the future. Recurring meetings are always listed. The listing never returns the join PIN. Configs are sanitized to the public fields, and each meeting carries the viewer's role (`host`, `moderator`, or none) so the home page can badge moderators without reading the full grants map.
 
 ---
 

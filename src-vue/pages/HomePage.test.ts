@@ -112,4 +112,120 @@ describe('HomePage', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('applies a slow first response instead of starving it', async () => {
+    vi.useFakeTimers();
+    try {
+      signInAsHost();
+      const first = meetingFactory({ id: 'first', title: 'First Meeting' });
+      const second = meetingFactory({ id: 'second', title: 'Second Meeting' });
+
+      let resolveFirst!: (value: unknown) => void;
+      let resolveSecond!: (value: unknown) => void;
+      const firstFetch = new Promise((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondFetch = new Promise((resolve) => {
+        resolveSecond = resolve;
+      });
+      const fetchMock = vi
+        .fn()
+        .mockImplementationOnce(() => firstFetch)
+        .mockImplementationOnce(() => secondFetch);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { wrapper } = await mountWithApp(HomePage, { route: '/' });
+      // The 5s poll starts a second fetch while the first is still slow.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // The slow first response still applies: nothing newer has applied yet.
+      resolveFirst({ ok: true, json: async () => [first] });
+      await flushPromises();
+      expect(wrapper.text()).toContain('First Meeting');
+      // The second response then replaces it, as the newest applied response.
+      resolveSecond({ ok: true, json: async () => [second] });
+      await flushPromises();
+      expect(wrapper.text()).toContain('Second Meeting');
+      expect(wrapper.text()).not.toContain('First Meeting');
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not refill the list when a fetch resolves after logout', async () => {
+    signInAsHost();
+    let resolveFetch!: (value: unknown) => void;
+    const pendingFetch = new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        url === '/api/meetings/upcoming'
+          ? pendingFetch
+          : Promise.resolve({ ok: true, json: async () => [] }),
+      ),
+    );
+    try {
+      const { wrapper } = await mountWithApp(HomePage, { route: '/' });
+      await flushPromises();
+      // Log out while the fetch is still in flight.
+      const auth = useAuthStore();
+      auth.isAuthenticated = false;
+      await flushPromises();
+      expect(wrapper.text()).not.toContain('Planning Call');
+      resolveFetch({ ok: true, json: async () => [meetingFactory()] });
+      await flushPromises();
+      expect(wrapper.text()).not.toContain('Planning Call');
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps polling after a failed fetch', async () => {
+    vi.useFakeTimers();
+    try {
+      signInAsHost();
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('network down'))
+        .mockResolvedValue({ ok: true, json: async () => [meetingFactory()] });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { wrapper } = await mountWithApp(HomePage, { route: '/' });
+      await flushPromises();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      await flushPromises();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(wrapper.text()).toContain('Planning Call');
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('shows the moderator badge from viewerRole without the grants map', async () => {
+    signInAsHost();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [meetingFactory({ hostId: 'someone-else', viewerRole: 'moderator' })],
+      }),
+    );
+    try {
+      const { wrapper } = await mountWithApp(HomePage, { route: '/' });
+      await flushPromises();
+      expect(wrapper.find('.roleBadge.moderator').text()).toBe('Mod');
+      expect(wrapper.find('.actionBtn.edit').exists()).toBe(true);
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
