@@ -93,6 +93,43 @@ function sanitizeMeetingConfig(configs: any) {
   };
 }
 
+// The upcoming list is a public listing, so never return joinPin, either on
+// the meeting row or on the nested configs object. Configs are sanitized to
+// the same public fields every other endpoint returns, so no internal config
+// property (for example the full grants map) leaks through this listing.
+function stripJoinPinFromMeeting(meeting: {
+  joinPin?: string | null;
+  configs?: { joinPin?: string | null } | null;
+}) {
+  const { joinPin: _meetingJoinPin, configs, ...rest } = meeting;
+  return { ...rest, configs: sanitizeMeetingConfig(configs) };
+}
+
+// Resolve the viewer's own role for one upcoming meeting, from the host and
+// the moderator grants. This mirrors exactly what the home page used to
+// derive client-side from the full grants map, so the badges and edit actions
+// stay the same without returning every user's grants to every viewer.
+// Moderator-by-email is deliberately not included here: updateMeeting and
+// cancelMeeting only grant edit rights to the host and to grant moderators.
+function viewerRoleForMeeting(
+  meeting: {
+    hostId: string;
+    configs?: { userGrants?: string | null } | null;
+  },
+  viewerId: string,
+): 'host' | 'moderator' | null {
+  if (meeting.hostId === viewerId) return 'host';
+  if (meeting.configs?.userGrants) {
+    try {
+      const grants = JSON.parse(meeting.configs.userGrants);
+      if (grants[viewerId]?.moderator) return 'moderator';
+    } catch (err) {
+      console.error('Error parsing userGrants in viewerRoleForMeeting:', err);
+    }
+  }
+  return null;
+}
+
 // Helper: Sync Event to Google Calendar (Create or Update)
 async function syncGoogleCalendarEvent(
   userId: string,
@@ -309,6 +346,7 @@ export async function createMeeting(req: Request, res: Response) {
 export async function getUpcomingMeetings(req: Request, res: Response) {
   const hostId = req.user!.id;
   const email = req.user!.email;
+  const now = new Date();
 
   try {
     const meetings = await prisma.meeting.findMany({
@@ -324,8 +362,14 @@ export async function getUpcomingMeetings(req: Request, res: Response) {
           },
           {
             OR: [
-              { startTime: { gte: new Date() } },
               { recurrence: { not: 'NONE' } },
+              { endTime: { gte: now } },
+              {
+                AND: [
+                  { endTime: null },
+                  { startTime: { gte: now } },
+                ],
+              },
             ],
           }
         ]
@@ -338,7 +382,12 @@ export async function getUpcomingMeetings(req: Request, res: Response) {
       },
     });
 
-    return res.json(meetings);
+    return res.json(
+      meetings.map((meeting) => ({
+        ...stripJoinPinFromMeeting(meeting),
+        viewerRole: viewerRoleForMeeting(meeting, hostId),
+      })),
+    );
   } catch (err) {
     console.error('Get upcoming meetings error:', err);
     return res.status(500).json({ error: 'Internal server error' });

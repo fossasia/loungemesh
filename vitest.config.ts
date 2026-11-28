@@ -7,13 +7,24 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src-vue', import.meta.url)),
+      // Server-only dependencies, stubbed so server controller tests can
+      // run under this runner without the server dependencies installed.
+      jsonwebtoken: fileURLToPath(
+        new URL('./server/src/controllers/__tests__/stubs/jsonwebtoken.ts', import.meta.url),
+      ),
+      'google-auth-library': fileURLToPath(
+        new URL(
+          './server/src/controllers/__tests__/stubs/google-auth-library.ts',
+          import.meta.url,
+        ),
+      ),
     },
   },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src-vue/test/setup.ts'],
-    include: ['src-vue/**/*.test.ts', 'src-vue/**/*.spec.ts'],
+    include: ['src-vue/**/*.test.ts', 'src-vue/**/*.spec.ts', 'server/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src-vue/**/*.{ts,vue}'],
