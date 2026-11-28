@@ -42,6 +42,8 @@ type MeetingRow = {
   startTime: Date | null
   endTime: Date | null
   recurrence: string | null
+  joinPin?: string | null
+  configs?: { joinPin?: string | null } | null
 }
 
 const minutesFromNow = (n: number): Date => new Date(NOW.getTime() + n * MIN)
@@ -55,6 +57,8 @@ const base = (overrides: Partial<MeetingRow>): MeetingRow => ({
   startTime: minutesFromNow(60),
   endTime: minutesFromNow(120),
   recurrence: "NONE",
+  joinPin: null,
+  configs: null,
   ...overrides,
 })
 
@@ -95,10 +99,40 @@ const FIXTURES: MeetingRow[] = [
     startTime: minutesFromNow(-60),
     endTime: new Date(NOW.getTime()),
   }),
+  base({
+    id: "future-start-past-end",
+    startTime: minutesFromNow(60),
+    endTime: minutesFromNow(-30),
+  }),
+  base({
+    id: "with-join-pin",
+    startTime: minutesFromNow(-30),
+    endTime: minutesFromNow(30),
+    joinPin: "1234",
+    configs: { joinPin: "5678" },
+  }),
 ]
 
 // Minimal evaluator for the exact where shapes getUpcomingMeetings builds,
-// mirroring Prisma semantics: null never satisfies gte or not.
+// mirroring Prisma semantics: null never satisfies gte or not, and a null
+// equality matches only null.
+function matchesCondition(row: MeetingRow, c: any): boolean {
+  if (c.AND !== undefined) return c.AND.every((sub: any) => matchesCondition(row, sub))
+  if (c.OR !== undefined) return c.OR.some((sub: any) => matchesCondition(row, sub))
+  if (c.endTime !== undefined) {
+    if (c.endTime === null) return row.endTime === null
+    if (c.endTime.gte !== undefined) return row.endTime !== null && row.endTime >= c.endTime.gte
+  }
+  if (c.startTime !== undefined) {
+    if (c.startTime === null) return row.startTime === null
+    if (c.startTime.gte !== undefined) return row.startTime !== null && row.startTime >= c.startTime.gte
+  }
+  if (c.recurrence?.not !== undefined) {
+    return row.recurrence !== null && row.recurrence !== c.recurrence.not
+  }
+  return false
+}
+
 function matchesWhere(row: MeetingRow, where: any): boolean {
   if (where.isScheduled !== row.isScheduled) return false
   const [accessOr, timeOr] = where.AND
@@ -111,25 +145,18 @@ function matchesWhere(row: MeetingRow, where: any): boolean {
         row.moderatorEmails.includes(c.moderatorEmails.has)),
   )
   if (!access) return false
-  return timeOr.OR.some(
-    (c: any) =>
-      (c.endTime?.gte !== undefined &&
-        row.endTime !== null &&
-        row.endTime >= c.endTime.gte) ||
-      (c.startTime?.gte !== undefined &&
-        row.startTime !== null &&
-        row.startTime >= c.startTime.gte) ||
-      (c.recurrence?.not !== undefined &&
-        row.recurrence !== null &&
-        row.recurrence !== c.recurrence.not),
-  )
+  return matchesCondition(row, timeOr)
 }
 
-async function callUpcoming(): Promise<string[]> {
+async function callUpcomingRows(): Promise<any[]> {
   const req: any = { user: { id: "host-1", email: "host@example.com" } }
   const res: any = { json: vi.fn(), status: vi.fn().mockReturnThis() }
   await getUpcomingMeetings(req, res)
-  return (res.json.mock.calls[0][0] as MeetingRow[]).map((m) => m.id)
+  return res.json.mock.calls[0][0] as any[]
+}
+
+async function callUpcoming(): Promise<string[]> {
+  return (await callUpcomingRows()).map((m) => m.id)
 }
 
 describe("getUpcomingMeetings", () => {
@@ -172,5 +199,17 @@ describe("getUpcomingMeetings", () => {
 
   it("returns a meeting whose end time is exactly now", async () => {
     expect(await callUpcoming()).toContain("ends-now")
+  })
+
+  it("does not return a meeting whose end has passed even when its start is in the future", async () => {
+    expect(await callUpcoming()).not.toContain("future-start-past-end")
+  })
+
+  it("never returns joinPin on the meeting or its configs", async () => {
+    const rows = await callUpcomingRows()
+    const pinned = rows.find((m) => m.id === "with-join-pin")
+    expect(pinned).toBeDefined()
+    expect(pinned).not.toHaveProperty("joinPin")
+    expect(pinned.configs).not.toHaveProperty("joinPin")
   })
 })

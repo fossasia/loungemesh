@@ -93,6 +93,18 @@ function sanitizeMeetingConfig(configs: any) {
   };
 }
 
+// The upcoming list is a public listing, so never return joinPin, either on
+// the meeting row or on the nested configs object.
+function stripJoinPinFromMeeting(meeting: {
+  joinPin?: string | null;
+  configs?: { joinPin?: string | null } | null;
+}) {
+  const { joinPin: _meetingJoinPin, configs, ...rest } = meeting;
+  if (!configs) return { ...rest, configs };
+  const { joinPin: _configJoinPin, ...restConfigs } = configs;
+  return { ...rest, configs: restConfigs };
+}
+
 // Helper: Sync Event to Google Calendar (Create or Update)
 async function syncGoogleCalendarEvent(
   userId: string,
@@ -325,9 +337,14 @@ export async function getUpcomingMeetings(req: Request, res: Response) {
           },
           {
             OR: [
-              { endTime: { gte: now } },
-              { startTime: { gte: now } },
               { recurrence: { not: 'NONE' } },
+              { endTime: { gte: now } },
+              {
+                AND: [
+                  { endTime: null },
+                  { startTime: { gte: now } },
+                ],
+              },
             ],
           }
         ]
@@ -340,7 +357,7 @@ export async function getUpcomingMeetings(req: Request, res: Response) {
       },
     });
 
-    return res.json(meetings);
+    return res.json(meetings.map(stripJoinPinFromMeeting));
   } catch (err) {
     console.error('Get upcoming meetings error:', err);
     return res.status(500).json({ error: 'Internal server error' });

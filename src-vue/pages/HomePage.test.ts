@@ -1,10 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { setActivePinia, createPinia } from 'pinia';
 import { mountWithApp } from '@/test/mountApp';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
 import { useAuthStore } from '@/stores/authStore';
 import HomePage from './HomePage.vue';
+
+const meetingFactory = (overrides: Record<string, unknown> = {}) => ({
+  id: 'm-1',
+  title: 'Planning Call',
+  roomName: 'planning-call',
+  startTime: '2026-11-27T13:00:00.000Z',
+  endTime: '2026-11-27T14:00:00.000Z',
+  recurrence: 'NONE',
+  hostId: 'host-1',
+  guestEmails: [],
+  ...overrides,
+});
+
+function signInAsHost() {
+  const auth = useAuthStore();
+  auth.loading = false;
+  auth.user = { id: 'host-1', email: 'host@example.com', displayName: 'Host', avatarUrl: null };
+  auth.isAuthenticated = true;
+}
 
 describe('HomePage', () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -32,5 +52,64 @@ describe('HomePage', () => {
     expect(useConferenceStore().displayName).toBe("Alex's Sphere");
     expect(push).toHaveBeenCalledWith('/session/my-room');
     wrapper.unmount();
+  });
+
+  it('shows the end date when a meeting has no start time', async () => {
+    signInAsHost();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [meetingFactory({ startTime: null })],
+      }),
+    );
+    try {
+      const { wrapper } = await mountWithApp(HomePage, { route: '/' });
+      await flushPromises();
+      expect(wrapper.text()).toContain('Planning Call');
+      expect(wrapper.find('.timeText').text()).toContain('Nov 27');
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ignores a stale poll response that resolves after a newer one', async () => {
+    vi.useFakeTimers();
+    try {
+      signInAsHost();
+      const ended = meetingFactory({ id: 'ended', title: 'Ended Meeting' });
+      const live = meetingFactory({ id: 'live', title: 'Live Meeting' });
+
+      let resolveFirst!: (value: unknown) => void;
+      let resolveSecond!: (value: unknown) => void;
+      const firstFetch = new Promise((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondFetch = new Promise((resolve) => {
+        resolveSecond = resolve;
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn()
+          .mockImplementationOnce(() => firstFetch)
+          .mockImplementationOnce(() => secondFetch),
+      );
+
+      const { wrapper } = await mountWithApp(HomePage, { route: '/' });
+      // First fetch in flight; fire the 5s poll to start the second fetch.
+      await vi.advanceTimersByTimeAsync(5000);
+      resolveSecond({ ok: true, json: async () => [live] });
+      await flushPromises();
+      resolveFirst({ ok: true, json: async () => [ended, live] });
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Live Meeting');
+      expect(wrapper.text()).not.toContain('Ended Meeting');
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
   });
 });
